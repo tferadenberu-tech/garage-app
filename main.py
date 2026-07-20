@@ -1,16 +1,14 @@
-import io
-import os
-import sqlite3
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, StreamingResponse
+from pydantic import BaseModel
+from typing import List, Optional
 from datetime import datetime
 import pandas as pd
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse, HTMLResponse
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+import io
 
 app = FastAPI(title="Garage Fleet Management System v2")
 
-# Enable CORS for mobile connectivity
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,246 +17,233 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_FILE = "garage.db"
-
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS jobs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            order_number TEXT NOT NULL,
-            plate_number TEXT NOT NULL,
-            owner_name TEXT NOT NULL,
-            current_km INTEGER,
-            next_service_km INTEGER,
-            maintenance_type TEXT,
-            status TEXT DEFAULT 'Check-In',
-            start_time TEXT,
-            team_members TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-init_db()
-
+# ----------------------------------------------------
+# 1. Data Models (ወጪዎች የተካተቱበት)
+# ----------------------------------------------------
 class JobCreate(BaseModel):
-    order_number: str
-    plate_number: str
-    owner_name: str
-    current_km: int
-    next_service_km: int
-    maintenance_type: str
-    team_members: str
+    vehicle_plate: str
+    driver_name: str
+    issue_description: str
+    spare_parts_cost: float = 0.0
+    lubricant_cost: float = 0.0
+    battery_cost: float = 0.0
+    tire_cost: float = 0.0
+    labor_cost: float = 0.0
+
+class JobResponse(JobCreate):
+    id: int
+    status: str
+    created_at: str
+    total_cost: float
 
 class StatusUpdate(BaseModel):
     status: str
 
-@app.get("/api/jobs")
-def get_jobs():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM jobs ORDER BY id DESC")
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+# ----------------------------------------------------
+# 2. In-Memory Database (ጊዜያዊ ዳታቤዝ)
+# ----------------------------------------------------
+jobs_db = []
+job_id_counter = 1
 
-@app.post("/api/jobs")
-def create_job(job: JobCreate):
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    start_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-    cursor.execute("""
-        INSERT INTO jobs (order_number, plate_number, owner_name, current_km, next_service_km, maintenance_type, status, start_time, team_members)
-        VALUES (?, ?, ?, ?, ?, ?, 'Check-In', ?, ?)
-    """, (job.order_number, job.plate_number, job.owner_name, job.current_km, job.next_service_km, job.maintenance_type, start_str, job.team_members))
-    conn.commit()
-    conn.close()
-    return {"message": "Work Order Created"}
-
-@app.put("/api/jobs/{job_id}/status")
-def update_job_status(job_id: int, status_data: StatusUpdate):
-    """የመኪናውን የጥገና ደረጃ በዳታቤዝ ውስጥ ማዘመሪያ"""
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("UPDATE jobs SET status = ? WHERE id = ?", (status_data.status, job_id))
-    conn.commit()
-    conn.close()
-    return {"message": "Status Updated"}
-
-@app.get("/api/reports/excel")
-def generate_excel_report():
-    conn = sqlite3.connect(DB_FILE)
-    df = pd.read_sql_query("SELECT * FROM jobs", conn)
-    conn.close()
-    if df.empty:
-        raise HTTPException(status_code=404, detail="No records to export")
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Fleet Report')
-    output.seek(0)
-    return StreamingResponse(
-        output,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=garage_report.xlsx"}
-    )
-
+# ----------------------------------------------------
+# 3. API Endpoints
+# ----------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
-def serve_home_page():
+def serve_home():
     return """
     <!DOCTYPE html>
-    <html lang="en">
+    <html lang="am">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Garage Fleet Dashboard</title>
+        <title>የጋራዥ መቆጣጠሪያ ሲስተም</title>
         <style>
-            * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding: 0; }
-            body { background: #f4f6f9; padding: 15px; }
-            header { background: #1e293b; color: white; padding: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
-            .btn { padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; }
-            .btn-success { background: #10b981; color: white; }
-            .btn-primary { background: #2563eb; color: white; }
-            .btn-action { background: #64748b; color: white; padding: 4px 8px; font-size: 11px; margin-top: 5px; border-radius: 4px; }
-            .report-section { margin-top: 15px; background: white; padding: 15px; border-radius: 8px; display: flex; gap: 12px; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-            .kanban { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 15px; margin-top: 20px; }
-            .column { background: #e2e8f0; padding: 15px; border-radius: 8px; min-height: 450px; }
-            .column h3 { font-size: 15px; color: #334155; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid #cbd5e1; }
-            .card { background: white; padding: 15px; margin-bottom: 10px; border-radius: 6px; border-left: 5px solid #3b82f6; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-            .column:nth-child(2) .card { border-left-color: #f59e0b; }
-            .column:nth-child(3) .card { border-left-color: #8b5cf6; }
-            .column:nth-child(4) .card { border-left-color: #10b981; }
-            .type-badge { background: #fee2e2; color: #dc2626; padding: 2px 6px; border-radius: 4px; font-weight: bold; font-size: 11px; }
-            .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; padding: 10px; }
-            .modal-content { background: white; padding: 25px; border-radius: 8px; width: 100%; max-width: 480px; }
-            label { display: block; margin-top: 10px; font-weight: 600; color: #475569; }
-            input, select { width: 100%; padding: 10px; margin-top: 4px; border: 1px solid #cbd5e1; border-radius: 4px; }
-            .actions-div { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; border-top: 1px dashed #cbd5e1; padding-top: 8px; }
+            body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f7f6; }
+            h1 { color: #333; }
+            .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+            .form-group { margin-bottom: 15px; }
+            label { display: block; margin-bottom: 5px; font-weight: bold; }
+            input, textarea, select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+            button { background-color: #28a745; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; }
+            button:hover { background-color: #218838; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #007bff; color: white; }
         </style>
     </head>
     <body>
-        <header>
-            <div>
-                <h2>Workshop Operations Board</h2>
-                <p>Live Fleet Maintenance Tracking</p>
-            </div>
-            <button class="btn btn-success" onclick="document.getElementById('addModal').style.display='flex'">+ Create Work Order</button>
-        </header>
+        <div class="container">
+            <h1>የጋራዥ ጥገና እና ወጪ መመዝገቢያ</h1>
+            <form id="jobForm">
+                <div class="form-group">
+                    <label>የታርጋ ቁጥር (Plate Number):</label>
+                    <input type="text" id="vehicle_plate" required placeholder="ምሳሌ: 3-A66865">
+                </div>
+                <div class="form-group">
+                    <label>የአሽከርካሪ ስም (Driver Name):</label>
+                    <input type="text" id="driver_name" required placeholder="ምሳሌ: አበበ">
+                </div>
+                <div class="form-group">
+                    <label>የብልሽት መግለጫ (Issue Description):</label>
+                    <textarea id="issue_description" required placeholder="የተሰራው ስራ ዝርዝር..."></textarea>
+                </div>
+                <h3>የወጪ ዝርዝር (በብር)</h3>
+                <div class="form-group">
+                    <label>የተለዋዋጭ ዕቃዎች ወጪ (Spare Parts Cost):</label>
+                    <input type="number" id="spare_parts_cost" value="0" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>የዘይት እና ቅባት ወጪ (Lubricant Cost):</label>
+                    <input type="number" id="lubricant_cost" value="0" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>የባትሪ ወጪ (Battery Cost):</label>
+                    <input type="number" id="battery_cost" value="0" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>የጎማ ወጪ (Tire Cost):</label>
+                    <input type="number" id="tire_cost" value="0" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label>የጉልበት/የስራ ወጪ (Labor Cost):</label>
+                    <input type="number" id="labor_cost" value="0" step="0.01">
+                </div>
+                <button type="submit">መዝግብ</button>
+            </form>
 
-        <div class="report-section">
-            <strong>📊 Reports:</strong>
-            <a href="/api/reports/excel"><button class="btn btn-primary">Download Excel Sheet</button></a>
-        </div>
-
-        <div class="kanban">
-            <div class="column"><h3>Check-In</h3><div id="todo-col"></div></div>
-            <div class="column"><h3>In Progress</h3><div id="progress-col"></div></div>
-            <div class="column"><h3>QC (Testing)</h3><div id="qc-col"></div></div>
-            <div class="column"><h3>Completed</h3><div id="done-col"></div></div>
-        </div>
-
-        <div id="addModal" class="modal">
-            <div class="modal-content">
-                <h3>New Work Order Details</h3>
-                <form onsubmit="saveNewJob(event)">
-                    <label>Work Order Number:</label><input type="text" id="orderNo" required placeholder="WO-2026-X">
-                    <label>Plate Number:</label><input type="text" id="plateNo" required>
-                    <label>Owner/Driver Name:</label><input type="text" id="ownerName" required>
-                    <label>Current Mileage (KM):</label><input type="number" id="currentKm" required>
-                    <label>Next Service Mileage (KM):</label><input type="number" id="nextKm" required>
-                    <label>Maintenance Category:</label>
-                    <select id="maintType">
-                        <option value="PM">PM (Preventive)</option>
-                        <option value="CM">CM (Corrective)</option>
-                    </select>
-                    <label>Assigned Mechanics:</label><input type="text" id="team">
-                    <button type="submit" class="btn btn-success" style="width:100%; margin-top:15px;">Log to Board</button>
-                </form>
-                <button onclick="document.getElementById('addModal').style.display='none'" style="background:#64748b; color:white; width:100%; margin-top:8px;" class="btn">Cancel</button>
-            </div>
+            <hr style="margin-top: 30px;">
+            <h2>የተመዘገቡ ስራዎች ዝርዝር</h2>
+            <button onclick="downloadExcel()" style="background-color: #17a2b8;">በ Excel አውርድ (Export)</button>
+            <table id="jobsTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>ታርጋ</th>
+                        <th>አሽከርካሪ</th>
+                        <th>ብልሽት</th>
+                        <th>አጠቃላይ ወጪ</th>
+                        <th>ደረጃ (Status)</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
         </div>
 
         <script>
-            async function loadJobs() {
-                const response = await fetch("/api/jobs");
-                const jobs = await response.json();
-                
-                // Clear columns
-                document.getElementById('todo-col').innerHTML = '';
-                document.getElementById('progress-col').innerHTML = '';
-                document.getElementById('qc-col').innerHTML = '';
-                document.getElementById('done-col').innerHTML = '';
-
-                jobs.forEach(job => {
-                    const card = document.createElement('div');
-                    card.className = 'card';
-                    
-                    // Create buttons based on status
-                    let actionButtons = '';
-                    if (job.status === "Check-In") {
-                        actionButtons = `<button class="btn-action" style="background:#f59e0b;" onclick="moveJob(${job.id}, 'In Progress')">➔ Start Repair</button>`;
-                    } else if (job.status === "In Progress") {
-                        actionButtons = `<button class="btn-action" style="background:#8b5cf6;" onclick="moveJob(${job.id}, 'QC')">➔ Move to QC</button>`;
-                    } else if (job.status === "QC") {
-                        actionButtons = `<button class="btn-action" style="background:#10b981;" onclick="moveJob(${job.id}, 'Completed')">➔ Complete Job</button>`;
-                    }
-
-                    card.innerHTML = `
-                        <div style="padding:5px;">
-                            <strong>${job.order_number}</strong><br>
-                            Plates: <strong>${job.plate_number}</strong><br>
-                            Owner: ${job.owner_name}<br>
-                            Type: <span class="type-badge">${job.maintenance_type}</span><br>
-                            <small>KM: ${job.current_km} | Target: ${job.next_service_km}</small><br>
-                            <small style="color:#64748b">Crew: ${job.team_members || 'None'}</small>
-                            <div class="actions-div">${actionButtons}</div>
-                        </div>
-                    `;
-                    
-                    if(job.status === "Check-In") document.getElementById('todo-col').appendChild(card);
-                    if(job.status === "In Progress") document.getElementById('progress-col').appendChild(card);
-                    if(job.status === "QC") document.getElementById('qc-col').appendChild(card);
-                    if(job.status === "Completed") document.getElementById('done-col').appendChild(card);
+            async function fetchJobs() {
+                const res = await fetch('/api/jobs');
+                const jobs = await res.json();
+                const tbody = document.querySelector('#jobsTable tbody');
+                tbody.innerHTML = '';
+                jobs.forEach(j => {
+                    tbody.innerHTML += `<tr>
+                        <td>${j.id}</td>
+                        <td>${j.vehicle_plate}</td>
+                        <td>${j.driver_name}</td>
+                        <td>${j.issue_description}</td>
+                        <td>${j.total_cost} ETB</td>
+                        <td>${j.status}</td>
+                    </tr>`;
                 });
             }
 
-            async function moveJob(jobId, newStatus) {
-                await fetch(`/api/jobs/${jobId}/status`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ status: newStatus })
-                });
-                loadJobs();
-            }
-
-            async function saveNewJob(event) {
-                event.preventDefault();
+            document.getElementById('jobForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
                 const data = {
-                    order_number: document.getElementById('orderNo').value,
-                    plate_number: document.getElementById('plateNo').value,
-                    owner_name: document.getElementById('ownerName').value,
-                    current_km: parseInt(document.getElementById('currentKm').value),
-                    next_service_km: parseInt(document.getElementById('nextKm').value),
-                    maintenance_type: document.getElementById('maintType').value,
-                    team_members: document.getElementById('team').value
+                    vehicle_plate: document.getElementById('vehicle_plate').value,
+                    driver_name: document.getElementById('driver_name').value,
+                    issue_description: document.getElementById('issue_description').value,
+                    spare_parts_cost: parseFloat(document.getElementById('spare_parts_cost').value) || 0,
+                    lubricant_cost: parseFloat(document.getElementById('lubricant_cost').value) || 0,
+                    battery_cost: parseFloat(document.getElementById('battery_cost').value) || 0,
+                    tire_cost: parseFloat(document.getElementById('tire_cost').value) || 0,
+                    labor_cost: parseFloat(document.getElementById('labor_cost').value) || 0
                 };
-                await fetch("/api/jobs", {
+
+                await fetch('/api/jobs', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
-                document.getElementById('addModal').style.display = 'none';
-                document.getElementById('addModal').querySelector('form').reset();
-                loadJobs();
+
+                document.getElementById('jobForm').reset();
+                fetchJobs();
+            });
+
+            function downloadExcel() {
+                window.location.href = '/api/reports/excel';
             }
-            loadJobs();
+
+            fetchJobs();
         </script>
     </body>
     </html>
     """
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+@app.post("/api/jobs", response_model=JobResponse)
+def create_job(job: JobCreate):
+    global job_id_counter
+    total = (
+        job.spare_parts_cost + 
+        job.lubricant_cost + 
+        job.battery_cost + 
+        job.tire_cost + 
+        job.labor_cost
+    )
+    job_data = job.dict()
+    job_data["id"] = job_id_counter
+    job_data["status"] = "Pending"
+    job_data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    job_data["total_cost"] = total
+    
+    jobs_db.append(job_data)
+    job_id_counter += 1
+    return job_data
+
+@app.get("/api/jobs", response_model=List[JobResponse])
+def get_jobs():
+    return jobs_db
+
+@app.put("/api/jobs/{job_id}/status", response_model=JobResponse)
+def update_job_status(job_id: int, status_update: StatusUpdate):
+    for job in jobs_db:
+        if job["id"] == job_id:
+            job["status"] = status_update.status
+            return job
+    raise HTTPException(status_status=404, detail="Job not found")
+
+@app.get("/api/reports/excel")
+def generate_excel_report():
+    if not jobs_db:
+        df = pd.DataFrame(columns=[
+            "ID", "Vehicle Plate", "Driver Name", "Issue Description",
+            "Spare Parts Cost", "Lubricant Cost", "Battery Cost",
+            "Tire Cost", "Labor Cost", "Total Cost", "Status", "Created At"
+        ])
+    else:
+        df = pd.DataFrame(jobs_db)
+        df = df.rename(columns={
+            "id": "ID",
+            "vehicle_plate": "Vehicle Plate",
+            "driver_name": "Driver Name",
+            "issue_description": "Issue Description",
+            "spare_parts_cost": "Spare Parts Cost",
+            "lubricant_cost": "Lubricant Cost",
+            "battery_cost": "Battery Cost",
+            "tire_cost": "Tire Cost",
+            "labor_cost": "Labor Cost",
+            "total_cost": "Total Cost",
+            "status": "Status",
+            "created_at": "Created At"
+        })
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Garage_Report')
+    
+    output.seek(0)
+    
+    headers = {
+        'Content-Disposition': 'attachment; filename="garage_fleet_report.xlsx"'
+    }
+    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
