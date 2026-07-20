@@ -1,3 +1,4 @@
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
@@ -21,6 +22,7 @@ app.add_middleware(
 # 1. Data Models
 # ----------------------------------------------------
 class JobCreate(BaseModel):
+    serial_number: str
     vehicle_plate: str
     vehicle_type: str
     driver_name: str
@@ -30,21 +32,23 @@ class JobCreate(BaseModel):
     start_time: str
     end_time: Optional[str] = ""
     
+    spare_parts_qty: int = 0
     spare_parts_cost: float = 0.0
+    lubricant_liters: float = 0.0
     lubricant_cost: float = 0.0
     battery_cost: float = 0.0
     tire_cost: float = 0.0
-    labor_cost: float = 0.0
 
 class JobUpdate(BaseModel):
     technicians: Optional[str] = None
     status: Optional[str] = None
     end_time: Optional[str] = None
+    spare_parts_qty: Optional[int] = None
     spare_parts_cost: Optional[float] = None
+    lubricant_liters: Optional[float] = None
     lubricant_cost: Optional[float] = None
     battery_cost: Optional[float] = None
     tire_cost: Optional[float] = None
-    labor_cost: Optional[float] = None
 
 class JobResponse(JobCreate):
     id: int
@@ -94,7 +98,7 @@ def serve_home():
         <style>
             body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f7f6; }
             h1, h2, h3 { color: #1a365d; }
-            .container { max-width: 1050px; margin: auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+            .container { max-width: 1100px; margin: auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
             .form-group { margin-bottom: 15px; }
             label { display: block; margin-bottom: 5px; font-weight: bold; }
             input, textarea, select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
@@ -117,7 +121,7 @@ def serve_home():
 
             /* Modal Dialog Box */
             .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
-            .modal-content { background-color: white; margin: 5% auto; padding: 20px; border-radius: 8px; width: 500px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+            .modal-content { background-color: white; margin: 3% auto; padding: 20px; border-radius: 8px; width: 500px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto; }
             .close-btn { color: #aaa; float: right; font-size: 24px; font-weight: bold; cursor: pointer; }
             .close-btn:hover { color: black; }
         </style>
@@ -142,6 +146,10 @@ def serve_home():
 
             <h2>Create Work Order</h2>
             <form id="jobForm">
+                <div class="form-group">
+                    <label>Serial Number (S/N):</label>
+                    <input type="text" id="serial_number" required placeholder="e.g., SN-2026-001">
+                </div>
                 <div class="form-group">
                     <label>Vehicle Plate Number:</label>
                     <input type="text" id="vehicle_plate" required placeholder="e.g., 3-A66865">
@@ -181,26 +189,30 @@ def serve_home():
                     <input type="datetime-local" id="end_time">
                 </div>
 
-                <h3>Cost Breakdown (ETB)</h3>
+                <h3>Spare Parts & Lubricants Breakdown</h3>
                 <div class="form-group">
-                    <label>Spare Parts Cost:</label>
+                    <label>Spare Parts Quantity (Pcs):</label>
+                    <input type="number" id="spare_parts_qty" value="0" min="0" step="1">
+                </div>
+                <div class="form-group">
+                    <label>Spare Parts Cost (ETB):</label>
                     <input type="number" id="spare_parts_cost" value="0" step="0.01">
                 </div>
                 <div class="form-group">
-                    <label>Lubricant Cost:</label>
+                    <label>Lubricants Quantity (Liters):</label>
+                    <input type="number" id="lubricant_liters" value="0" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label>Lubricant Cost (ETB):</label>
                     <input type="number" id="lubricant_cost" value="0" step="0.01">
                 </div>
                 <div class="form-group">
-                    <label>Battery Cost:</label>
+                    <label>Battery Cost (ETB):</label>
                     <input type="number" id="battery_cost" value="0" step="0.01">
                 </div>
                 <div class="form-group">
-                    <label>Tire Cost:</label>
+                    <label>Tire Cost (ETB):</label>
                     <input type="number" id="tire_cost" value="0" step="0.01">
-                </div>
-                <div class="form-group">
-                    <label>Labor Cost:</label>
-                    <input type="number" id="labor_cost" value="0" step="0.01">
                 </div>
                 <button type="submit">Submit Work Order</button>
             </form>
@@ -211,12 +223,12 @@ def serve_home():
             <table id="jobsTable">
                 <thead>
                     <tr>
-                        <th>ID</th>
+                        <th>S/N</th>
                         <th>Plate</th>
                         <th>Vehicle Type</th>
                         <th>Technicians</th>
-                        <th>Work Type</th>
-                        <th>Start Time</th>
+                        <th>Parts (Pcs)</th>
+                        <th>Lubricants (L)</th>
                         <th>Duration</th>
                         <th>Total Cost</th>
                         <th>Status</th>
@@ -251,24 +263,28 @@ def serve_home():
                         <input type="datetime-local" id="edit_end_time">
                     </div>
                     <div class="form-group">
-                        <label>Spare Parts Cost:</label>
+                        <label>Spare Parts Quantity (Pcs):</label>
+                        <input type="number" id="edit_spare_parts_qty" step="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Spare Parts Cost (ETB):</label>
                         <input type="number" id="edit_spare_parts_cost" step="0.01">
                     </div>
                     <div class="form-group">
-                        <label>Lubricant Cost:</label>
+                        <label>Lubricants Quantity (Liters):</label>
+                        <input type="number" id="edit_lubricant_liters" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>Lubricant Cost (ETB):</label>
                         <input type="number" id="edit_lubricant_cost" step="0.01">
                     </div>
                     <div class="form-group">
-                        <label>Battery Cost:</label>
+                        <label>Battery Cost (ETB):</label>
                         <input type="number" id="edit_battery_cost" step="0.01">
                     </div>
                     <div class="form-group">
-                        <label>Tire Cost:</label>
+                        <label>Tire Cost (ETB):</label>
                         <input type="number" id="edit_tire_cost" step="0.01">
-                    </div>
-                    <div class="form-group">
-                        <label>Labor Cost:</label>
-                        <input type="number" id="edit_labor_cost" step="0.01">
                     </div>
                     <button type="submit">Save Changes</button>
                     <button type="button" onclick="closeModal()" style="background-color: #6c757d;">Cancel</button>
@@ -286,11 +302,12 @@ def serve_home():
                 function renderCard(data) {
                     return `
                         <div class="stat-row"><span>Total Jobs:</span> <b>${data.total_jobs}</b></div>
+                        <div class="stat-row"><span>Spare Parts Quantity:</span> <b>${data.spare_parts_qty} Pcs</b></div>
                         <div class="stat-row"><span>Spare Parts Cost:</span> <span>ETB ${data.spare_parts_cost.toLocaleString()}</span></div>
+                        <div class="stat-row"><span>Lubricants Volume:</span> <b>${data.lubricant_liters} Liters</b></div>
                         <div class="stat-row"><span>Lubricants Cost:</span> <span>ETB ${data.lubricant_cost.toLocaleString()}</span></div>
                         <div class="stat-row"><span>Batteries Cost:</span> <span>ETB ${data.battery_cost.toLocaleString()}</span></div>
                         <div class="stat-row"><span>Tires Cost:</span> <span>ETB ${data.tire_cost.toLocaleString()}</span></div>
-                        <div class="stat-row"><span>Labor Cost:</span> <span>ETB ${data.labor_cost.toLocaleString()}</span></div>
                         <div class="stat-row stat-total"><span>Total Expenditure:</span> <span>ETB ${data.total_cost.toLocaleString()}</span></div>
                     `;
                 }
@@ -306,12 +323,12 @@ def serve_home():
                 tbody.innerHTML = '';
                 allJobs.forEach(j => {
                     tbody.innerHTML += `<tr>
-                        <td>${j.id}</td>
+                        <td><b>${j.serial_number}</b></td>
                         <td>${j.vehicle_plate}</td>
                         <td><b>${j.vehicle_type}</b></td>
                         <td>${j.technicians}</td>
-                        <td>${j.work_type}</td>
-                        <td>${j.start_time.replace('T', ' ')}</td>
+                        <td>${j.spare_parts_qty} Pcs</td>
+                        <td>${j.lubricant_liters} L</td>
                         <td><b>${j.duration}</b></td>
                         <td>ETB ${j.total_cost.toLocaleString()}</td>
                         <td>${j.status}</td>
@@ -323,6 +340,7 @@ def serve_home():
             document.getElementById('jobForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const data = {
+                    serial_number: document.getElementById('serial_number').value,
                     vehicle_plate: document.getElementById('vehicle_plate').value,
                     vehicle_type: document.getElementById('vehicle_type').value,
                     driver_name: document.getElementById('driver_name').value,
@@ -331,11 +349,12 @@ def serve_home():
                     issue_description: document.getElementById('issue_description').value,
                     start_time: document.getElementById('start_time').value,
                     end_time: document.getElementById('end_time').value,
+                    spare_parts_qty: parseInt(document.getElementById('spare_parts_qty').value) || 0,
                     spare_parts_cost: parseFloat(document.getElementById('spare_parts_cost').value) || 0,
+                    lubricant_liters: parseFloat(document.getElementById('lubricant_liters').value) || 0,
                     lubricant_cost: parseFloat(document.getElementById('lubricant_cost').value) || 0,
                     battery_cost: parseFloat(document.getElementById('battery_cost').value) || 0,
-                    tire_cost: parseFloat(document.getElementById('tire_cost').value) || 0,
-                    labor_cost: parseFloat(document.getElementById('labor_cost').value) || 0
+                    tire_cost: parseFloat(document.getElementById('tire_cost').value) || 0
                 };
 
                 await fetch('/api/jobs', {
@@ -353,16 +372,17 @@ def serve_home():
                 const job = allJobs.find(j => j.id === id);
                 if (!job) return;
 
-                document.getElementById('editJobIdTitle').innerText = job.id;
+                document.getElementById('editJobIdTitle').innerText = job.serial_number;
                 document.getElementById('editJobId').value = job.id;
                 document.getElementById('edit_status').value = job.status;
                 document.getElementById('edit_technicians').value = job.technicians || '';
                 document.getElementById('edit_end_time').value = job.end_time || '';
-                document.getElementById('edit_spare_parts_cost').value = job.spare_parts_cost;
-                document.getElementById('edit_lubricant_cost').value = job.lubricant_cost;
-                document.getElementById('edit_battery_cost').value = job.battery_cost;
-                document.getElementById('edit_tire_cost').value = job.tire_cost;
-                document.getElementById('edit_labor_cost').value = job.labor_cost;
+                document.getElementById('edit_spare_parts_qty').value = job.spare_parts_qty || 0;
+                document.getElementById('edit_spare_parts_cost').value = job.spare_parts_cost || 0;
+                document.getElementById('edit_lubricant_liters').value = job.lubricant_liters || 0;
+                document.getElementById('edit_lubricant_cost').value = job.lubricant_cost || 0;
+                document.getElementById('edit_battery_cost').value = job.battery_cost || 0;
+                document.getElementById('edit_tire_cost').value = job.tire_cost || 0;
 
                 document.getElementById('editModal').style.display = 'block';
             }
@@ -378,11 +398,12 @@ def serve_home():
                     status: document.getElementById('edit_status').value,
                     technicians: document.getElementById('edit_technicians').value,
                     end_time: document.getElementById('edit_end_time').value,
+                    spare_parts_qty: parseInt(document.getElementById('edit_spare_parts_qty').value) || 0,
                     spare_parts_cost: parseFloat(document.getElementById('edit_spare_parts_cost').value) || 0,
+                    lubricant_liters: parseFloat(document.getElementById('edit_lubricant_liters').value) || 0,
                     lubricant_cost: parseFloat(document.getElementById('edit_lubricant_cost').value) || 0,
                     battery_cost: parseFloat(document.getElementById('edit_battery_cost').value) || 0,
-                    tire_cost: parseFloat(document.getElementById('edit_tire_cost').value) || 0,
-                    labor_cost: parseFloat(document.getElementById('edit_labor_cost').value) || 0
+                    tire_cost: parseFloat(document.getElementById('edit_tire_cost').value) || 0
                 };
 
                 await fetch(`/api/jobs/${jobId}`, {
@@ -414,8 +435,7 @@ def create_job(job: JobCreate):
         job.spare_parts_cost + 
         job.lubricant_cost + 
         job.battery_cost + 
-        job.tire_cost + 
-        job.labor_cost
+        job.tire_cost
     )
     duration_str = calculate_duration(job.start_time, job.end_time)
     
@@ -443,25 +463,26 @@ def update_job(job_id: int, job_update: JobUpdate):
                 job["technicians"] = job_update.technicians
             if job_update.end_time is not None:
                 job["end_time"] = job_update.end_time
+            if job_update.spare_parts_qty is not None:
+                job["spare_parts_qty"] = job_update.spare_parts_qty
             if job_update.spare_parts_cost is not None:
                 job["spare_parts_cost"] = job_update.spare_parts_cost
+            if job_update.lubricant_liters is not None:
+                job["lubricant_liters"] = job_update.lubricant_liters
             if job_update.lubricant_cost is not None:
                 job["lubricant_cost"] = job_update.lubricant_cost
             if job_update.battery_cost is not None:
                 job["battery_cost"] = job_update.battery_cost
             if job_update.tire_cost is not None:
                 job["tire_cost"] = job_update.tire_cost
-            if job_update.labor_cost is not None:
-                job["labor_cost"] = job_update.labor_cost
 
-            # Recalculate duration & total
+            # Recalculate duration & total cost
             job["duration"] = calculate_duration(job["start_time"], job.get("end_time", ""))
             job["total_cost"] = (
                 job["spare_parts_cost"] + 
                 job["lubricant_cost"] + 
                 job["battery_cost"] + 
-                job["tire_cost"] + 
-                job["labor_cost"]
+                job["tire_cost"]
             )
             return job
     raise HTTPException(status_code=404, detail="Job not found")
@@ -475,22 +496,24 @@ def get_executive_summary():
     def summarize(period_start):
         summary = {
             "total_jobs": 0,
+            "spare_parts_qty": 0,
             "spare_parts_cost": 0.0,
+            "lubricant_liters": 0.0,
             "lubricant_cost": 0.0,
             "battery_cost": 0.0,
             "tire_cost": 0.0,
-            "labor_cost": 0.0,
             "total_cost": 0.0
         }
         for job in jobs_db:
             job_date = parse_job_date(job.get("start_time", ""))
             if job_date and job_date >= period_start:
                 summary["total_jobs"] += 1
+                summary["spare_parts_qty"] += job.get("spare_parts_qty", 0)
                 summary["spare_parts_cost"] += job.get("spare_parts_cost", 0.0)
+                summary["lubricant_liters"] += job.get("lubricant_liters", 0.0)
                 summary["lubricant_cost"] += job.get("lubricant_cost", 0.0)
                 summary["battery_cost"] += job.get("battery_cost", 0.0)
                 summary["tire_cost"] += job.get("tire_cost", 0.0)
-                summary["labor_cost"] += job.get("labor_cost", 0.0)
                 summary["total_cost"] += job.get("total_cost", 0.0)
         return summary
 
@@ -503,15 +526,15 @@ def get_executive_summary():
 def generate_excel_report():
     if not jobs_db:
         df = pd.DataFrame(columns=[
-            "ID", "Vehicle Plate", "Vehicle Type", "Driver Name", "Assigned Technicians",
+            "S/N", "Vehicle Plate", "Vehicle Type", "Driver Name", "Assigned Technicians",
             "Work Type", "Issue Description", "Start Time", "End Time", "Duration",
-            "Spare Parts Cost", "Lubricant Cost", "Battery Cost", "Tire Cost", "Labor Cost",
-            "Total Cost", "Status"
+            "Spare Parts Qty (Pcs)", "Spare Parts Cost", "Lubricants (Liters)", "Lubricant Cost", 
+            "Battery Cost", "Tire Cost", "Total Cost", "Status"
         ])
     else:
         df = pd.DataFrame(jobs_db)
         df = df.rename(columns={
-            "id": "ID",
+            "serial_number": "S/N",
             "vehicle_plate": "Vehicle Plate",
             "vehicle_type": "Vehicle Type",
             "driver_name": "Driver Name",
@@ -521,14 +544,17 @@ def generate_excel_report():
             "start_time": "Start Time",
             "end_time": "End Time",
             "duration": "Duration",
+            "spare_parts_qty": "Spare Parts Qty (Pcs)",
             "spare_parts_cost": "Spare Parts Cost",
+            "lubricant_liters": "Lubricants (Liters)",
             "lubricant_cost": "Lubricant Cost",
             "battery_cost": "Battery Cost",
             "tire_cost": "Tire Cost",
-            "labor_cost": "Labor Cost",
             "total_cost": "Total Cost",
             "status": "Status"
         })
+        if "id" in df.columns:
+            df = df.drop(columns=["id"])
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
