@@ -1,5 +1,4 @@
-
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
@@ -29,11 +28,20 @@ class JobCreate(BaseModel):
     technicians: str
     work_type: str 
     issue_description: str
+    additional_unplanned_work: Optional[str] = ""
     start_time: str
     end_time: Optional[str] = ""
     
-    spare_parts_qty: int = 0
-    spare_parts_cost: float = 0.0
+    # Spare parts list (a, b, c, d)
+    part_a_desc: Optional[str] = ""
+    part_a_cost: float = 0.0
+    part_b_desc: Optional[str] = ""
+    part_b_cost: float = 0.0
+    part_c_desc: Optional[str] = ""
+    part_c_cost: float = 0.0
+    part_d_desc: Optional[str] = ""
+    part_d_cost: float = 0.0
+
     lubricant_liters: float = 0.0
     lubricant_cost: float = 0.0
     battery_cost: float = 0.0
@@ -43,8 +51,17 @@ class JobUpdate(BaseModel):
     technicians: Optional[str] = None
     status: Optional[str] = None
     end_time: Optional[str] = None
-    spare_parts_qty: Optional[int] = None
-    spare_parts_cost: Optional[float] = None
+    additional_unplanned_work: Optional[str] = None
+    
+    part_a_desc: Optional[str] = None
+    part_a_cost: Optional[float] = None
+    part_b_desc: Optional[str] = None
+    part_b_cost: Optional[float] = None
+    part_c_desc: Optional[str] = None
+    part_c_cost: Optional[float] = None
+    part_d_desc: Optional[str] = None
+    part_d_cost: Optional[float] = None
+
     lubricant_liters: Optional[float] = None
     lubricant_cost: Optional[float] = None
     battery_cost: Optional[float] = None
@@ -54,6 +71,8 @@ class JobResponse(JobCreate):
     id: int
     status: str
     duration: str
+    spare_parts_qty: int
+    spare_parts_cost: float
     total_cost: float
 
 # ----------------------------------------------------
@@ -95,131 +114,245 @@ def serve_home():
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Steely R.M.I Garage Maintenance Dashboard</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
-            body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f7f6; }
-            h1, h2, h3 { color: #1a365d; }
-            .container { max-width: 1100px; margin: auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-            .form-group { margin-bottom: 15px; }
-            label { display: block; margin-bottom: 5px; font-weight: bold; }
-            input, textarea, select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-            button { background-color: #28a745; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 15px; margin-right: 5px; }
-            button:hover { background-color: #218838; }
-            .btn-info { background-color: #17a2b8; }
-            .btn-info:hover { background-color: #138496; }
-            .btn-edit { background-color: #ffc107; color: #212529; padding: 5px 10px; font-size: 13px; }
-            .btn-edit:hover { background-color: #e0a800; }
-            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background-color: #1a365d; color: white; }
+            :root {
+                --primary: #1a365d;
+                --primary-light: #2b6cb0;
+                --accent: #2b6cb0;
+                --bg-main: #f1f5f9;
+                --card-bg: #ffffff;
+                --text-main: #0f172a;
+                --text-muted: #64748b;
+                --border: #e2e8f0;
+                --success: #10b981;
+                --warning: #f59e0b;
+                --info: #0284c7;
+            }
+            body { 
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; 
+                margin: 0; padding: 25px; 
+                background-color: var(--bg-main); 
+                color: var(--text-main);
+            }
+            .container { 
+                max-width: 1200px; margin: auto; 
+                background: var(--card-bg); padding: 30px; 
+                border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); 
+            }
+            h1 { color: var(--primary); font-size: 26px; margin-top: 0; font-weight: 700; border-bottom: 2px solid var(--border); padding-bottom: 12px; }
+            h2 { color: var(--primary); font-size: 20px; margin-top: 25px; font-weight: 600; }
+            h3 { color: var(--primary-light); font-size: 16px; margin-top: 20px; font-weight: 600; }
             
-            .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 15px; margin-bottom: 25px; }
-            .card { background: #f8f9fa; border-left: 5px solid #007bff; padding: 15px; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-            .card.monthly { border-left-color: #28a745; }
-            .card h4 { margin: 0 0 10px 0; color: #333; text-transform: uppercase; font-size: 13px; }
-            .stat-row { display: flex; justify-content: space-between; margin-bottom: 5px; font-size: 13px; }
-            .stat-total { font-weight: bold; border-top: 1px dashed #ccc; padding-top: 5px; margin-top: 5px; font-size: 14px; color: #111; }
+            .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; }
+            .form-group { margin-bottom: 12px; }
+            .form-group.full-width { grid-column: 1 / -1; }
+            
+            label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 13px; color: #334155; }
+            input, textarea, select { 
+                width: 100%; padding: 10px; box-sizing: border-box; 
+                border: 1px solid var(--border); border-radius: 6px; 
+                font-size: 14px; background-color: #f8fafc; color: var(--text-main);
+                transition: border-color 0.2s;
+            }
+            input:focus, textarea:focus, select:focus { border-color: var(--primary-light); outline: none; background-color: #fff; }
+            
+            .parts-subgroup { background: #f8fafc; border: 1px dashed var(--border); padding: 15px; border-radius: 8px; margin-bottom: 15px; }
+            .parts-row { display: grid; grid-template-columns: 1fr 140px; gap: 10px; margin-bottom: 8px; }
+
+            button { 
+                background-color: var(--primary); color: white; 
+                padding: 10px 18px; border: none; border-radius: 6px; 
+                cursor: pointer; font-size: 14px; font-weight: 600; 
+                transition: background-color 0.2s;
+            }
+            button:hover { background-color: var(--primary-light); }
+            .btn-info { background-color: var(--info); }
+            .btn-info:hover { background-color: #0369a1; }
+            .btn-edit { background-color: var(--warning); color: #fff; padding: 5px 12px; font-size: 12px; border-radius: 4px; }
+            .btn-edit:hover { background-color: #d97706; }
+            .btn-filter { background-color: #475569; }
+            .btn-filter:hover { background-color: #334155; }
+
+            .filter-bar { 
+                display: flex; gap: 12px; align-items: flex-end; 
+                background: #f8fafc; padding: 15px; border-radius: 8px; 
+                border: 1px solid var(--border); margin-bottom: 20px; flex-wrap: wrap;
+            }
+            .filter-bar .form-group { margin-bottom: 0; min-width: 180px; }
+
+            table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
+            th, td { border: 1px solid var(--border); padding: 10px; text-align: left; }
+            th { background-color: var(--primary); color: white; font-weight: 600; }
+            tr:nth-child(even) { background-color: #f8fafc; }
+            
+            .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-bottom: 20px; }
+            .card { background: #ffffff; border-top: 4px solid var(--primary); padding: 18px; border-radius: 8px; border-left: 1px solid var(--border); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+            .card.monthly { border-top-color: var(--success); }
+            .card.custom { border-top-color: var(--info); }
+            .card h4 { margin: 0 0 12px 0; color: var(--primary); text-transform: uppercase; font-size: 13px; letter-spacing: 0.5px; }
+            .stat-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; color: #475569; }
+            .stat-total { font-weight: 700; border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 8px; font-size: 14px; color: var(--text-main); }
 
             /* Modal Dialog Box */
-            .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
-            .modal-content { background-color: white; margin: 3% auto; padding: 20px; border-radius: 8px; width: 500px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto; }
-            .close-btn { color: #aaa; float: right; font-size: 24px; font-weight: bold; cursor: pointer; }
-            .close-btn:hover { color: black; }
+            .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(15, 23, 42, 0.6); }
+            .modal-content { background-color: white; margin: 3% auto; padding: 25px; border-radius: 10px; width: 550px; max-width: 90%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); max-height: 85vh; overflow-y: auto; }
+            .close-btn { color: #94a3b8; float: right; font-size: 24px; font-weight: bold; cursor: pointer; }
+            .close-btn:hover { color: var(--text-main); }
         </style>
     </head>
     <body>
         <div class="container">
             <h1>Steely R.M.I Garage Maintenance Dashboard</h1>
             
-            <h2>Executive Summary</h2>
+            <h2>Executive Summaries & Analytics</h2>
+            
+            <!-- Executive Filter Bar -->
+            <div class="filter-bar">
+                <div class="form-group">
+                    <label>Executive Custom From Date:</label>
+                    <input type="date" id="exec_from_date">
+                </div>
+                <div class="form-group">
+                    <label>Executive Custom To Date:</label>
+                    <input type="date" id="exec_to_date">
+                </div>
+                <button type="button" class="btn-filter" onclick="fetchSummary()">Apply Executive Filter</button>
+                <button type="button" style="background-color: #94a3b8;" onclick="resetExecFilter()">Reset</button>
+            </div>
+
             <div class="summary-grid">
-                <div class="card" id="weeklyCard">
-                    <h4>Weekly Executive Summary (Last 7 Days)</h4>
+                <div class="card">
+                    <h4>Weekly Summary (Last 7 Days)</h4>
                     <div id="weeklyStats">Loading...</div>
                 </div>
-                <div class="card monthly" id="monthlyCard">
-                    <h4>Monthly Executive Summary (Last 30 Days)</h4>
+                <div class="card monthly">
+                    <h4>Monthly Summary (Last 30 Days)</h4>
                     <div id="monthlyStats">Loading...</div>
+                </div>
+                <div class="card custom">
+                    <h4>Custom Date Range Summary</h4>
+                    <div id="customStats">Select dates above to view...</div>
                 </div>
             </div>
 
-            <hr style="margin: 25px 0;">
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid var(--border);">
 
             <h2>Create Work Order</h2>
             <form id="jobForm">
-                <div class="form-group">
-                    <label>Serial Number (S/N):</label>
-                    <input type="text" id="serial_number" required placeholder="e.g., SN-2026-001">
-                </div>
-                <div class="form-group">
-                    <label>Vehicle Plate Number:</label>
-                    <input type="text" id="vehicle_plate" required placeholder="e.g., 3-A66865">
-                </div>
-                <div class="form-group">
-                    <label>Vehicle Type / Model:</label>
-                    <input type="text" id="vehicle_type" required placeholder="e.g., Jellion, Actros, Land Cruiser">
-                </div>
-                <div class="form-group">
-                    <label>Driver Name:</label>
-                    <input type="text" id="driver_name" required placeholder="e.g., Abebe Kebede">
-                </div>
-                <div class="form-group">
-                    <label>Assigned Technicians / Mechanics:</label>
-                    <input type="text" id="technicians" required placeholder="e.g., Ato Mihret, Dinberu Tefera">
-                </div>
-                <div class="form-group">
-                    <label>Work Type / Category:</label>
-                    <select id="work_type" required>
-                        <option value="Preventive Maintenance">Preventive Maintenance</option>
-                        <option value="Corrective Maintenance">Corrective Maintenance</option>
-                        <option value="Inspection & Checkup">Inspection & Checkup</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Issue Description:</label>
-                    <textarea id="issue_description" required placeholder="Detail repair scope..."></textarea>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Serial Number (S/N):</label>
+                        <input type="text" id="serial_number" required placeholder="e.g., SN-2026-001">
+                    </div>
+                    <div class="form-group">
+                        <label>Vehicle Plate Number:</label>
+                        <input type="text" id="vehicle_plate" required placeholder="e.g., 3-A66865">
+                    </div>
+                    <div class="form-group">
+                        <label>Vehicle Type / Model:</label>
+                        <input type="text" id="vehicle_type" required placeholder="e.g., Jellion, Actros, Land Cruiser">
+                    </div>
+                    <div class="form-group">
+                        <label>Driver Name:</label>
+                        <input type="text" id="driver_name" required placeholder="e.g., Abebe Kebede">
+                    </div>
+                    <div class="form-group">
+                        <label>Assigned Technicians / Mechanics:</label>
+                        <input type="text" id="technicians" required placeholder="e.g., Ato Mihret, Dinberu Tefera">
+                    </div>
+                    <div class="form-group">
+                        <label>Work Type / Category:</label>
+                        <select id="work_type" required>
+                            <option value="Preventive Maintenance">Preventive Maintenance</option>
+                            <option value="Corrective Maintenance">Corrective Maintenance</option>
+                            <option value="Inspection & Checkup">Inspection & Checkup</option>
+                        </select>
+                    </div>
+                    <div class="form-group full-width">
+                        <label>Primary Issue Description:</label>
+                        <textarea id="issue_description" required placeholder="Detail repair scope..."></textarea>
+                    </div>
+                    <div class="form-group full-width">
+                        <label>Additional / Unplanned Work Completed (Out of Scope):</label>
+                        <textarea id="additional_unplanned_work" placeholder="Specify any additional emergency or extra work done outside original request..."></textarea>
+                    </div>
                 </div>
                 
                 <h3>Time Tracking</h3>
-                <div class="form-group">
-                    <label>Start Date & Time:</label>
-                    <input type="datetime-local" id="start_time" required>
-                </div>
-                <div class="form-group">
-                    <label>End Date & Time (Optional):</label>
-                    <input type="datetime-local" id="end_time">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Start Date & Time:</label>
+                        <input type="datetime-local" id="start_time" required>
+                    </div>
+                    <div class="form-group">
+                        <label>End Date & Time (Optional):</label>
+                        <input type="datetime-local" id="end_time">
+                    </div>
                 </div>
 
-                <h3>Spare Parts & Lubricants Breakdown</h3>
-                <div class="form-group">
-                    <label>Spare Parts Quantity (Pcs):</label>
-                    <input type="number" id="spare_parts_qty" value="0" min="0" step="1">
+                <h3>Replaced Spare Parts Breakdown List</h3>
+                <div class="parts-subgroup">
+                    <div class="parts-row">
+                        <input type="text" id="part_a_desc" placeholder="a. Spare Part Name / Spec">
+                        <input type="number" id="part_a_cost" placeholder="Cost (ETB)" value="0" step="0.01">
+                    </div>
+                    <div class="parts-row">
+                        <input type="text" id="part_b_desc" placeholder="b. Spare Part Name / Spec">
+                        <input type="number" id="part_b_cost" placeholder="Cost (ETB)" value="0" step="0.01">
+                    </div>
+                    <div class="parts-row">
+                        <input type="text" id="part_c_desc" placeholder="c. Spare Part Name / Spec">
+                        <input type="number" id="part_c_cost" placeholder="Cost (ETB)" value="0" step="0.01">
+                    </div>
+                    <div class="parts-row">
+                        <input type="text" id="part_d_desc" placeholder="d. Spare Part Name / Spec">
+                        <input type="number" id="part_d_cost" placeholder="Cost (ETB)" value="0" step="0.01">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Spare Parts Cost (ETB):</label>
-                    <input type="number" id="spare_parts_cost" value="0" step="0.01">
+
+                <h3>Lubricants, Batteries & Tires</h3>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Lubricants Quantity (Liters):</label>
+                        <input type="number" id="lubricant_liters" value="0" step="0.1">
+                    </div>
+                    <div class="form-group">
+                        <label>Lubricant Cost (ETB):</label>
+                        <input type="number" id="lubricant_cost" value="0" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>Battery Cost (ETB):</label>
+                        <input type="number" id="battery_cost" value="0" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>Tire Cost (ETB):</label>
+                        <input type="number" id="tire_cost" value="0" step="0.01">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Lubricants Quantity (Liters):</label>
-                    <input type="number" id="lubricant_liters" value="0" step="0.1">
-                </div>
-                <div class="form-group">
-                    <label>Lubricant Cost (ETB):</label>
-                    <input type="number" id="lubricant_cost" value="0" step="0.01">
-                </div>
-                <div class="form-group">
-                    <label>Battery Cost (ETB):</label>
-                    <input type="number" id="battery_cost" value="0" step="0.01">
-                </div>
-                <div class="form-group">
-                    <label>Tire Cost (ETB):</label>
-                    <input type="number" id="tire_cost" value="0" step="0.01">
-                </div>
-                <button type="submit">Submit Work Order</button>
+                
+                <button type="submit" style="margin-top: 15px;">Submit Work Order</button>
             </form>
 
-            <hr style="margin: 30px 0;">
-            <h2>Recent Work Orders</h2>
-            <button onclick="downloadExcel()" class="btn-info">Export Excel Report</button>
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid var(--border);">
+            
+            <h2>Work Orders Registry</h2>
+            
+            <!-- Work Order List Filter Bar -->
+            <div class="filter-bar">
+                <div class="form-group">
+                    <label>From Date:</label>
+                    <input type="date" id="filter_from_date">
+                </div>
+                <div class="form-group">
+                    <label>To Date:</label>
+                    <input type="date" id="filter_to_date">
+                </div>
+                <button type="button" class="btn-filter" onclick="fetchJobs()">Filter Records</button>
+                <button type="button" style="background-color: #94a3b8;" onclick="resetJobsFilter()">Clear Filter</button>
+                <button type="button" onclick="downloadExcel()" class="btn-info" style="margin-left: auto;">Export Excel Report</button>
+            </div>
+
             <table id="jobsTable">
                 <thead>
                     <tr>
@@ -227,8 +360,9 @@ def serve_home():
                         <th>Plate</th>
                         <th>Vehicle Type</th>
                         <th>Technicians</th>
-                        <th>Parts (Pcs)</th>
-                        <th>Lubricants (L)</th>
+                        <th>Replaced Parts</th>
+                        <th>Lubricants</th>
+                        <th>Unplanned Work</th>
                         <th>Duration</th>
                         <th>Total Cost</th>
                         <th>Status</th>
@@ -263,13 +397,30 @@ def serve_home():
                         <input type="datetime-local" id="edit_end_time">
                     </div>
                     <div class="form-group">
-                        <label>Spare Parts Quantity (Pcs):</label>
-                        <input type="number" id="edit_spare_parts_qty" step="1">
+                        <label>Additional / Unplanned Work Done:</label>
+                        <textarea id="edit_additional_unplanned_work"></textarea>
                     </div>
-                    <div class="form-group">
-                        <label>Spare Parts Cost (ETB):</label>
-                        <input type="number" id="edit_spare_parts_cost" step="0.01">
+
+                    <h4>Replaced Spare Parts (a, b, c, d)</h4>
+                    <div class="parts-subgroup">
+                        <div class="parts-row">
+                            <input type="text" id="edit_part_a_desc" placeholder="a. Part Name">
+                            <input type="number" id="edit_part_a_cost" placeholder="Cost" step="0.01">
+                        </div>
+                        <div class="parts-row">
+                            <input type="text" id="edit_part_b_desc" placeholder="b. Part Name">
+                            <input type="number" id="edit_part_b_cost" placeholder="Cost" step="0.01">
+                        </div>
+                        <div class="parts-row">
+                            <input type="text" id="edit_part_c_desc" placeholder="c. Part Name">
+                            <input type="number" id="edit_part_c_cost" placeholder="Cost" step="0.01">
+                        </div>
+                        <div class="parts-row">
+                            <input type="text" id="edit_part_d_desc" placeholder="d. Part Name">
+                            <input type="number" id="edit_part_d_cost" placeholder="Cost" step="0.01">
+                        </div>
                     </div>
+
                     <div class="form-group">
                         <label>Lubricants Quantity (Liters):</label>
                         <input type="number" id="edit_lubricant_liters" step="0.1">
@@ -286,8 +437,9 @@ def serve_home():
                         <label>Tire Cost (ETB):</label>
                         <input type="number" id="edit_tire_cost" step="0.01">
                     </div>
-                    <button type="submit">Save Changes</button>
-                    <button type="button" onclick="closeModal()" style="background-color: #6c757d;">Cancel</button>
+                    
+                    <button type="submit" style="margin-top: 10px;">Save Changes</button>
+                    <button type="button" onclick="closeModal()" style="background-color: #64748b;">Cancel</button>
                 </form>
             </div>
         </div>
@@ -296,10 +448,19 @@ def serve_home():
             let allJobs = [];
 
             async function fetchSummary() {
-                const res = await fetch('/api/reports/executive-summary');
+                const execFrom = document.getElementById('exec_from_date').value;
+                const execTo = document.getElementById('exec_to_date').value;
+                
+                let query = '';
+                if(execFrom && execTo) {
+                    query = `?from_date=${execFrom}&to_date=${execTo}`;
+                }
+
+                const res = await fetch(`/api/reports/executive-summary${query}`);
                 const summary = await res.json();
                 
                 function renderCard(data) {
+                    if(!data) return 'No records found for period.';
                     return `
                         <div class="stat-row"><span>Total Jobs:</span> <b>${data.total_jobs}</b></div>
                         <div class="stat-row"><span>Spare Parts Quantity:</span> <b>${data.spare_parts_qty} Pcs</b></div>
@@ -314,27 +475,60 @@ def serve_home():
 
                 document.getElementById('weeklyStats').innerHTML = renderCard(summary.weekly);
                 document.getElementById('monthlyStats').innerHTML = renderCard(summary.monthly);
+                if(summary.custom) {
+                    document.getElementById('customStats').innerHTML = renderCard(summary.custom);
+                } else {
+                    document.getElementById('customStats').innerHTML = 'Select executive dates above and click Filter.';
+                }
+            }
+
+            function resetExecFilter() {
+                document.getElementById('exec_from_date').value = '';
+                document.getElementById('exec_to_date').value = '';
+                fetchSummary();
             }
 
             async function fetchJobs() {
-                const res = await fetch('/api/jobs');
+                const fromDate = document.getElementById('filter_from_date').value;
+                const toDate = document.getElementById('filter_to_date').value;
+                
+                let query = '';
+                if(fromDate && toDate) {
+                    query = `?from_date=${fromDate}&to_date=${toDate}`;
+                }
+
+                const res = await fetch(`/api/jobs${query}`);
                 allJobs = await res.json();
                 const tbody = document.querySelector('#jobsTable tbody');
                 tbody.innerHTML = '';
                 allJobs.forEach(j => {
+                    let partsSummary = [];
+                    if(j.part_a_desc) partsSummary.push(`a. ${j.part_a_desc}`);
+                    if(j.part_b_desc) partsSummary.push(`b. ${j.part_b_desc}`);
+                    if(j.part_c_desc) partsSummary.push(`c. ${j.part_c_desc}`);
+                    if(j.part_d_desc) partsSummary.push(`d. ${j.part_d_desc}`);
+                    let partsText = partsSummary.length > 0 ? partsSummary.join('<br>') : 'None';
+
                     tbody.innerHTML += `<tr>
                         <td><b>${j.serial_number}</b></td>
                         <td>${j.vehicle_plate}</td>
                         <td><b>${j.vehicle_type}</b></td>
                         <td>${j.technicians}</td>
-                        <td>${j.spare_parts_qty} Pcs</td>
+                        <td>${partsText}</td>
                         <td>${j.lubricant_liters} L</td>
+                        <td>${j.additional_unplanned_work || '-'}</td>
                         <td><b>${j.duration}</b></td>
                         <td>ETB ${j.total_cost.toLocaleString()}</td>
                         <td>${j.status}</td>
                         <td><button class="btn-edit" onclick="openEditModal(${j.id})">Edit</button></td>
                     </tr>`;
                 });
+            }
+
+            function resetJobsFilter() {
+                document.getElementById('filter_from_date').value = '';
+                document.getElementById('filter_to_date').value = '';
+                fetchJobs();
             }
 
             document.getElementById('jobForm').addEventListener('submit', async (e) => {
@@ -347,10 +541,19 @@ def serve_home():
                     technicians: document.getElementById('technicians').value,
                     work_type: document.getElementById('work_type').value,
                     issue_description: document.getElementById('issue_description').value,
+                    additional_unplanned_work: document.getElementById('additional_unplanned_work').value,
                     start_time: document.getElementById('start_time').value,
                     end_time: document.getElementById('end_time').value,
-                    spare_parts_qty: parseInt(document.getElementById('spare_parts_qty').value) || 0,
-                    spare_parts_cost: parseFloat(document.getElementById('spare_parts_cost').value) || 0,
+                    
+                    part_a_desc: document.getElementById('part_a_desc').value,
+                    part_a_cost: parseFloat(document.getElementById('part_a_cost').value) || 0,
+                    part_b_desc: document.getElementById('part_b_desc').value,
+                    part_b_cost: parseFloat(document.getElementById('part_b_cost').value) || 0,
+                    part_c_desc: document.getElementById('part_c_desc').value,
+                    part_c_cost: parseFloat(document.getElementById('part_c_cost').value) || 0,
+                    part_d_desc: document.getElementById('part_d_desc').value,
+                    part_d_cost: parseFloat(document.getElementById('part_d_cost').value) || 0,
+
                     lubricant_liters: parseFloat(document.getElementById('lubricant_liters').value) || 0,
                     lubricant_cost: parseFloat(document.getElementById('lubricant_cost').value) || 0,
                     battery_cost: parseFloat(document.getElementById('battery_cost').value) || 0,
@@ -377,8 +580,17 @@ def serve_home():
                 document.getElementById('edit_status').value = job.status;
                 document.getElementById('edit_technicians').value = job.technicians || '';
                 document.getElementById('edit_end_time').value = job.end_time || '';
-                document.getElementById('edit_spare_parts_qty').value = job.spare_parts_qty || 0;
-                document.getElementById('edit_spare_parts_cost').value = job.spare_parts_cost || 0;
+                document.getElementById('edit_additional_unplanned_work').value = job.additional_unplanned_work || '';
+                
+                document.getElementById('edit_part_a_desc').value = job.part_a_desc || '';
+                document.getElementById('edit_part_a_cost').value = job.part_a_cost || 0;
+                document.getElementById('edit_part_b_desc').value = job.part_b_desc || '';
+                document.getElementById('edit_part_b_cost').value = job.part_b_cost || 0;
+                document.getElementById('edit_part_c_desc').value = job.part_c_desc || '';
+                document.getElementById('edit_part_c_cost').value = job.part_c_cost || 0;
+                document.getElementById('edit_part_d_desc').value = job.part_d_desc || '';
+                document.getElementById('edit_part_d_cost').value = job.part_d_cost || 0;
+
                 document.getElementById('edit_lubricant_liters').value = job.lubricant_liters || 0;
                 document.getElementById('edit_lubricant_cost').value = job.lubricant_cost || 0;
                 document.getElementById('edit_battery_cost').value = job.battery_cost || 0;
@@ -398,8 +610,17 @@ def serve_home():
                     status: document.getElementById('edit_status').value,
                     technicians: document.getElementById('edit_technicians').value,
                     end_time: document.getElementById('edit_end_time').value,
-                    spare_parts_qty: parseInt(document.getElementById('edit_spare_parts_qty').value) || 0,
-                    spare_parts_cost: parseFloat(document.getElementById('edit_spare_parts_cost').value) || 0,
+                    additional_unplanned_work: document.getElementById('edit_additional_unplanned_work').value,
+                    
+                    part_a_desc: document.getElementById('edit_part_a_desc').value,
+                    part_a_cost: parseFloat(document.getElementById('edit_part_a_cost').value) || 0,
+                    part_b_desc: document.getElementById('edit_part_b_desc').value,
+                    part_b_cost: parseFloat(document.getElementById('edit_part_b_cost').value) || 0,
+                    part_c_desc: document.getElementById('edit_part_c_desc').value,
+                    part_c_cost: parseFloat(document.getElementById('edit_part_c_cost').value) || 0,
+                    part_d_desc: document.getElementById('edit_part_d_desc').value,
+                    part_d_cost: parseFloat(document.getElementById('edit_part_d_cost').value) || 0,
+
                     lubricant_liters: parseFloat(document.getElementById('edit_lubricant_liters').value) || 0,
                     lubricant_cost: parseFloat(document.getElementById('edit_lubricant_cost').value) || 0,
                     battery_cost: parseFloat(document.getElementById('edit_battery_cost').value) || 0,
@@ -418,7 +639,13 @@ def serve_home():
             });
 
             function downloadExcel() {
-                window.location.href = '/api/reports/excel';
+                const fromDate = document.getElementById('filter_from_date').value;
+                const toDate = document.getElementById('filter_to_date').value;
+                let query = '';
+                if(fromDate && toDate) {
+                    query = `?from_date=${fromDate}&to_date=${toDate}`;
+                }
+                window.location.href = `/api/reports/excel${query}`;
             }
 
             fetchJobs();
@@ -431,18 +658,20 @@ def serve_home():
 @app.post("/api/jobs", response_model=JobResponse)
 def create_job(job: JobCreate):
     global job_id_counter
-    total = (
-        job.spare_parts_cost + 
-        job.lubricant_cost + 
-        job.battery_cost + 
-        job.tire_cost
-    )
+    
+    # Calculate Spare Parts Total Cost and Item Count
+    parts_cost = job.part_a_cost + job.part_b_cost + job.part_c_cost + job.part_d_cost
+    parts_qty = sum(1 for p in [job.part_a_desc, job.part_b_desc, job.part_c_desc, job.part_d_desc] if p and p.strip())
+    
+    total = parts_cost + job.lubricant_cost + job.battery_cost + job.tire_cost
     duration_str = calculate_duration(job.start_time, job.end_time)
     
     job_data = job.dict()
     job_data["id"] = job_id_counter
     job_data["status"] = "Completed" if job.end_time else "In Progress"
     job_data["duration"] = duration_str
+    job_data["spare_parts_qty"] = parts_qty
+    job_data["spare_parts_cost"] = parts_cost
     job_data["total_cost"] = total
     
     jobs_db.append(job_data)
@@ -450,8 +679,19 @@ def create_job(job: JobCreate):
     return job_data
 
 @app.get("/api/jobs", response_model=List[JobResponse])
-def get_jobs():
-    return jobs_db
+def get_jobs(from_date: Optional[str] = None, to_date: Optional[str] = None):
+    if not from_date or not to_date:
+        return jobs_db
+    
+    filtered = []
+    f_date = datetime.strptime(from_date, "%Y-%m-%d")
+    t_date = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
+    
+    for job in jobs_db:
+        j_date = parse_job_date(job.get("start_time", ""))
+        if j_date and f_date <= j_date <= t_date:
+            filtered.append(job)
+    return filtered
 
 @app.put("/api/jobs/{job_id}", response_model=JobResponse)
 def update_job(job_id: int, job_update: JobUpdate):
@@ -463,21 +703,28 @@ def update_job(job_id: int, job_update: JobUpdate):
                 job["technicians"] = job_update.technicians
             if job_update.end_time is not None:
                 job["end_time"] = job_update.end_time
-            if job_update.spare_parts_qty is not None:
-                job["spare_parts_qty"] = job_update.spare_parts_qty
-            if job_update.spare_parts_cost is not None:
-                job["spare_parts_cost"] = job_update.spare_parts_cost
-            if job_update.lubricant_liters is not None:
-                job["lubricant_liters"] = job_update.lubricant_liters
-            if job_update.lubricant_cost is not None:
-                job["lubricant_cost"] = job_update.lubricant_cost
-            if job_update.battery_cost is not None:
-                job["battery_cost"] = job_update.battery_cost
-            if job_update.tire_cost is not None:
-                job["tire_cost"] = job_update.tire_cost
+            if job_update.additional_unplanned_work is not None:
+                job["additional_unplanned_work"] = job_update.additional_unplanned_work
 
-            # Recalculate duration & total cost
+            if job_update.part_a_desc is not None: job["part_a_desc"] = job_update.part_a_desc
+            if job_update.part_a_cost is not None: job["part_a_cost"] = job_update.part_a_cost
+            if job_update.part_b_desc is not None: job["part_b_desc"] = job_update.part_b_desc
+            if job_update.part_b_cost is not None: job["part_b_cost"] = job_update.part_b_cost
+            if job_update.part_c_desc is not None: job["part_c_desc"] = job_update.part_c_desc
+            if job_update.part_c_cost is not None: job["part_c_cost"] = job_update.part_c_cost
+            if job_update.part_d_desc is not None: job["part_d_desc"] = job_update.part_d_desc
+            if job_update.part_d_cost is not None: job["part_d_cost"] = job_update.part_d_cost
+
+            if job_update.lubricant_liters is not None: job["lubricant_liters"] = job_update.lubricant_liters
+            if job_update.lubricant_cost is not None: job["lubricant_cost"] = job_update.lubricant_cost
+            if job_update.battery_cost is not None: job["battery_cost"] = job_update.battery_cost
+            if job_update.tire_cost is not None: job["tire_cost"] = job_update.tire_cost
+
+            # Recalculate duration & parts
             job["duration"] = calculate_duration(job["start_time"], job.get("end_time", ""))
+            job["spare_parts_cost"] = job["part_a_cost"] + job["part_b_cost"] + job["part_c_cost"] + job["part_d_cost"]
+            job["spare_parts_qty"] = sum(1 for p in [job["part_a_desc"], job["part_b_desc"], job["part_c_desc"], job["part_d_desc"]] if p and p.strip())
+            
             job["total_cost"] = (
                 job["spare_parts_cost"] + 
                 job["lubricant_cost"] + 
@@ -488,12 +735,12 @@ def update_job(job_id: int, job_update: JobUpdate):
     raise HTTPException(status_code=404, detail="Job not found")
 
 @app.get("/api/reports/executive-summary")
-def get_executive_summary():
+def get_executive_summary(from_date: Optional[str] = Query(None), to_date: Optional[str] = Query(None)):
     now = datetime.now()
     seven_days_ago = now - timedelta(days=7)
     thirty_days_ago = now - timedelta(days=30)
 
-    def summarize(period_start):
+    def summarize(period_start, period_end=None):
         summary = {
             "total_jobs": 0,
             "spare_parts_qty": 0,
@@ -506,33 +753,55 @@ def get_executive_summary():
         }
         for job in jobs_db:
             job_date = parse_job_date(job.get("start_time", ""))
-            if job_date and job_date >= period_start:
-                summary["total_jobs"] += 1
-                summary["spare_parts_qty"] += job.get("spare_parts_qty", 0)
-                summary["spare_parts_cost"] += job.get("spare_parts_cost", 0.0)
-                summary["lubricant_liters"] += job.get("lubricant_liters", 0.0)
-                summary["lubricant_cost"] += job.get("lubricant_cost", 0.0)
-                summary["battery_cost"] += job.get("battery_cost", 0.0)
-                summary["tire_cost"] += job.get("tire_cost", 0.0)
-                summary["total_cost"] += job.get("total_cost", 0.0)
+            if job_date:
+                in_period = False
+                if period_end:
+                    in_period = (period_start <= job_date <= period_end)
+                else:
+                    in_period = (job_date >= period_start)
+
+                if in_period:
+                    summary["total_jobs"] += 1
+                    summary["spare_parts_qty"] += job.get("spare_parts_qty", 0)
+                    summary["spare_parts_cost"] += job.get("spare_parts_cost", 0.0)
+                    summary["lubricant_liters"] += job.get("lubricant_liters", 0.0)
+                    summary["lubricant_cost"] += job.get("lubricant_cost", 0.0)
+                    summary["battery_cost"] += job.get("battery_cost", 0.0)
+                    summary["tire_cost"] += job.get("tire_cost", 0.0)
+                    summary["total_cost"] += job.get("total_cost", 0.0)
         return summary
 
-    return {
+    result = {
         "weekly": summarize(seven_days_ago),
-        "monthly": summarize(thirty_days_ago)
+        "monthly": summarize(thirty_days_ago),
+        "custom": None
     }
 
+    if from_date and to_date:
+        f_date = datetime.strptime(from_date, "%Y-%m-%d")
+        t_date = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
+        result["custom"] = summarize(f_date, t_date)
+
+    return result
+
 @app.get("/api/reports/excel")
-def generate_excel_report():
-    if not jobs_db:
+def generate_excel_report(from_date: Optional[str] = Query(None), to_date: Optional[str] = Query(None)):
+    data = jobs_db
+    if from_date and to_date:
+        f_date = datetime.strptime(from_date, "%Y-%m-%d")
+        t_date = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
+        data = [j for j in jobs_db if parse_job_date(j.get("start_time", "")) and f_date <= parse_job_date(j.get("start_time", "")) <= t_date]
+
+    if not data:
         df = pd.DataFrame(columns=[
             "S/N", "Vehicle Plate", "Vehicle Type", "Driver Name", "Assigned Technicians",
-            "Work Type", "Issue Description", "Start Time", "End Time", "Duration",
-            "Spare Parts Qty (Pcs)", "Spare Parts Cost", "Lubricants (Liters)", "Lubricant Cost", 
+            "Work Type", "Primary Issue", "Additional Unplanned Work", "Start Time", "End Time", "Duration",
+            "Part A", "Part A Cost", "Part B", "Part B Cost", "Part C", "Part C Cost", "Part D", "Part D Cost",
+            "Spare Parts Total Cost", "Lubricants (Liters)", "Lubricant Cost", 
             "Battery Cost", "Tire Cost", "Total Cost", "Status"
         ])
     else:
-        df = pd.DataFrame(jobs_db)
+        df = pd.DataFrame(data)
         df = df.rename(columns={
             "serial_number": "S/N",
             "vehicle_plate": "Vehicle Plate",
@@ -540,12 +809,20 @@ def generate_excel_report():
             "driver_name": "Driver Name",
             "technicians": "Assigned Technicians",
             "work_type": "Work Type",
-            "issue_description": "Issue Description",
+            "issue_description": "Primary Issue",
+            "additional_unplanned_work": "Additional Unplanned Work",
             "start_time": "Start Time",
             "end_time": "End Time",
             "duration": "Duration",
-            "spare_parts_qty": "Spare Parts Qty (Pcs)",
-            "spare_parts_cost": "Spare Parts Cost",
+            "part_a_desc": "Part A",
+            "part_a_cost": "Part A Cost",
+            "part_b_desc": "Part B",
+            "part_b_cost": "Part B Cost",
+            "part_c_desc": "Part C",
+            "part_c_cost": "Part C Cost",
+            "part_d_desc": "Part D",
+            "part_d_cost": "Part D Cost",
+            "spare_parts_cost": "Spare Parts Total Cost",
             "lubricant_liters": "Lubricants (Liters)",
             "lubricant_cost": "Lubricant Cost",
             "battery_cost": "Battery Cost",
@@ -553,8 +830,9 @@ def generate_excel_report():
             "total_cost": "Total Cost",
             "status": "Status"
         })
-        if "id" in df.columns:
-            df = df.drop(columns=["id"])
+        cols_to_drop = [c for c in ["id", "spare_parts_qty"] if c in df.columns]
+        if cols_to_drop:
+            df = df.drop(columns=cols_to_drop)
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
