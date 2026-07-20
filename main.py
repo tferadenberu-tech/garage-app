@@ -20,6 +20,11 @@ app.add_middleware(
 # ----------------------------------------------------
 # 1. Data Models
 # ----------------------------------------------------
+class SparePartItem(BaseModel):
+    description: str
+    qty: int = 1
+    unit_cost: float = 0.0
+
 class JobCreate(BaseModel):
     serial_number: str
     vehicle_plate: str
@@ -32,22 +37,7 @@ class JobCreate(BaseModel):
     start_time: str
     end_time: Optional[str] = ""
     
-    # Spare parts list with Description, Quantity, and Unit Cost (a, b, c, d)
-    part_a_desc: Optional[str] = ""
-    part_a_qty: int = 0
-    part_a_cost: float = 0.0
-
-    part_b_desc: Optional[str] = ""
-    part_b_qty: int = 0
-    part_b_cost: float = 0.0
-
-    part_c_desc: Optional[str] = ""
-    part_c_qty: int = 0
-    part_c_cost: float = 0.0
-
-    part_d_desc: Optional[str] = ""
-    part_d_qty: int = 0
-    part_d_cost: float = 0.0
+    spare_parts: List[SparePartItem] = []
 
     lubricant_liters: float = 0.0
     lubricant_cost: float = 0.0
@@ -60,21 +50,7 @@ class JobUpdate(BaseModel):
     end_time: Optional[str] = None
     additional_unplanned_work: Optional[str] = None
     
-    part_a_desc: Optional[str] = None
-    part_a_qty: Optional[int] = None
-    part_a_cost: Optional[float] = None
-
-    part_b_desc: Optional[str] = None
-    part_b_qty: Optional[int] = None
-    part_b_cost: Optional[float] = None
-
-    part_c_desc: Optional[str] = None
-    part_c_qty: Optional[int] = None
-    part_c_cost: Optional[float] = None
-
-    part_d_desc: Optional[str] = None
-    part_d_qty: Optional[int] = None
-    part_d_cost: Optional[float] = None
+    spare_parts: Optional[List[SparePartItem]] = None
 
     lubricant_liters: Optional[float] = None
     lubricant_cost: Optional[float] = None
@@ -117,52 +93,41 @@ def parse_job_date(start_str: str) -> Optional[datetime]:
         return None
 
 def build_excel_response(data: List[dict], filename: str):
-    if not data:
-        df = pd.DataFrame(columns=[
-            "S/N", "Vehicle Plate", "Vehicle Type", "Driver Name", "Assigned Technicians",
-            "Work Type", "Primary Issue", "Additional Unplanned Work", "Start Time", "End Time", "Duration",
-            "Part A Desc", "Part A Qty", "Part A Cost", "Part B Desc", "Part B Qty", "Part B Cost",
-            "Part C Desc", "Part C Qty", "Part C Cost", "Part D Desc", "Part D Qty", "Part D Cost",
-            "Spare Parts Total Cost", "Lubricants (Liters)", "Lubricant Cost", 
-            "Battery Cost", "Tire Cost", "Total Cost", "Status"
-        ])
-    else:
-        df = pd.DataFrame(data)
-        df = df.rename(columns={
-            "serial_number": "S/N",
-            "vehicle_plate": "Vehicle Plate",
-            "vehicle_type": "Vehicle Type",
-            "driver_name": "Driver Name",
-            "technicians": "Assigned Technicians",
-            "work_type": "Work Type",
-            "issue_description": "Primary Issue",
-            "additional_unplanned_work": "Additional Unplanned Work",
-            "start_time": "Start Time",
-            "end_time": "End Time",
-            "duration": "Duration",
-            "part_a_desc": "Part A Desc",
-            "part_a_qty": "Part A Qty",
-            "part_a_cost": "Part A Cost",
-            "part_b_desc": "Part B Desc",
-            "part_b_qty": "Part B Qty",
-            "part_b_cost": "Part B Cost",
-            "part_c_desc": "Part C Desc",
-            "part_c_qty": "Part C Qty",
-            "part_c_cost": "Part C Cost",
-            "part_d_desc": "Part D Desc",
-            "part_d_qty": "Part D Qty",
-            "part_d_cost": "Part D Cost",
-            "spare_parts_cost": "Spare Parts Total Cost",
-            "lubricant_liters": "Lubricants (Liters)",
-            "lubricant_cost": "Lubricant Cost",
-            "battery_cost": "Battery Cost",
-            "tire_cost": "Tire Cost",
-            "total_cost": "Total Cost",
-            "status": "Status"
-        })
-        cols_to_drop = [c for c in ["id", "spare_parts_qty"] if c in df.columns]
-        if cols_to_drop:
-            df = df.drop(columns=cols_to_drop)
+    excel_rows = []
+    for job in data:
+        parts = job.get("spare_parts", [])
+        parts_str = "; ".join([f"{p['description']} (Qty: {p['qty']}, Unit Cost: ETB {p['unit_cost']})" for p in parts])
+        
+        row = {
+            "S/N": job.get("serial_number"),
+            "Vehicle Plate": job.get("vehicle_plate"),
+            "Vehicle Type": job.get("vehicle_type"),
+            "Driver Name": job.get("driver_name"),
+            "Assigned Technicians": job.get("technicians"),
+            "Work Type": job.get("work_type"),
+            "Primary Issue": job.get("issue_description"),
+            "Additional Unplanned Work": job.get("additional_unplanned_work"),
+            "Start Time": job.get("start_time"),
+            "End Time": job.get("end_time"),
+            "Duration": job.get("duration"),
+            "Replaced Spare Parts Breakdown": parts_str if parts_str else "None",
+            "Spare Parts Total Qty": job.get("spare_parts_qty", 0),
+            "Spare Parts Total Cost": job.get("spare_parts_cost", 0.0),
+            "Lubricants (Liters)": job.get("lubricant_liters", 0.0),
+            "Lubricant Cost": job.get("lubricant_cost", 0.0),
+            "Battery Cost": job.get("battery_cost", 0.0),
+            "Tire Cost": job.get("tire_cost", 0.0),
+            "Total Cost": job.get("total_cost", 0.0),
+            "Status": job.get("status")
+        }
+        excel_rows.append(row)
+
+    df = pd.DataFrame(excel_rows) if excel_rows else pd.DataFrame(columns=[
+        "S/N", "Vehicle Plate", "Vehicle Type", "Driver Name", "Assigned Technicians",
+        "Work Type", "Primary Issue", "Additional Unplanned Work", "Start Time", "End Time", "Duration",
+        "Replaced Spare Parts Breakdown", "Spare Parts Total Qty", "Spare Parts Total Cost",
+        "Lubricants (Liters)", "Lubricant Cost", "Battery Cost", "Tire Cost", "Total Cost", "Status"
+    ])
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -189,11 +154,9 @@ def serve_home():
             :root {
                 --primary: #1a365d;
                 --primary-light: #2b6cb0;
-                --accent: #2b6cb0;
                 --bg-main: #f1f5f9;
                 --card-bg: #ffffff;
                 --text-main: #0f172a;
-                --text-muted: #64748b;
                 --border: #e2e8f0;
                 --success: #10b981;
                 --warning: #f59e0b;
@@ -225,9 +188,6 @@ def serve_home():
                 font-size: 14px; background-color: #f8fafc; color: var(--text-main);
             }
             input:focus, textarea:focus, select:focus { border-color: var(--primary-light); outline: none; background-color: #fff; }
-            
-            .parts-subgroup { background: #f8fafc; border: 1px dashed var(--border); padding: 15px; border-radius: 8px; margin-bottom: 15px; }
-            .parts-row { display: grid; grid-template-columns: 2fr 100px 140px; gap: 10px; margin-bottom: 8px; }
 
             button { 
                 background-color: var(--primary); color: white; 
@@ -235,6 +195,8 @@ def serve_home():
                 cursor: pointer; font-size: 14px; font-weight: 600; 
             }
             button:hover { background-color: var(--primary-light); }
+            .btn-add-part { background-color: #0284c7; margin-bottom: 12px; }
+            .btn-add-part:hover { background-color: #0369a1; }
             .btn-info { background-color: var(--info); }
             .btn-info:hover { background-color: #0369a1; }
             .btn-excel { background-color: #16a34a; color: white; padding: 6px 12px; font-size: 12px; margin-top: 10px; width: 100%; }
@@ -245,6 +207,12 @@ def serve_home():
             .btn-filter:hover { background-color: #334155; }
             .btn-reset { background-color: #94a3b8; }
             .btn-reset:hover { background-color: #64748b; }
+            .btn-remove { background-color: #ef4444; color: white; padding: 4px 8px; font-size: 12px; border-radius: 4px; }
+            .btn-remove:hover { background-color: #dc2626; }
+
+            .parts-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 13px; }
+            .parts-table th, .parts-table td { border: 1px solid var(--border); padding: 8px; text-align: left; }
+            .parts-table th { background-color: #e2e8f0; color: var(--text-main); }
 
             .filter-bar { 
                 display: flex; gap: 12px; align-items: flex-end; 
@@ -268,7 +236,7 @@ def serve_home():
 
             /* Modal Dialog Box */
             .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(15, 23, 42, 0.6); }
-            .modal-content { background-color: white; margin: 3% auto; padding: 25px; border-radius: 10px; width: 650px; max-width: 90%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); max-height: 85vh; overflow-y: auto; }
+            .modal-content { background-color: white; margin: 5% auto; padding: 25px; border-radius: 10px; width: 550px; max-width: 90%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
             .close-btn { color: #94a3b8; float: right; font-size: 24px; font-weight: bold; cursor: pointer; }
             .close-btn:hover { color: var(--text-main); }
         </style>
@@ -366,28 +334,22 @@ def serve_home():
                 </div>
 
                 <h3>Replaced Spare Parts Breakdown (Description, Qty, Unit Cost)</h3>
-                <div class="parts-subgroup">
-                    <div class="parts-row">
-                        <input type="text" id="part_a_desc" placeholder="a. Spare Part Name (Spec)">
-                        <input type="number" id="part_a_qty" placeholder="Qty (Pcs)" value="0" min="0">
-                        <input type="number" id="part_a_cost" placeholder="Unit Cost (ETB)" value="0" step="0.01">
-                    </div>
-                    <div class="parts-row">
-                        <input type="text" id="part_b_desc" placeholder="b. Spare Part Name (Spec)">
-                        <input type="number" id="part_b_qty" placeholder="Qty (Pcs)" value="0" min="0">
-                        <input type="number" id="part_b_cost" placeholder="Unit Cost (ETB)" value="0" step="0.01">
-                    </div>
-                    <div class="parts-row">
-                        <input type="text" id="part_c_desc" placeholder="c. Spare Part Name (Spec)">
-                        <input type="number" id="part_c_qty" placeholder="Qty (Pcs)" value="0" min="0">
-                        <input type="number" id="part_c_cost" placeholder="Unit Cost (ETB)" value="0" step="0.01">
-                    </div>
-                    <div class="parts-row">
-                        <input type="text" id="part_d_desc" placeholder="d. Spare Part Name (Spec)">
-                        <input type="number" id="part_d_qty" placeholder="Qty (Pcs)" value="0" min="0">
-                        <input type="number" id="part_d_cost" placeholder="Unit Cost (ETB)" value="0" step="0.01">
-                    </div>
-                </div>
+                <button type="button" class="btn-add-part" onclick="openSparePartModal('create')">+ Add Replaced Spare Part Breakdown (Description, Qty, Unit Cost)</button>
+
+                <table class="parts-table" id="createPartsTable">
+                    <thead>
+                        <tr>
+                            <th>Spare Part Description</th>
+                            <th>Quantity (Pcs)</th>
+                            <th>Unit Cost (ETB)</th>
+                            <th>Total Cost (ETB)</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr id="noPartsRow"><td colspan="5" style="text-align:center; color:#94a3b8;">No spare parts added yet. Click above to add.</td></tr>
+                    </tbody>
+                </table>
 
                 <h3>Lubricants, Batteries & Tires</h3>
                 <div class="form-grid">
@@ -438,7 +400,7 @@ def serve_home():
                         <th>Plate</th>
                         <th>Vehicle Type</th>
                         <th>Technicians</th>
-                        <th>Replaced Parts (Desc, Qty, Cost)</th>
+                        <th>Replaced Parts Breakdown</th>
                         <th>Lubricants</th>
                         <th>Unplanned Work</th>
                         <th>Duration</th>
@@ -451,10 +413,34 @@ def serve_home():
             </table>
         </div>
 
-        <!-- EDITABLE SPARE PARTS MODAL DIALOG -->
-        <div id="editModal" class="modal">
+        <!-- ADD SPARE PART DIALOG BOX / MODAL -->
+        <div id="sparePartModal" class="modal">
             <div class="modal-content">
-                <span class="close-btn" onclick="closeModal()">&times;</span>
+                <span class="close-btn" onclick="closeSparePartModal()">&times;</span>
+                <h3>Add Replaced Spare Part Breakdown</h3>
+                <form id="sparePartForm">
+                    <div class="form-group">
+                        <label>Spare Part Description / Spec:</label>
+                        <input type="text" id="modal_part_desc" required placeholder="e.g., Oil Filter, Brake Pad Set">
+                    </div>
+                    <div class="form-group">
+                        <label>Quantity (Pcs):</label>
+                        <input type="number" id="modal_part_qty" required value="1" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>Unit Cost (ETB):</label>
+                        <input type="number" id="modal_part_cost" required value="0" step="0.01">
+                    </div>
+                    <button type="submit" style="margin-top: 10px;">Add Part to List</button>
+                    <button type="button" onclick="closeSparePartModal()" style="background-color: #64748b;">Cancel</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- EDIT WORK ORDER MODAL DIALOG -->
+        <div id="editModal" class="modal">
+            <div class="modal-content" style="width:650px;">
+                <span class="close-btn" onclick="closeEditModal()">&times;</span>
                 <h3>Edit Work Order #<span id="editJobIdTitle"></span></h3>
                 <form id="editForm">
                     <input type="hidden" id="editJobId">
@@ -479,29 +465,21 @@ def serve_home():
                         <textarea id="edit_additional_unplanned_work"></textarea>
                     </div>
 
-                    <h4>Editable Spare Parts Breakdown (a, b, c, d)</h4>
-                    <div class="parts-subgroup">
-                        <div class="parts-row">
-                            <input type="text" id="edit_part_a_desc" placeholder="a. Spare Part Name (Spec)">
-                            <input type="number" id="edit_part_a_qty" placeholder="Qty" min="0">
-                            <input type="number" id="edit_part_a_cost" placeholder="Unit Cost" step="0.01">
-                        </div>
-                        <div class="parts-row">
-                            <input type="text" id="edit_part_b_desc" placeholder="b. Spare Part Name (Spec)">
-                            <input type="number" id="edit_part_b_qty" placeholder="Qty" min="0">
-                            <input type="number" id="edit_part_b_cost" placeholder="Unit Cost" step="0.01">
-                        </div>
-                        <div class="parts-row">
-                            <input type="text" id="edit_part_c_desc" placeholder="c. Spare Part Name (Spec)">
-                            <input type="number" id="edit_part_c_qty" placeholder="Qty" min="0">
-                            <input type="number" id="edit_part_c_cost" placeholder="Unit Cost" step="0.01">
-                        </div>
-                        <div class="parts-row">
-                            <input type="text" id="edit_part_d_desc" placeholder="d. Spare Part Name (Spec)">
-                            <input type="number" id="edit_part_d_qty" placeholder="Qty" min="0">
-                            <input type="number" id="edit_part_d_cost" placeholder="Unit Cost" step="0.01">
-                        </div>
-                    </div>
+                    <h4>Replaced Spare Parts Breakdown</h4>
+                    <button type="button" class="btn-add-part" onclick="openSparePartModal('edit')">+ Add Replaced Spare Part Breakdown (Description, Qty, Unit Cost)</button>
+                    
+                    <table class="parts-table" id="editPartsTable">
+                        <thead>
+                            <tr>
+                                <th>Spare Part Description</th>
+                                <th>Qty</th>
+                                <th>Unit Cost</th>
+                                <th>Total</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
 
                     <div class="form-group">
                         <label>Lubricants Quantity (Liters):</label>
@@ -521,14 +499,98 @@ def serve_home():
                     </div>
                     
                     <button type="submit" style="margin-top: 10px;">Save Changes</button>
-                    <button type="button" onclick="closeModal()" style="background-color: #64748b;">Cancel</button>
+                    <button type="button" onclick="closeEditModal()" style="background-color: #64748b;">Cancel</button>
                 </form>
             </div>
         </div>
 
         <script>
             let allJobs = [];
+            let createSpareParts = [];
+            let editSpareParts = [];
+            let activeModalContext = 'create'; // 'create' or 'edit'
 
+            // --- Spare Part Modal Handlers ---
+            function openSparePartModal(context) {
+                activeModalContext = context;
+                document.getElementById('sparePartForm').reset();
+                document.getElementById('modal_part_qty').value = 1;
+                document.getElementById('modal_part_cost').value = 0;
+                document.getElementById('sparePartModal').style.display = 'block';
+            }
+
+            function closeSparePartModal() {
+                document.getElementById('sparePartModal').style.display = 'none';
+            }
+
+            document.getElementById('sparePartForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const desc = document.getElementById('modal_part_desc').value;
+                const qty = parseInt(document.getElementById('modal_part_qty').value) || 1;
+                const cost = parseFloat(document.getElementById('modal_part_cost').value) || 0;
+
+                const item = { description: desc, qty: qty, unit_cost: cost };
+
+                if(activeModalContext === 'create') {
+                    createSpareParts.push(item);
+                    renderCreatePartsTable();
+                } else {
+                    editSpareParts.push(item);
+                    renderEditPartsTable();
+                }
+
+                closeSparePartModal();
+            });
+
+            function renderCreatePartsTable() {
+                const tbody = document.querySelector('#createPartsTable tbody');
+                tbody.innerHTML = '';
+                if(createSpareParts.length === 0) {
+                    tbody.innerHTML = '<tr id="noPartsRow"><td colspan="5" style="text-align:center; color:#94a3b8;">No spare parts added yet. Click above to add.</td></tr>';
+                    return;
+                }
+                createSpareParts.forEach((p, idx) => {
+                    const total = p.qty * p.unit_cost;
+                    tbody.innerHTML += `<tr>
+                        <td><b>${p.description}</b></td>
+                        <td>${p.qty}</td>
+                        <td>ETB ${p.unit_cost.toLocaleString()}</td>
+                        <td>ETB ${total.toLocaleString()}</td>
+                        <td><button type="button" class="btn-remove" onclick="removeCreatePart(${idx})">Delete</button></td>
+                    </tr>`;
+                });
+            }
+
+            function removeCreatePart(index) {
+                createSpareParts.splice(index, 1);
+                renderCreatePartsTable();
+            }
+
+            function renderEditPartsTable() {
+                const tbody = document.querySelector('#editPartsTable tbody');
+                tbody.innerHTML = '';
+                if(editSpareParts.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#94a3b8;">No spare parts attached.</td></tr>';
+                    return;
+                }
+                editSpareParts.forEach((p, idx) => {
+                    const total = p.qty * p.unit_cost;
+                    tbody.innerHTML += `<tr>
+                        <td><b>${p.description}</b></td>
+                        <td>${p.qty}</td>
+                        <td>ETB ${p.unit_cost.toLocaleString()}</td>
+                        <td>ETB ${total.toLocaleString()}</td>
+                        <td><button type="button" class="btn-remove" onclick="removeEditPart(${idx})">Delete</button></td>
+                    </tr>`;
+                });
+            }
+
+            function removeEditPart(index) {
+                editSpareParts.splice(index, 1);
+                renderEditPartsTable();
+            }
+
+            // --- Executive Summary ---
             async function fetchSummary() {
                 const execFrom = document.getElementById('exec_from_date').value;
                 const execTo = document.getElementById('exec_to_date').value;
@@ -570,6 +632,7 @@ def serve_home():
                 fetchSummary();
             }
 
+            // --- Job Registry ---
             async function fetchJobs() {
                 const fromDate = document.getElementById('filter_from_date').value;
                 const toDate = document.getElementById('filter_to_date').value;
@@ -584,12 +647,10 @@ def serve_home():
                 const tbody = document.querySelector('#jobsTable tbody');
                 tbody.innerHTML = '';
                 allJobs.forEach(j => {
-                    let partsSummary = [];
-                    if(j.part_a_desc) partsSummary.push(`a. ${j.part_a_desc} (${j.part_a_qty || 1} Pcs @ ETB ${j.part_a_cost})`);
-                    if(j.part_b_desc) partsSummary.push(`b. ${j.part_b_desc} (${j.part_b_qty || 1} Pcs @ ETB ${j.part_b_cost})`);
-                    if(j.part_c_desc) partsSummary.push(`c. ${j.part_c_desc} (${j.part_c_qty || 1} Pcs @ ETB ${j.part_c_cost})`);
-                    if(j.part_d_desc) partsSummary.push(`d. ${j.part_d_desc} (${j.part_d_qty || 1} Pcs @ ETB ${j.part_d_cost})`);
-                    let partsText = partsSummary.length > 0 ? partsSummary.join('<br>') : 'None';
+                    let partsText = 'None';
+                    if(j.spare_parts && j.spare_parts.length > 0) {
+                        partsText = j.spare_parts.map(p => `• ${p.description} (${p.qty} Pcs @ ETB ${p.unit_cost})`).join('<br>');
+                    }
 
                     tbody.innerHTML += `<tr>
                         <td><b>${j.serial_number}</b></td>
@@ -613,6 +674,7 @@ def serve_home():
                 fetchJobs();
             }
 
+            // --- Form Submit ---
             document.getElementById('jobForm').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const data = {
@@ -627,21 +689,7 @@ def serve_home():
                     start_time: document.getElementById('start_time').value,
                     end_time: document.getElementById('end_time').value,
                     
-                    part_a_desc: document.getElementById('part_a_desc').value,
-                    part_a_qty: parseInt(document.getElementById('part_a_qty').value) || 0,
-                    part_a_cost: parseFloat(document.getElementById('part_a_cost').value) || 0,
-
-                    part_b_desc: document.getElementById('part_b_desc').value,
-                    part_b_qty: parseInt(document.getElementById('part_b_qty').value) || 0,
-                    part_b_cost: parseFloat(document.getElementById('part_b_cost').value) || 0,
-
-                    part_c_desc: document.getElementById('part_c_desc').value,
-                    part_c_qty: parseInt(document.getElementById('part_c_qty').value) || 0,
-                    part_c_cost: parseFloat(document.getElementById('part_c_cost').value) || 0,
-
-                    part_d_desc: document.getElementById('part_d_desc').value,
-                    part_d_qty: parseInt(document.getElementById('part_d_qty').value) || 0,
-                    part_d_cost: parseFloat(document.getElementById('part_d_cost').value) || 0,
+                    spare_parts: createSpareParts,
 
                     lubricant_liters: parseFloat(document.getElementById('lubricant_liters').value) || 0,
                     lubricant_cost: parseFloat(document.getElementById('lubricant_cost').value) || 0,
@@ -656,10 +704,13 @@ def serve_home():
                 });
 
                 document.getElementById('jobForm').reset();
+                createSpareParts = [];
+                renderCreatePartsTable();
                 fetchJobs();
                 fetchSummary();
             });
 
+            // --- Edit Modal Handlers ---
             function openEditModal(id) {
                 const job = allJobs.find(j => j.id === id);
                 if (!job) return;
@@ -671,21 +722,8 @@ def serve_home():
                 document.getElementById('edit_end_time').value = job.end_time || '';
                 document.getElementById('edit_additional_unplanned_work').value = job.additional_unplanned_work || '';
                 
-                document.getElementById('edit_part_a_desc').value = job.part_a_desc || '';
-                document.getElementById('edit_part_a_qty').value = job.part_a_qty || 0;
-                document.getElementById('edit_part_a_cost').value = job.part_a_cost || 0;
-
-                document.getElementById('edit_part_b_desc').value = job.part_b_desc || '';
-                document.getElementById('edit_part_b_qty').value = job.part_b_qty || 0;
-                document.getElementById('edit_part_b_cost').value = job.part_b_cost || 0;
-
-                document.getElementById('edit_part_c_desc').value = job.part_c_desc || '';
-                document.getElementById('edit_part_c_qty').value = job.part_c_qty || 0;
-                document.getElementById('edit_part_c_cost').value = job.part_c_cost || 0;
-
-                document.getElementById('edit_part_d_desc').value = job.part_d_desc || '';
-                document.getElementById('edit_part_d_qty').value = job.part_d_qty || 0;
-                document.getElementById('edit_part_d_cost').value = job.part_d_cost || 0;
+                editSpareParts = job.spare_parts ? JSON.parse(JSON.stringify(job.spare_parts)) : [];
+                renderEditPartsTable();
 
                 document.getElementById('edit_lubricant_liters').value = job.lubricant_liters || 0;
                 document.getElementById('edit_lubricant_cost').value = job.lubricant_cost || 0;
@@ -695,7 +733,7 @@ def serve_home():
                 document.getElementById('editModal').style.display = 'block';
             }
 
-            function closeModal() {
+            function closeEditModal() {
                 document.getElementById('editModal').style.display = 'none';
             }
 
@@ -708,21 +746,7 @@ def serve_home():
                     end_time: document.getElementById('edit_end_time').value,
                     additional_unplanned_work: document.getElementById('edit_additional_unplanned_work').value,
                     
-                    part_a_desc: document.getElementById('edit_part_a_desc').value,
-                    part_a_qty: parseInt(document.getElementById('edit_part_a_qty').value) || 0,
-                    part_a_cost: parseFloat(document.getElementById('edit_part_a_cost').value) || 0,
-
-                    part_b_desc: document.getElementById('edit_part_b_desc').value,
-                    part_b_qty: parseInt(document.getElementById('edit_part_b_qty').value) || 0,
-                    part_b_cost: parseFloat(document.getElementById('edit_part_b_cost').value) || 0,
-
-                    part_c_desc: document.getElementById('edit_part_c_desc').value,
-                    part_c_qty: parseInt(document.getElementById('edit_part_c_qty').value) || 0,
-                    part_c_cost: parseFloat(document.getElementById('edit_part_c_cost').value) || 0,
-
-                    part_d_desc: document.getElementById('edit_part_d_desc').value,
-                    part_d_qty: parseInt(document.getElementById('edit_part_d_qty').value) || 0,
-                    part_d_cost: parseFloat(document.getElementById('edit_part_d_cost').value) || 0,
+                    spare_parts: editSpareParts,
 
                     lubricant_liters: parseFloat(document.getElementById('edit_lubricant_liters').value) || 0,
                     lubricant_cost: parseFloat(document.getElementById('edit_lubricant_cost').value) || 0,
@@ -736,11 +760,12 @@ def serve_home():
                     body: JSON.stringify(data)
                 });
 
-                closeModal();
+                closeEditModal();
                 fetchJobs();
                 fetchSummary();
             });
 
+            // --- Excel Downloads ---
             function downloadWeeklyExcel() {
                 window.location.href = `/api/reports/excel/weekly`;
             }
@@ -770,13 +795,8 @@ def serve_home():
 def create_job(job: JobCreate):
     global job_id_counter
     
-    cost_a = (job.part_a_qty if job.part_a_qty > 0 else (1 if job.part_a_desc else 0)) * job.part_a_cost
-    cost_b = (job.part_b_qty if job.part_b_qty > 0 else (1 if job.part_b_desc else 0)) * job.part_b_cost
-    cost_c = (job.part_c_qty if job.part_c_qty > 0 else (1 if job.part_c_desc else 0)) * job.part_c_cost
-    cost_d = (job.part_d_qty if job.part_d_qty > 0 else (1 if job.part_d_desc else 0)) * job.part_d_cost
-
-    parts_cost = cost_a + cost_b + cost_c + cost_d
-    parts_qty = job.part_a_qty + job.part_b_qty + job.part_c_qty + job.part_d_qty
+    parts_cost = sum(p.qty * p.unit_cost for p in job.spare_parts)
+    parts_qty = sum(p.qty for p in job.spare_parts)
 
     total = parts_cost + job.lubricant_cost + job.battery_cost + job.tire_cost
     duration_str = calculate_duration(job.start_time, job.end_time)
@@ -821,21 +841,8 @@ def update_job(job_id: int, job_update: JobUpdate):
             if job_update.additional_unplanned_work is not None:
                 job["additional_unplanned_work"] = job_update.additional_unplanned_work
 
-            if job_update.part_a_desc is not None: job["part_a_desc"] = job_update.part_a_desc
-            if job_update.part_a_qty is not None: job["part_a_qty"] = job_update.part_a_qty
-            if job_update.part_a_cost is not None: job["part_a_cost"] = job_update.part_a_cost
-
-            if job_update.part_b_desc is not None: job["part_b_desc"] = job_update.part_b_desc
-            if job_update.part_b_qty is not None: job["part_b_qty"] = job_update.part_b_qty
-            if job_update.part_b_cost is not None: job["part_b_cost"] = job_update.part_b_cost
-
-            if job_update.part_c_desc is not None: job["part_c_desc"] = job_update.part_c_desc
-            if job_update.part_c_qty is not None: job["part_c_qty"] = job_update.part_c_qty
-            if job_update.part_c_cost is not None: job["part_c_cost"] = job_update.part_c_cost
-
-            if job_update.part_d_desc is not None: job["part_d_desc"] = job_update.part_d_desc
-            if job_update.part_d_qty is not None: job["part_d_qty"] = job_update.part_d_qty
-            if job_update.part_d_cost is not None: job["part_d_cost"] = job_update.part_d_cost
+            if job_update.spare_parts is not None:
+                job["spare_parts"] = [p.dict() for p in job_update.spare_parts]
 
             if job_update.lubricant_liters is not None: job["lubricant_liters"] = job_update.lubricant_liters
             if job_update.lubricant_cost is not None: job["lubricant_cost"] = job_update.lubricant_cost
@@ -844,13 +851,8 @@ def update_job(job_id: int, job_update: JobUpdate):
 
             job["duration"] = calculate_duration(job["start_time"], job.get("end_time", ""))
             
-            cost_a = (job["part_a_qty"] if job["part_a_qty"] > 0 else (1 if job["part_a_desc"] else 0)) * job["part_a_cost"]
-            cost_b = (job["part_b_qty"] if job["part_b_qty"] > 0 else (1 if job["part_b_desc"] else 0)) * job["part_b_cost"]
-            cost_c = (job["part_c_qty"] if job["part_c_qty"] > 0 else (1 if job["part_c_desc"] else 0)) * job["part_c_cost"]
-            cost_d = (job["part_d_qty"] if job["part_d_qty"] > 0 else (1 if job["part_d_desc"] else 0)) * job["part_d_cost"]
-            
-            job["spare_parts_cost"] = cost_a + cost_b + cost_c + cost_d
-            job["spare_parts_qty"] = job["part_a_qty"] + job["part_b_qty"] + job["part_c_qty"] + job["part_d_qty"]
+            job["spare_parts_cost"] = sum(p["qty"] * p["unit_cost"] for p in job.get("spare_parts", []))
+            job["spare_parts_qty"] = sum(p["qty"] for p in job.get("spare_parts", []))
             
             job["total_cost"] = (
                 job["spare_parts_cost"] + 
