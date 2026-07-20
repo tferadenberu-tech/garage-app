@@ -116,6 +116,62 @@ def parse_job_date(start_str: str) -> Optional[datetime]:
     except Exception:
         return None
 
+def build_excel_response(data: List[dict], filename: str):
+    if not data:
+        df = pd.DataFrame(columns=[
+            "S/N", "Vehicle Plate", "Vehicle Type", "Driver Name", "Assigned Technicians",
+            "Work Type", "Primary Issue", "Additional Unplanned Work", "Start Time", "End Time", "Duration",
+            "Part A Desc", "Part A Qty", "Part A Cost", "Part B Desc", "Part B Qty", "Part B Cost",
+            "Part C Desc", "Part C Qty", "Part C Cost", "Part D Desc", "Part D Qty", "Part D Cost",
+            "Spare Parts Total Cost", "Lubricants (Liters)", "Lubricant Cost", 
+            "Battery Cost", "Tire Cost", "Total Cost", "Status"
+        ])
+    else:
+        df = pd.DataFrame(data)
+        df = df.rename(columns={
+            "serial_number": "S/N",
+            "vehicle_plate": "Vehicle Plate",
+            "vehicle_type": "Vehicle Type",
+            "driver_name": "Driver Name",
+            "technicians": "Assigned Technicians",
+            "work_type": "Work Type",
+            "issue_description": "Primary Issue",
+            "additional_unplanned_work": "Additional Unplanned Work",
+            "start_time": "Start Time",
+            "end_time": "End Time",
+            "duration": "Duration",
+            "part_a_desc": "Part A Desc",
+            "part_a_qty": "Part A Qty",
+            "part_a_cost": "Part A Cost",
+            "part_b_desc": "Part B Desc",
+            "part_b_qty": "Part B Qty",
+            "part_b_cost": "Part B Cost",
+            "part_c_desc": "Part C Desc",
+            "part_c_qty": "Part C Qty",
+            "part_c_cost": "Part C Cost",
+            "part_d_desc": "Part D Desc",
+            "part_d_qty": "Part D Qty",
+            "part_d_cost": "Part D Cost",
+            "spare_parts_cost": "Spare Parts Total Cost",
+            "lubricant_liters": "Lubricants (Liters)",
+            "lubricant_cost": "Lubricant Cost",
+            "battery_cost": "Battery Cost",
+            "tire_cost": "Tire Cost",
+            "total_cost": "Total Cost",
+            "status": "Status"
+        })
+        cols_to_drop = [c for c in ["id", "spare_parts_qty"] if c in df.columns]
+        if cols_to_drop:
+            df = df.drop(columns=cols_to_drop)
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Garage_Report')
+    
+    output.seek(0)
+    headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
+    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
 # ----------------------------------------------------
 # 3. API Endpoints
 # ----------------------------------------------------
@@ -181,6 +237,8 @@ def serve_home():
             button:hover { background-color: var(--primary-light); }
             .btn-info { background-color: var(--info); }
             .btn-info:hover { background-color: #0369a1; }
+            .btn-excel { background-color: #16a34a; color: white; padding: 6px 12px; font-size: 12px; margin-top: 10px; width: 100%; }
+            .btn-excel:hover { background-color: #15803d; }
             .btn-edit { background-color: var(--warning); color: #fff; padding: 5px 12px; font-size: 12px; border-radius: 4px; }
             .btn-edit:hover { background-color: #d97706; }
             .btn-filter { background-color: #475569; }
@@ -239,10 +297,12 @@ def serve_home():
                 <div class="card">
                     <h4>Weekly Summary (Last 7 Days)</h4>
                     <div id="weeklyStats">Loading...</div>
+                    <button class="btn-excel" onclick="downloadWeeklyExcel()">Export Weekly Excel</button>
                 </div>
                 <div class="card monthly">
                     <h4>Monthly Summary (Last 30 Days)</h4>
                     <div id="monthlyStats">Loading...</div>
+                    <button class="btn-excel" onclick="downloadMonthlyExcel()">Export Monthly Excel</button>
                 </div>
                 <div class="card custom">
                     <h4>Custom Date Range Summary</h4>
@@ -308,22 +368,22 @@ def serve_home():
                 <h3>Replaced Spare Parts Breakdown (Description, Qty, Unit Cost)</h3>
                 <div class="parts-subgroup">
                     <div class="parts-row">
-                        <input type="text" id="part_a_desc" placeholder="a. Spare Part Name / Spec">
+                        <input type="text" id="part_a_desc" placeholder="a. Spare Part Name (Spec)">
                         <input type="number" id="part_a_qty" placeholder="Qty (Pcs)" value="0" min="0">
                         <input type="number" id="part_a_cost" placeholder="Unit Cost (ETB)" value="0" step="0.01">
                     </div>
                     <div class="parts-row">
-                        <input type="text" id="part_b_desc" placeholder="b. Spare Part Name / Spec">
+                        <input type="text" id="part_b_desc" placeholder="b. Spare Part Name (Spec)">
                         <input type="number" id="part_b_qty" placeholder="Qty (Pcs)" value="0" min="0">
                         <input type="number" id="part_b_cost" placeholder="Unit Cost (ETB)" value="0" step="0.01">
                     </div>
                     <div class="parts-row">
-                        <input type="text" id="part_c_desc" placeholder="c. Spare Part Name / Spec">
+                        <input type="text" id="part_c_desc" placeholder="c. Spare Part Name (Spec)">
                         <input type="number" id="part_c_qty" placeholder="Qty (Pcs)" value="0" min="0">
                         <input type="number" id="part_c_cost" placeholder="Unit Cost (ETB)" value="0" step="0.01">
                     </div>
                     <div class="parts-row">
-                        <input type="text" id="part_d_desc" placeholder="d. Spare Part Name / Spec">
+                        <input type="text" id="part_d_desc" placeholder="d. Spare Part Name (Spec)">
                         <input type="number" id="part_d_qty" placeholder="Qty (Pcs)" value="0" min="0">
                         <input type="number" id="part_d_cost" placeholder="Unit Cost (ETB)" value="0" step="0.01">
                     </div>
@@ -422,22 +482,22 @@ def serve_home():
                     <h4>Editable Spare Parts Breakdown (a, b, c, d)</h4>
                     <div class="parts-subgroup">
                         <div class="parts-row">
-                            <input type="text" id="edit_part_a_desc" placeholder="a. Part Name">
+                            <input type="text" id="edit_part_a_desc" placeholder="a. Spare Part Name (Spec)">
                             <input type="number" id="edit_part_a_qty" placeholder="Qty" min="0">
                             <input type="number" id="edit_part_a_cost" placeholder="Unit Cost" step="0.01">
                         </div>
                         <div class="parts-row">
-                            <input type="text" id="edit_part_b_desc" placeholder="b. Part Name">
+                            <input type="text" id="edit_part_b_desc" placeholder="b. Spare Part Name (Spec)">
                             <input type="number" id="edit_part_b_qty" placeholder="Qty" min="0">
                             <input type="number" id="edit_part_b_cost" placeholder="Unit Cost" step="0.01">
                         </div>
                         <div class="parts-row">
-                            <input type="text" id="edit_part_c_desc" placeholder="c. Part Name">
+                            <input type="text" id="edit_part_c_desc" placeholder="c. Spare Part Name (Spec)">
                             <input type="number" id="edit_part_c_qty" placeholder="Qty" min="0">
                             <input type="number" id="edit_part_c_cost" placeholder="Unit Cost" step="0.01">
                         </div>
                         <div class="parts-row">
-                            <input type="text" id="edit_part_d_desc" placeholder="d. Part Name">
+                            <input type="text" id="edit_part_d_desc" placeholder="d. Spare Part Name (Spec)">
                             <input type="number" id="edit_part_d_qty" placeholder="Qty" min="0">
                             <input type="number" id="edit_part_d_cost" placeholder="Unit Cost" step="0.01">
                         </div>
@@ -681,6 +741,14 @@ def serve_home():
                 fetchSummary();
             });
 
+            function downloadWeeklyExcel() {
+                window.location.href = `/api/reports/excel/weekly`;
+            }
+
+            function downloadMonthlyExcel() {
+                window.location.href = `/api/reports/excel/monthly`;
+            }
+
             function downloadExcel() {
                 const fromDate = document.getElementById('filter_from_date').value;
                 const toDate = document.getElementById('filter_to_date').value;
@@ -702,7 +770,6 @@ def serve_home():
 def create_job(job: JobCreate):
     global job_id_counter
     
-    # Calculate Spare Parts Total Cost & Quantity
     cost_a = (job.part_a_qty if job.part_a_qty > 0 else (1 if job.part_a_desc else 0)) * job.part_a_cost
     cost_b = (job.part_b_qty if job.part_b_qty > 0 else (1 if job.part_b_desc else 0)) * job.part_b_cost
     cost_c = (job.part_c_qty if job.part_c_qty > 0 else (1 if job.part_c_desc else 0)) * job.part_c_cost
@@ -775,7 +842,6 @@ def update_job(job_id: int, job_update: JobUpdate):
             if job_update.battery_cost is not None: job["battery_cost"] = job_update.battery_cost
             if job_update.tire_cost is not None: job["tire_cost"] = job_update.tire_cost
 
-            # Recalculate duration & parts cost
             job["duration"] = calculate_duration(job["start_time"], job.get("end_time", ""))
             
             cost_a = (job["part_a_qty"] if job["part_a_qty"] > 0 else (1 if job["part_a_desc"] else 0)) * job["part_a_cost"]
@@ -845,6 +911,18 @@ def get_executive_summary(from_date: Optional[str] = Query(None), to_date: Optio
 
     return result
 
+@app.get("/api/reports/excel/weekly")
+def generate_weekly_excel_report():
+    seven_days_ago = datetime.now() - timedelta(days=7)
+    filtered_jobs = [j for j in jobs_db if parse_job_date(j.get("start_time", "")) and parse_job_date(j.get("start_time", "")) >= seven_days_ago]
+    return build_excel_response(filtered_jobs, "steely_rmi_weekly_garage_report.xlsx")
+
+@app.get("/api/reports/excel/monthly")
+def generate_monthly_excel_report():
+    thirty_days_ago = datetime.now() - timedelta(days=30)
+    filtered_jobs = [j for j in jobs_db if parse_job_date(j.get("start_time", "")) and parse_job_date(j.get("start_time", "")) >= thirty_days_ago]
+    return build_excel_response(filtered_jobs, "steely_rmi_monthly_garage_report.xlsx")
+
 @app.get("/api/reports/excel")
 def generate_excel_report(from_date: Optional[str] = Query(None), to_date: Optional[str] = Query(None)):
     data = jobs_db
@@ -853,60 +931,4 @@ def generate_excel_report(from_date: Optional[str] = Query(None), to_date: Optio
         t_date = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
         data = [j for j in jobs_db if parse_job_date(j.get("start_time", "")) and f_date <= parse_job_date(j.get("start_time", "")) <= t_date]
 
-    if not data:
-        df = pd.DataFrame(columns=[
-            "S/N", "Vehicle Plate", "Vehicle Type", "Driver Name", "Assigned Technicians",
-            "Work Type", "Primary Issue", "Additional Unplanned Work", "Start Time", "End Time", "Duration",
-            "Part A Desc", "Part A Qty", "Part A Cost", "Part B Desc", "Part B Qty", "Part B Cost",
-            "Part C Desc", "Part C Qty", "Part C Cost", "Part D Desc", "Part D Qty", "Part D Cost",
-            "Spare Parts Total Cost", "Lubricants (Liters)", "Lubricant Cost", 
-            "Battery Cost", "Tire Cost", "Total Cost", "Status"
-        ])
-    else:
-        df = pd.DataFrame(data)
-        df = df.rename(columns={
-            "serial_number": "S/N",
-            "vehicle_plate": "Vehicle Plate",
-            "vehicle_type": "Vehicle Type",
-            "driver_name": "Driver Name",
-            "technicians": "Assigned Technicians",
-            "work_type": "Work Type",
-            "issue_description": "Primary Issue",
-            "additional_unplanned_work": "Additional Unplanned Work",
-            "start_time": "Start Time",
-            "end_time": "End Time",
-            "duration": "Duration",
-            "part_a_desc": "Part A Desc",
-            "part_a_qty": "Part A Qty",
-            "part_a_cost": "Part A Cost",
-            "part_b_desc": "Part B Desc",
-            "part_b_qty": "Part B Qty",
-            "part_b_cost": "Part B Cost",
-            "part_c_desc": "Part C Desc",
-            "part_c_qty": "Part C Qty",
-            "part_c_cost": "Part C Cost",
-            "part_d_desc": "Part D Desc",
-            "part_d_qty": "Part D Qty",
-            "part_d_cost": "Part D Cost",
-            "spare_parts_cost": "Spare Parts Total Cost",
-            "lubricant_liters": "Lubricants (Liters)",
-            "lubricant_cost": "Lubricant Cost",
-            "battery_cost": "Battery Cost",
-            "tire_cost": "Tire Cost",
-            "total_cost": "Total Cost",
-            "status": "Status"
-        })
-        cols_to_drop = [c for c in ["id", "spare_parts_qty"] if c in df.columns]
-        if cols_to_drop:
-            df = df.drop(columns=cols_to_drop)
-
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Garage_Report')
-    
-    output.seek(0)
-    
-    headers = {
-        'Content-Disposition': 'attachment; filename="steely_rmi_garage_report.xlsx"'
-    }
-    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return build_excel_response(data, "steely_rmi_garage_report.xlsx")
