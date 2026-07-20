@@ -61,6 +61,7 @@ class JobResponse(JobCreate):
     id: int
     status: str
     duration: str
+    effective_minutes: int
     spare_parts_qty: int
     spare_parts_cost: float
     total_cost: float
@@ -71,20 +72,22 @@ class JobResponse(JobCreate):
 jobs_db = []
 job_id_counter = 1
 
-def calculate_duration(start_str: str, end_str: str) -> str:
+def calculate_duration_info(start_str: str, end_str: str):
     if not start_str or not end_str:
-        return "In Progress"
+        return "In Progress", 0
     try:
         fmt = "%Y-%m-%dT%H:%M"
         t1 = datetime.strptime(start_str, fmt)
         t2 = datetime.strptime(end_str, fmt)
         diff = t2 - t1
         
-        hours, remainder = divmod(diff.total_seconds(), 3600)
-        minutes, _ = divmod(remainder, 60)
-        return f"{int(hours)}h {int(minutes)}m"
+        total_seconds = max(0, diff.total_seconds())
+        minutes = int(total_seconds // 60)
+        
+        hours, remainder_mins = divmod(minutes, 60)
+        return f"{hours}h {remainder_mins}m", minutes
     except Exception:
-        return "N/A"
+        return "N/A", 0
 
 def parse_job_date(start_str: str) -> Optional[datetime]:
     try:
@@ -109,7 +112,7 @@ def build_excel_response(data: List[dict], filename: str):
             "Additional Unplanned Work": job.get("additional_unplanned_work"),
             "Start Time": job.get("start_time"),
             "End Time": job.get("end_time"),
-            "Duration": job.get("duration"),
+            "Effective Time Worked": job.get("duration"),
             "Replaced Spare Parts Breakdown": parts_str if parts_str else "None",
             "Spare Parts Total Qty": job.get("spare_parts_qty", 0),
             "Spare Parts Total Cost": job.get("spare_parts_cost", 0.0),
@@ -124,7 +127,7 @@ def build_excel_response(data: List[dict], filename: str):
 
     df = pd.DataFrame(excel_rows) if excel_rows else pd.DataFrame(columns=[
         "S/N", "Vehicle Plate", "Vehicle Type", "Driver Name", "Assigned Technicians",
-        "Work Type", "Primary Issue", "Additional Unplanned Work", "Start Time", "End Time", "Duration",
+        "Work Type", "Primary Issue", "Additional Unplanned Work", "Start Time", "End Time", "Effective Time Worked",
         "Replaced Spare Parts Breakdown", "Spare Parts Total Qty", "Spare Parts Total Cost",
         "Lubricants (Liters)", "Lubricant Cost", "Battery Cost", "Tire Cost", "Total Cost", "Status"
     ])
@@ -195,6 +198,8 @@ def serve_home():
                 cursor: pointer; font-size: 14px; font-weight: 600; 
             }
             button:hover { background-color: var(--primary-light); }
+            button:disabled { background-color: #cbd5e1; cursor: not-allowed; }
+
             .btn-add-part { background-color: #0284c7; margin-bottom: 12px; }
             .btn-add-part:hover { background-color: #0369a1; }
             .btn-info { background-color: var(--info); }
@@ -207,6 +212,8 @@ def serve_home():
             .btn-filter:hover { background-color: #334155; }
             .btn-reset { background-color: #94a3b8; }
             .btn-reset:hover { background-color: #64748b; }
+            .btn-undo-redo { background-color: #64748b; padding: 10px 14px; }
+            .btn-undo-redo:hover { background-color: #475569; }
             .btn-remove { background-color: #ef4444; color: white; padding: 4px 8px; font-size: 12px; border-radius: 4px; }
             .btn-remove:hover { background-color: #dc2626; }
 
@@ -215,23 +222,23 @@ def serve_home():
             .parts-table th { background-color: #e2e8f0; color: var(--text-main); }
 
             .filter-bar { 
-                display: flex; gap: 12px; align-items: flex-end; 
+                display: flex; gap: 10px; align-items: flex-end; 
                 background: #f8fafc; padding: 15px; border-radius: 8px; 
                 border: 1px solid var(--border); margin-bottom: 20px; flex-wrap: wrap;
             }
-            .filter-bar .form-group { margin-bottom: 0; min-width: 180px; }
+            .filter-bar .form-group { margin-bottom: 0; min-width: 170px; }
 
             table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
             th, td { border: 1px solid var(--border); padding: 10px; text-align: left; }
             th { background-color: var(--primary); color: white; font-weight: 600; }
             tr:nth-child(even) { background-color: #f8fafc; }
             
-            .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px; margin-bottom: 20px; }
-            .card { background: #ffffff; border-top: 4px solid var(--primary); padding: 18px; border-radius: 8px; border: 1px solid var(--border); border-top-width: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+            .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; margin-bottom: 25px; }
+            .card { background: #ffffff; border-top: 4px solid var(--primary); padding: 20px; border-radius: 8px; border: 1px solid var(--border); border-top-width: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
             .card.monthly { border-top-color: var(--success); }
-            .card.custom { border-top-color: var(--info); }
-            .card h4 { margin: 0 0 12px 0; color: var(--primary); text-transform: uppercase; font-size: 13px; letter-spacing: 0.5px; }
+            .card h4 { margin: 0 0 12px 0; color: var(--primary); text-transform: uppercase; font-size: 14px; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
             .stat-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; color: #475569; }
+            .stat-highlight { background-color: #f8fafc; padding: 8px; border-radius: 6px; border-left: 3px solid var(--primary-light); margin: 8px 0; }
             .stat-total { font-weight: 700; border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 8px; font-size: 14px; color: var(--text-main); }
 
             /* Modal Dialog Box */
@@ -245,36 +252,37 @@ def serve_home():
         <div class="container">
             <h1>Steely R.M.I Garage Maintenance Dashboard</h1>
             
-            <h2>Executive Summaries & Analytics</h2>
+            <h2>Executive Summaries (Weekly & Monthly)</h2>
             
-            <!-- Executive Date Filter Bar -->
+            <!-- Controls for Weekly & Monthly Summaries -->
             <div class="filter-bar">
                 <div class="form-group">
-                    <label>Executive From Date:</label>
+                    <label>Filter Summary From Date:</label>
                     <input type="date" id="exec_from_date">
                 </div>
                 <div class="form-group">
-                    <label>Executive To Date:</label>
+                    <label>Filter Summary To Date:</label>
                     <input type="date" id="exec_to_date">
                 </div>
-                <button type="button" class="btn-filter" onclick="fetchSummary()">Apply Date Filter</button>
-                <button type="button" class="btn-reset" onclick="resetExecFilter()">Reset Summary</button>
+                <button type="button" class="btn-filter" onclick="applyExecFilter()">Apply Date Filter</button>
+                <button type="button" class="btn-undo-redo" id="btnUndo" onclick="undoFilter()" title="Undo Filter" disabled>↩️ Undo</button>
+                <button type="button" class="btn-undo-redo" id="btnRedo" onclick="redoFilter()" title="Redo Filter" disabled>↪️ Redo</button>
+                <button type="button" class="btn-reset" onclick="resetExecFilter()">Reset Summaries</button>
             </div>
 
             <div class="summary-grid">
+                <!-- 1. WEEKLY SUMMARY CARD -->
                 <div class="card">
                     <h4>Weekly Summary (Last 7 Days)</h4>
                     <div id="weeklyStats">Loading...</div>
                     <button class="btn-excel" onclick="downloadWeeklyExcel()">Export Weekly Excel</button>
                 </div>
+                
+                <!-- 2. MONTHLY SUMMARY CARD -->
                 <div class="card monthly">
                     <h4>Monthly Summary (Last 30 Days)</h4>
                     <div id="monthlyStats">Loading...</div>
                     <button class="btn-excel" onclick="downloadMonthlyExcel()">Export Monthly Excel</button>
-                </div>
-                <div class="card custom">
-                    <h4>Custom Date Range Summary</h4>
-                    <div id="customStats">Select dates above and click Apply Filter...</div>
                 </div>
             </div>
 
@@ -306,8 +314,8 @@ def serve_home():
                     <div class="form-group">
                         <label>Work Type / Category:</label>
                         <select id="work_type" required>
-                            <option value="Preventive Maintenance">Preventive Maintenance</option>
-                            <option value="Corrective Maintenance">Corrective Maintenance</option>
+                            <option value="Preventive Maintenance">Preventive Maintenance (PM)</option>
+                            <option value="Corrective Maintenance">Corrective Maintenance (CM)</option>
                             <option value="Inspection & Checkup">Inspection & Checkup</option>
                         </select>
                     </div>
@@ -333,8 +341,8 @@ def serve_home():
                     </div>
                 </div>
 
-                <h3>Replaced Spare Parts Breakdown (Description, Qty, Unit Cost)</h3>
-                <button type="button" class="btn-add-part" onclick="openSparePartModal('create')">+ Add Replaced Spare Part Breakdown (Description, Qty, Unit Cost)</button>
+                <h3>Replaced Spare Parts Breakdown</h3>
+                <button type="button" class="btn-add-part" onclick="openSparePartModal('create')">+ Add Replaced Spare Part Breakdown</button>
 
                 <table class="parts-table" id="createPartsTable">
                     <thead>
@@ -399,11 +407,11 @@ def serve_home():
                         <th>S/N</th>
                         <th>Plate</th>
                         <th>Vehicle Type</th>
+                        <th>Work Type</th>
                         <th>Technicians</th>
                         <th>Replaced Parts Breakdown</th>
                         <th>Lubricants</th>
-                        <th>Unplanned Work</th>
-                        <th>Duration</th>
+                        <th>Effective Work Time</th>
                         <th>Total Cost</th>
                         <th>Status</th>
                         <th>Action</th>
@@ -466,7 +474,7 @@ def serve_home():
                     </div>
 
                     <h4>Replaced Spare Parts Breakdown</h4>
-                    <button type="button" class="btn-add-part" onclick="openSparePartModal('edit')">+ Add Replaced Spare Part Breakdown (Description, Qty, Unit Cost)</button>
+                    <button type="button" class="btn-add-part" onclick="openSparePartModal('edit')">+ Add Replaced Spare Part Breakdown</button>
                     
                     <table class="parts-table" id="editPartsTable">
                         <thead>
@@ -508,7 +516,66 @@ def serve_home():
             let allJobs = [];
             let createSpareParts = [];
             let editSpareParts = [];
-            let activeModalContext = 'create'; // 'create' or 'edit'
+            let activeModalContext = 'create';
+
+            // UNDO & REDO Stack Management for Summaries
+            let filterHistory = [{ from: '', to: '' }];
+            let historyIndex = 0;
+
+            function updateUndoRedoButtons() {
+                document.getElementById('btnUndo').disabled = (historyIndex <= 0);
+                document.getElementById('btnRedo').disabled = (historyIndex >= filterHistory.length - 1);
+            }
+
+            function applyExecFilter() {
+                const execFrom = document.getElementById('exec_from_date').value;
+                const execTo = document.getElementById('exec_to_date').value;
+
+                if (historyIndex < filterHistory.length - 1) {
+                    filterHistory = filterHistory.slice(0, historyIndex + 1);
+                }
+                filterHistory.push({ from: execFrom, to: execTo });
+                historyIndex++;
+                updateUndoRedoButtons();
+
+                fetchSummary(execFrom, execTo);
+            }
+
+            function undoFilter() {
+                if (historyIndex > 0) {
+                    historyIndex--;
+                    const state = filterHistory[historyIndex];
+                    document.getElementById('exec_from_date').value = state.from;
+                    document.getElementById('exec_to_date').value = state.to;
+                    updateUndoRedoButtons();
+                    fetchSummary(state.from, state.to);
+                }
+            }
+
+            function redoFilter() {
+                if (historyIndex < filterHistory.length - 1) {
+                    historyIndex++;
+                    const state = filterHistory[historyIndex];
+                    document.getElementById('exec_from_date').value = state.from;
+                    document.getElementById('exec_to_date').value = state.to;
+                    updateUndoRedoButtons();
+                    fetchSummary(state.from, state.to);
+                }
+            }
+
+            function resetExecFilter() {
+                document.getElementById('exec_from_date').value = '';
+                document.getElementById('exec_to_date').value = '';
+                
+                if (historyIndex < filterHistory.length - 1) {
+                    filterHistory = filterHistory.slice(0, historyIndex + 1);
+                }
+                filterHistory.push({ from: '', to: '' });
+                historyIndex++;
+                updateUndoRedoButtons();
+
+                fetchSummary('', '');
+            }
 
             // --- Spare Part Modal Handlers ---
             function openSparePartModal(context) {
@@ -590,10 +657,10 @@ def serve_home():
                 renderEditPartsTable();
             }
 
-            // --- Executive Summary ---
-            async function fetchSummary() {
-                const execFrom = document.getElementById('exec_from_date').value;
-                const execTo = document.getElementById('exec_to_date').value;
+            // --- Executive Summary Renderer ---
+            async function fetchSummary(fromVal, toVal) {
+                const execFrom = (fromVal !== undefined) ? fromVal : document.getElementById('exec_from_date').value;
+                const execTo = (toVal !== undefined) ? toVal : document.getElementById('exec_to_date').value;
                 
                 let query = '';
                 if(execFrom && execTo) {
@@ -603,11 +670,30 @@ def serve_home():
                 const res = await fetch(`/api/reports/executive-summary${query}`);
                 const summary = await res.json();
                 
-                function renderCard(data) {
-                    if(!data) return 'No records found for period.';
+                function formatMinutes(mins) {
+                    const hrs = Math.floor(mins / 60);
+                    const remMins = mins % 60;
+                    return `${hrs}h ${remMins}m`;
+                }
+
+                function renderCardContent(data) {
+                    if(!data) return 'No records found.';
                     return `
-                        <div class="stat-row"><span>Total Jobs:</span> <b>${data.total_jobs}</b></div>
-                        <div class="stat-row"><span>Spare Parts Quantity:</span> <b>${data.spare_parts_qty} Pcs</b></div>
+                        <div class="stat-row"><span>Total Jobs Executed:</span> <b>${data.total_jobs}</b></div>
+                        
+                        <!-- PM, CM, Inspection Breakdown -->
+                        <div class="stat-highlight">
+                            <div class="stat-row"><span>• Preventive Maintenance (PM):</span> <b>${data.pm_count}</b></div>
+                            <div class="stat-row"><span>• Corrective Maintenance (CM):</span> <b>${data.cm_count}</b></div>
+                            <div class="stat-row"><span>• Inspection & Checkup:</span> <b>${data.inspection_count}</b></div>
+                        </div>
+
+                        <!-- Effective Time Worked Calculation -->
+                        <div class="stat-row" style="background-color:#e0f2fe; padding:6px; border-radius:4px; font-weight:600; color:#0369a1;">
+                            <span>Total Effective Work Time:</span> <span>${formatMinutes(data.total_effective_minutes)}</span>
+                        </div>
+
+                        <div class="stat-row" style="margin-top:10px;"><span>Spare Parts Quantity:</span> <b>${data.spare_parts_qty} Pcs</b></div>
                         <div class="stat-row"><span>Spare Parts Cost:</span> <span>ETB ${data.spare_parts_cost.toLocaleString()}</span></div>
                         <div class="stat-row"><span>Lubricants Volume:</span> <b>${data.lubricant_liters} Liters</b></div>
                         <div class="stat-row"><span>Lubricants Cost:</span> <span>ETB ${data.lubricant_cost.toLocaleString()}</span></div>
@@ -617,19 +703,8 @@ def serve_home():
                     `;
                 }
 
-                document.getElementById('weeklyStats').innerHTML = renderCard(summary.weekly);
-                document.getElementById('monthlyStats').innerHTML = renderCard(summary.monthly);
-                if(summary.custom) {
-                    document.getElementById('customStats').innerHTML = renderCard(summary.custom);
-                } else {
-                    document.getElementById('customStats').innerHTML = 'Select dates above and click Apply Date Filter.';
-                }
-            }
-
-            function resetExecFilter() {
-                document.getElementById('exec_from_date').value = '';
-                document.getElementById('exec_to_date').value = '';
-                fetchSummary();
+                document.getElementById('weeklyStats').innerHTML = renderCardContent(summary.weekly);
+                document.getElementById('monthlyStats').innerHTML = renderCardContent(summary.monthly);
             }
 
             // --- Job Registry ---
@@ -656,10 +731,10 @@ def serve_home():
                         <td><b>${j.serial_number}</b></td>
                         <td>${j.vehicle_plate}</td>
                         <td><b>${j.vehicle_type}</b></td>
+                        <td><span class="stat-highlight" style="padding:2px 6px;">${j.work_type}</span></td>
                         <td>${j.technicians}</td>
                         <td>${partsText}</td>
                         <td>${j.lubricant_liters} L</td>
-                        <td>${j.additional_unplanned_work || '-'}</td>
                         <td><b>${j.duration}</b></td>
                         <td>ETB ${j.total_cost.toLocaleString()}</td>
                         <td>${j.status}</td>
@@ -799,12 +874,13 @@ def create_job(job: JobCreate):
     parts_qty = sum(p.qty for p in job.spare_parts)
 
     total = parts_cost + job.lubricant_cost + job.battery_cost + job.tire_cost
-    duration_str = calculate_duration(job.start_time, job.end_time)
+    duration_str, eff_mins = calculate_duration_info(job.start_time, job.end_time)
     
     job_data = job.dict()
     job_data["id"] = job_id_counter
     job_data["status"] = "Completed" if job.end_time else "In Progress"
     job_data["duration"] = duration_str
+    job_data["effective_minutes"] = eff_mins
     job_data["spare_parts_qty"] = parts_qty
     job_data["spare_parts_cost"] = parts_cost
     job_data["total_cost"] = total
@@ -849,7 +925,9 @@ def update_job(job_id: int, job_update: JobUpdate):
             if job_update.battery_cost is not None: job["battery_cost"] = job_update.battery_cost
             if job_update.tire_cost is not None: job["tire_cost"] = job_update.tire_cost
 
-            job["duration"] = calculate_duration(job["start_time"], job.get("end_time", ""))
+            dur_str, eff_mins = calculate_duration_info(job["start_time"], job.get("end_time", ""))
+            job["duration"] = dur_str
+            job["effective_minutes"] = eff_mins
             
             job["spare_parts_cost"] = sum(p["qty"] * p["unit_cost"] for p in job.get("spare_parts", []))
             job["spare_parts_qty"] = sum(p["qty"] for p in job.get("spare_parts", []))
@@ -866,12 +944,26 @@ def update_job(job_id: int, job_update: JobUpdate):
 @app.get("/api/reports/executive-summary")
 def get_executive_summary(from_date: Optional[str] = Query(None), to_date: Optional[str] = Query(None)):
     now = datetime.now()
-    seven_days_ago = now - timedelta(days=7)
-    thirty_days_ago = now - timedelta(days=30)
+    
+    # Custom filter calculation or fallback to standard rolling windows
+    if from_date and to_date:
+        w_start = datetime.strptime(from_date, "%Y-%m-%d")
+        w_end = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
+        m_start = w_start
+        m_end = w_end
+    else:
+        w_start = now - timedelta(days=7)
+        w_end = None
+        m_start = now - timedelta(days=30)
+        m_end = None
 
     def summarize(period_start, period_end=None):
         summary = {
             "total_jobs": 0,
+            "pm_count": 0,
+            "cm_count": 0,
+            "inspection_count": 0,
+            "total_effective_minutes": 0,
             "spare_parts_qty": 0,
             "spare_parts_cost": 0.0,
             "lubricant_liters": 0.0,
@@ -891,6 +983,16 @@ def get_executive_summary(from_date: Optional[str] = Query(None), to_date: Optio
 
                 if in_period:
                     summary["total_jobs"] += 1
+                    
+                    w_type = job.get("work_type", "")
+                    if w_type == "Preventive Maintenance":
+                        summary["pm_count"] += 1
+                    elif w_type == "Corrective Maintenance":
+                        summary["cm_count"] += 1
+                    elif w_type == "Inspection & Checkup":
+                        summary["inspection_count"] += 1
+
+                    summary["total_effective_minutes"] += job.get("effective_minutes", 0)
                     summary["spare_parts_qty"] += job.get("spare_parts_qty", 0)
                     summary["spare_parts_cost"] += job.get("spare_parts_cost", 0.0)
                     summary["lubricant_liters"] += job.get("lubricant_liters", 0.0)
@@ -900,18 +1002,10 @@ def get_executive_summary(from_date: Optional[str] = Query(None), to_date: Optio
                     summary["total_cost"] += job.get("total_cost", 0.0)
         return summary
 
-    result = {
-        "weekly": summarize(seven_days_ago),
-        "monthly": summarize(thirty_days_ago),
-        "custom": None
+    return {
+        "weekly": summarize(w_start, w_end),
+        "monthly": summarize(m_start, m_end)
     }
-
-    if from_date and to_date:
-        f_date = datetime.strptime(from_date, "%Y-%m-%d")
-        t_date = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
-        result["custom"] = summarize(f_date, t_date)
-
-    return result
 
 @app.get("/api/reports/excel/weekly")
 def generate_weekly_excel_report():
