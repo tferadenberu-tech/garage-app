@@ -4,6 +4,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime, timedelta
+from collections import Counter
 import pandas as pd
 import io
 
@@ -139,6 +140,18 @@ def compute_summary_dict(period_start, period_end=None):
                 summary["total_cost"] += job.get("total_cost", 0.0)
     return summary
 
+def get_technician_rankings():
+    tech_counter = Counter()
+    for job in jobs_db:
+        techs_str = job.get("technicians", "")
+        if techs_str:
+            tech_list = [t.strip() for t in techs_str.split(",") if t.strip()]
+            for t in tech_list:
+                tech_counter[t] += 1
+    
+    sorted_techs = sorted(tech_counter.items(), key=lambda x: x[1], reverse=True)
+    return [{"rank": idx + 1, "technician": tech, "jobs_completed": count} for idx, (tech, count) in enumerate(sorted_techs)]
+
 def create_jobs_dataframe(data: List[dict]) -> pd.DataFrame:
     excel_rows = []
     for job in data:
@@ -259,24 +272,19 @@ def serve_home():
                 cursor: pointer; font-size: 14px; font-weight: 600; 
             }
             button:hover { background-color: var(--primary-light); }
-            button:disabled { background-color: #cbd5e1; cursor: not-allowed; }
 
             .btn-add-part { background-color: #0284c7; margin-bottom: 12px; }
             .btn-add-part:hover { background-color: #0369a1; }
-            .btn-info { background-color: var(--info); }
-            .btn-info:hover { background-color: #0369a1; }
-            .btn-excel { background-color: #16a34a; color: white; padding: 6px 12px; font-size: 12px; margin-top: 10px; width: 100%; }
-            .btn-excel:hover { background-color: #15803d; }
-            .btn-master { background-color: #7c3aed; color: white; padding: 10px 16px; font-size: 13px; font-weight: 700; border-radius: 6px; }
-            .btn-master:hover { background-color: #6d28d9; }
+            .btn-tech-modal { background-color: #475569; padding: 6px 12px; font-size: 12px; margin-top: 4px; }
+            .btn-tech-modal:hover { background-color: #334155; }
+            .btn-master { background-color: #16a34a; color: white; padding: 12px 20px; font-size: 14px; font-weight: 700; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .btn-master:hover { background-color: #15803d; }
             .btn-edit { background-color: var(--warning); color: #fff; padding: 5px 12px; font-size: 12px; border-radius: 4px; }
             .btn-edit:hover { background-color: #d97706; }
             .btn-filter { background-color: #475569; }
             .btn-filter:hover { background-color: #334155; }
             .btn-reset { background-color: #94a3b8; }
             .btn-reset:hover { background-color: #64748b; }
-            .btn-undo-redo { background-color: #64748b; padding: 10px 14px; }
-            .btn-undo-redo:hover { background-color: #475569; }
             .btn-remove { background-color: #ef4444; color: white; padding: 4px 8px; font-size: 12px; border-radius: 4px; }
             .btn-remove:hover { background-color: #dc2626; }
 
@@ -296,9 +304,10 @@ def serve_home():
             th { background-color: var(--primary); color: white; font-weight: 600; }
             tr:nth-child(even) { background-color: #f8fafc; }
             
-            .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 20px; margin-bottom: 25px; }
+            .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; margin-bottom: 25px; }
             .card { background: #ffffff; border-top: 4px solid var(--primary); padding: 20px; border-radius: 8px; border: 1px solid var(--border); border-top-width: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
             .card.monthly { border-top-color: var(--success); }
+            .card.ranking { border-top-color: #8b5cf6; }
             .card h4 { margin: 0 0 12px 0; color: var(--primary); text-transform: uppercase; font-size: 14px; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
             .stat-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; color: #475569; }
             .stat-highlight { background-color: #f8fafc; padding: 8px; border-radius: 6px; border-left: 3px solid var(--primary-light); margin: 8px 0; }
@@ -313,53 +322,36 @@ def serve_home():
             .km-badge { background-color: #eff6ff; color: #1d4ed8; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid #bfdbfe; }
             .km-next-badge { background-color: #f0fdf4; color: #15803d; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid #bbf7d0; }
             .wo-badge { background-color: #fef3c7; color: #b45309; font-weight: 700; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a; }
+            .rank-badge { background-color: #f3e8ff; color: #6b21a8; font-weight: 700; padding: 2px 8px; border-radius: 12px; border: 1px solid #d8b4fe; }
         </style>
     </head>
     <body>
         <div class="container">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); padding-bottom: 12px;">
                 <h1 style="border:none; margin:0; padding:0;">SteelY R.M.I Garage Maintnace dash Bord</h1>
-                <!-- MASTER ALL-IN-ONE EXCEL REPORT BUTTON -->
-                <button class="btn-master" onclick="downloadMasterExcel()">📊 Export All-in-One Master Excel Report</button>
+                <!-- SINGLE MASTER EXCEL EXPORT BUTTON -->
+                <button class="btn-master" onclick="downloadMasterExcel()">📊 Export Master Excel Report (All-in-One)</button>
             </div>
             
-            <h2>Executive Summaries (Weekly & Monthly)</h2>
+            <h2>Executive Summaries & Staff Rankings</h2>
             
-            <!-- Controls for Weekly & Monthly Summaries -->
-            <div class="filter-bar">
-                <div class="form-group">
-                    <label>Filter Summary From Date:</label>
-                    <input type="date" id="exec_from_date">
-                </div>
-                <div class="form-group">
-                    <label>Filter Summary To Date:</label>
-                    <input type="date" id="exec_to_date">
-                </div>
-                <button type="button" class="btn-filter" onclick="applyExecFilter()">Apply Date Filter</button>
-                <button type="button" class="btn-undo-redo" id="btnUndo" onclick="undoFilter()" title="Undo Filter" disabled>↩️ Undo</button>
-                <button type="button" class="btn-undo-redo" id="btnRedo" onclick="redoFilter()" title="Redo Filter" disabled>↪️ Redo</button>
-                <button type="button" class="btn-reset" onclick="resetExecFilter()">Reset Summaries</button>
-            </div>
-
             <div class="summary-grid">
                 <!-- 1. WEEKLY SUMMARY CARD -->
                 <div class="card">
                     <h4>Weekly Summary (Last 7 Days)</h4>
                     <div id="weeklyStats">Loading...</div>
-                    <div style="display:flex; gap:8px;">
-                        <button class="btn-excel" onclick="downloadWeeklyJobsExcel()">Export Jobs List (Weekly)</button>
-                        <button class="btn-excel" style="background-color:#0284c7;" onclick="downloadWeeklySummaryExcel()">Export Summary Data Only</button>
-                    </div>
                 </div>
                 
                 <!-- 2. MONTHLY SUMMARY CARD -->
                 <div class="card monthly">
                     <h4>Monthly Summary (Last 30 Days)</h4>
                     <div id="monthlyStats">Loading...</div>
-                    <div style="display:flex; gap:8px;">
-                        <button class="btn-excel" onclick="downloadMonthlyJobsExcel()">Export Jobs List (Monthly)</button>
-                        <button class="btn-excel" style="background-color:#0284c7;" onclick="downloadMonthlySummaryExcel()">Export Summary Data Only</button>
-                    </div>
+                </div>
+
+                <!-- 3. TECHNICIAN RANKING CARD -->
+                <div class="card ranking">
+                    <h4>Technician Work Performance (Rank)</h4>
+                    <div id="techRankings">Loading...</div>
                 </div>
             </div>
 
@@ -399,10 +391,15 @@ def serve_home():
                         <input type="number" id="next_service_km" readonly style="background-color:#e2e8f0; font-weight:bold; color:#15803d;">
                     </div>
 
-                    <div class="form-group">
+                    <!-- TECHNICIANS EDITABLE DIALOG FIELD -->
+                    <div class="form-group full-width">
                         <label>Assigned Technicians / Mechanics:</label>
-                        <input type="text" id="technicians" required placeholder="e.g., Ato Mihret, Dinberu Tefera">
+                        <div style="display:flex; gap:8px;">
+                            <input type="text" id="technicians" required placeholder="e.g., Ato Mihret, Dinberu Tefera">
+                            <button type="button" class="btn-tech-modal" onclick="openTechDialog('create')">+ Assign Technicians</button>
+                        </div>
                     </div>
+
                     <div class="form-group">
                         <label>Work Type / Category:</label>
                         <select id="work_type" required>
@@ -490,7 +487,6 @@ def serve_home():
                 </div>
                 <button type="button" class="btn-filter" onclick="fetchJobs()">Filter Records</button>
                 <button type="button" class="btn-reset" onclick="resetJobsFilter()">Clear Filter / Reset</button>
-                <button type="button" onclick="downloadExcel()" class="btn-info" style="margin-left: auto;">Export Filtered Registry Excel</button>
             </div>
 
             <table id="jobsTable">
@@ -514,6 +510,21 @@ def serve_home():
                 </thead>
                 <tbody></tbody>
             </table>
+        </div>
+
+        <!-- TECHNICIAN ASSIGNMENT MODAL DIALOG -->
+        <div id="techModal" class="modal">
+            <div class="modal-content">
+                <span class="close-btn" onclick="closeTechModal()">&times;</span>
+                <h3>Assign Technicians / Mechanics</h3>
+                <p style="font-size:13px; color:#64748b;">Add multiple technicians involved in this work order (separated by commas):</p>
+                <div class="form-group">
+                    <label>Technician List:</label>
+                    <textarea id="modal_tech_list" rows="4" placeholder="e.g., Ato Mihret, Dinberu Tefera, Ato Ibrahim"></textarea>
+                </div>
+                <button type="button" onclick="saveTechSelection()">Save Technicians</button>
+                <button type="button" onclick="closeTechModal()" style="background-color: #64748b;">Cancel</button>
+            </div>
         </div>
 
         <!-- ADD SPARE PART DIALOG BOX / MODAL -->
@@ -569,7 +580,10 @@ def serve_home():
                     </div>
                     <div class="form-group">
                         <label>Assigned Technicians:</label>
-                        <input type="text" id="edit_technicians" required>
+                        <div style="display:flex; gap:8px;">
+                            <input type="text" id="edit_technicians" required>
+                            <button type="button" class="btn-tech-modal" onclick="openTechDialog('edit')">+ Edit Technicians</button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>End Date & Time:</label>
@@ -624,6 +638,7 @@ def serve_home():
             let createSpareParts = [];
             let editSpareParts = [];
             let activeModalContext = 'create';
+            let activeTechContext = 'create';
 
             function autoCalcNextKM() {
                 const cKm = parseInt(document.getElementById('current_km').value) || 0;
@@ -635,63 +650,28 @@ def serve_home():
                 document.getElementById('edit_next_service_km').value = cKm > 0 ? cKm + 5000 : 0;
             }
 
-            // UNDO & REDO Stack Management
-            let filterHistory = [{ from: '', to: '' }];
-            let historyIndex = 0;
-
-            function updateUndoRedoButtons() {
-                document.getElementById('btnUndo').disabled = (historyIndex <= 0);
-                document.getElementById('btnRedo').disabled = (historyIndex >= filterHistory.length - 1);
+            // --- Technician Modal Dialog Handlers ---
+            function openTechDialog(context) {
+                activeTechContext = context;
+                const currentVal = (context === 'create') 
+                    ? document.getElementById('technicians').value 
+                    : document.getElementById('edit_technicians').value;
+                document.getElementById('modal_tech_list').value = currentVal;
+                document.getElementById('techModal').style.display = 'block';
             }
 
-            function applyExecFilter() {
-                const execFrom = document.getElementById('exec_from_date').value;
-                const execTo = document.getElementById('exec_to_date').value;
-
-                if (historyIndex < filterHistory.length - 1) {
-                    filterHistory = filterHistory.slice(0, historyIndex + 1);
-                }
-                filterHistory.push({ from: execFrom, to: execTo });
-                historyIndex++;
-                updateUndoRedoButtons();
-
-                fetchSummary(execFrom, execTo);
+            function closeTechModal() {
+                document.getElementById('techModal').style.display = 'none';
             }
 
-            function undoFilter() {
-                if (historyIndex > 0) {
-                    historyIndex--;
-                    const state = filterHistory[historyIndex];
-                    document.getElementById('exec_from_date').value = state.from;
-                    document.getElementById('exec_to_date').value = state.to;
-                    updateUndoRedoButtons();
-                    fetchSummary(state.from, state.to);
+            function saveTechSelection() {
+                const val = document.getElementById('modal_tech_list').value;
+                if(activeTechContext === 'create') {
+                    document.getElementById('technicians').value = val;
+                } else {
+                    document.getElementById('edit_technicians').value = val;
                 }
-            }
-
-            function redoFilter() {
-                if (historyIndex < filterHistory.length - 1) {
-                    historyIndex++;
-                    const state = filterHistory[historyIndex];
-                    document.getElementById('exec_from_date').value = state.from;
-                    document.getElementById('exec_to_date').value = state.to;
-                    updateUndoRedoButtons();
-                    fetchSummary(state.from, state.to);
-                }
-            }
-
-            function resetExecFilter() {
-                document.getElementById('exec_from_date').value = '';
-                document.getElementById('exec_to_date').value = '';
-                
-                if (historyIndex < filterHistory.length - 1) {
-                    filterHistory = filterHistory.slice(0, historyIndex + 1);
-                }
-                filterHistory.push({ from: '', to: '' });
-                historyIndex++;
-                updateUndoRedoButtons();
-
-                fetchSummary('', '');
+                closeTechModal();
             }
 
             // --- Spare Part Modal Handlers ---
@@ -774,17 +754,9 @@ def serve_home():
                 renderEditPartsTable();
             }
 
-            // --- Executive Summary Renderer ---
-            async function fetchSummary(fromVal, toVal) {
-                const execFrom = (fromVal !== undefined) ? fromVal : document.getElementById('exec_from_date').value;
-                const execTo = (toVal !== undefined) ? toVal : document.getElementById('exec_to_date').value;
-                
-                let query = '';
-                if(execFrom && execTo) {
-                    query = `?from_date=${execFrom}&to_date=${execTo}`;
-                }
-
-                const res = await fetch(`/api/reports/executive-summary${query}`);
+            // --- Executive Summary & Staff Ranking Renderer ---
+            async function fetchSummary() {
+                const res = await fetch(`/api/reports/executive-summary`);
                 const summary = await res.json();
                 
                 function formatMinutes(mins) {
@@ -818,8 +790,23 @@ def serve_home():
                     `;
                 }
 
+                function renderRankings(rankings) {
+                    if(!rankings || rankings.length === 0) return 'No technician data recorded yet.';
+                    let html = '';
+                    rankings.forEach(r => {
+                        html += `
+                            <div class="stat-row" style="padding: 4px 0; border-bottom: 1px solid #f1f5f9;">
+                                <span><span class="rank-badge">#${r.rank}</span> <b>${r.technician}</b></span>
+                                <span style="font-weight:bold; color:#6b21a8;">${r.jobs_completed} Jobs</span>
+                            </div>
+                        `;
+                    });
+                    return html;
+                }
+
                 document.getElementById('weeklyStats').innerHTML = renderCardContent(summary.weekly);
                 document.getElementById('monthlyStats').innerHTML = renderCardContent(summary.monthly);
+                document.getElementById('techRankings').innerHTML = renderRankings(summary.rankings);
             }
 
             // --- Job Registry ---
@@ -850,7 +837,7 @@ def serve_home():
                         <td><span class="km-badge">${j.current_km ? j.current_km.toLocaleString() + ' KM' : 'N/A'}</span></td>
                         <td><span class="km-next-badge">${j.next_service_km ? j.next_service_km.toLocaleString() + ' KM' : 'N/A'}</span></td>
                         <td><span class="stat-highlight" style="padding:2px 6px;">${j.work_type}</span></td>
-                        <td>${j.technicians}</td>
+                        <td><b>${j.technicians}</b></td>
                         <td>${partsText}</td>
                         <td>${j.lubricant_liters} L</td>
                         <td><b>${j.duration}</b></td>
@@ -967,35 +954,9 @@ def serve_home():
                 fetchSummary();
             });
 
-            // --- Excel Download Trigger Functions ---
-            function downloadWeeklyJobsExcel() {
-                window.location.href = `/api/reports/excel/weekly`;
-            }
-
-            function downloadMonthlyJobsExcel() {
-                window.location.href = `/api/reports/excel/monthly`;
-            }
-
-            function downloadWeeklySummaryExcel() {
-                window.location.href = `/api/reports/excel/summary-only?period=weekly`;
-            }
-
-            function downloadMonthlySummaryExcel() {
-                window.location.href = `/api/reports/excel/summary-only?period=monthly`;
-            }
-
+            // --- Single Excel Export Download Trigger ---
             function downloadMasterExcel() {
                 window.location.href = `/api/reports/excel/master-all-in-one`;
-            }
-
-            function downloadExcel() {
-                const fromDate = document.getElementById('filter_from_date').value;
-                const toDate = document.getElementById('filter_to_date').value;
-                let query = '';
-                if(fromDate && toDate) {
-                    query = `?from_date=${fromDate}&to_date=${toDate}`;
-                }
-                window.location.href = `/api/reports/excel${query}`;
             }
 
             fetchJobs();
@@ -1084,103 +1045,39 @@ def update_job(job_id: int, job_update: JobUpdate):
     raise HTTPException(status_code=404, detail="Job not found")
 
 @app.get("/api/reports/executive-summary")
-def get_executive_summary(from_date: Optional[str] = Query(None), to_date: Optional[str] = Query(None)):
+def get_executive_summary():
     now = datetime.now()
-    if from_date and to_date:
-        w_start = datetime.strptime(from_date, "%Y-%m-%d")
-        w_end = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
-        m_start, m_end = w_start, w_end
-    else:
-        w_start, w_end = now - timedelta(days=7), None
-        m_start, m_end = now - timedelta(days=30), None
+    w_start = now - timedelta(days=7)
+    m_start = now - timedelta(days=30)
 
     return {
-        "weekly": compute_summary_dict(w_start, w_end),
-        "monthly": compute_summary_dict(m_start, m_end)
+        "weekly": compute_summary_dict(w_start),
+        "monthly": compute_summary_dict(m_start),
+        "rankings": get_technician_rankings()
     }
 
-# --- EXCEL REPORT ENDPOINTS ---
-
-@app.get("/api/reports/excel/summary-only")
-def download_summary_only_excel(period: str = Query("weekly")):
-    """ 1. ሱመሪ ዳታዎችን ብቻ ለብቻ ወደ ኤክሴል ኤክስፖርት ማድረጊያ """
-    now = datetime.now()
-    if period == "weekly":
-        summary = compute_summary_dict(now - timedelta(days=7))
-        title = "Weekly Executive Summary (Last 7 Days)"
-        filename = "weekly_executive_summary_report.xlsx"
-    else:
-        summary = compute_summary_dict(now - timedelta(days=30))
-        title = "Monthly Executive Summary (Last 30 Days)"
-        filename = "monthly_executive_summary_report.xlsx"
-
-    df_summary = create_summary_dataframe(summary, title)
-    
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df_summary.to_excel(writer, index=False, sheet_name='Executive_Summary')
-    output.seek(0)
-    
-    headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
-    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+# --- MASTER SINGLE EXCEL REPORT ENDPOINT ---
 
 @app.get("/api/reports/excel/master-all-in-one")
 def download_master_all_in_one_excel():
-    """ 2. ሁሉንም ሪፖርቶች በአንድ የኤክሴል ፋይል ውስጥ በ 3 Sheet አጣጥሞ ማስቀመጫ """
+    """ ሁሉንም ሪፖርቶች እና የሰራተኞች ራንክ በአንድ ኤክሴል ፋይል ውስጥ በ 4 Sheets አጣጥሞ ማውጫ """
     now = datetime.now()
     weekly_summary = compute_summary_dict(now - timedelta(days=7))
     monthly_summary = compute_summary_dict(now - timedelta(days=30))
+    rankings_data = get_technician_rankings()
 
     df_jobs = create_jobs_dataframe(jobs_db)
     df_weekly = create_summary_dataframe(weekly_summary, "Weekly Summary (Last 7 Days)")
     df_monthly = create_summary_dataframe(monthly_summary, "Monthly Summary (Last 30 Days)")
+    df_rankings = pd.DataFrame(rankings_data) if rankings_data else pd.DataFrame(columns=["rank", "technician", "jobs_completed"])
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_jobs.to_excel(writer, index=False, sheet_name='Full_Job_Registry')
-        df_weekly.to_excel(writer, index=False, sheet_name='Weekly_Executive_Summary')
-        df_monthly.to_excel(writer, index=False, sheet_name='Monthly_Executive_Summary')
+        df_weekly.to_excel(writer, index=False, sheet_name='Weekly_Summary')
+        df_monthly.to_excel(writer, index=False, sheet_name='Monthly_Summary')
+        df_rankings.to_excel(writer, index=False, sheet_name='Technician_Rankings')
     output.seek(0)
 
     headers = {'Content-Disposition': 'attachment; filename="steely_rmi_master_garage_report.xlsx"'}
-    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-@app.get("/api/reports/excel/weekly")
-def generate_weekly_excel_report():
-    seven_days_ago = datetime.now() - timedelta(days=7)
-    filtered_jobs = [j for j in jobs_db if parse_job_date(j.get("start_time", "")) and parse_job_date(j.get("start_time", "")) >= seven_days_ago]
-    df = create_jobs_dataframe(filtered_jobs)
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Weekly_Jobs')
-    output.seek(0)
-    headers = {'Content-Disposition': 'attachment; filename="steely_rmi_weekly_jobs_report.xlsx"'}
-    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-@app.get("/api/reports/excel/monthly")
-def generate_monthly_excel_report():
-    thirty_days_ago = datetime.now() - timedelta(days=30)
-    filtered_jobs = [j for j in jobs_db if parse_job_date(j.get("start_time", "")) and parse_job_date(j.get("start_time", "")) >= thirty_days_ago]
-    df = create_jobs_dataframe(filtered_jobs)
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Monthly_Jobs')
-    output.seek(0)
-    headers = {'Content-Disposition': 'attachment; filename="steely_rmi_monthly_jobs_report.xlsx"'}
-    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
-@app.get("/api/reports/excel")
-def generate_excel_report(from_date: Optional[str] = Query(None), to_date: Optional[str] = Query(None)):
-    data = jobs_db
-    if from_date and to_date:
-        f_date = datetime.strptime(from_date, "%Y-%m-%d")
-        t_date = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
-        data = [j for j in jobs_db if parse_job_date(j.get("start_time", "")) and f_date <= parse_job_date(j.get("start_time", "")) <= t_date]
-
-    df = create_jobs_dataframe(data)
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Garage_Report')
-    output.seek(0)
-    headers = {'Content-Disposition': 'attachment; filename="steely_rmi_garage_report.xlsx"'}
     return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
