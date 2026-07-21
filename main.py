@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import io
 
-app = FastAPI(title="Steely R.M.I Garage Maintenance Dashboard")
+app = FastAPI(title="SteelY R.M.I Garage Maintnace dash Bord")
 
 app.add_middleware(
     CORSMiddleware,
@@ -37,6 +37,10 @@ class JobCreate(BaseModel):
     start_time: str
     end_time: Optional[str] = ""
     
+    # Mileage Tracking Columns
+    current_km: int = 0
+    next_service_km: Optional[int] = 0
+
     spare_parts: List[SparePartItem] = []
 
     lubricant_liters: float = 0.0
@@ -50,6 +54,9 @@ class JobUpdate(BaseModel):
     end_time: Optional[str] = None
     additional_unplanned_work: Optional[str] = None
     
+    current_km: Optional[int] = None
+    next_service_km: Optional[int] = None
+
     spare_parts: Optional[List[SparePartItem]] = None
 
     lubricant_liters: Optional[float] = None
@@ -106,6 +113,8 @@ def build_excel_response(data: List[dict], filename: str):
             "Vehicle Plate": job.get("vehicle_plate"),
             "Vehicle Type": job.get("vehicle_type"),
             "Driver Name": job.get("driver_name"),
+            "Current KM": job.get("current_km", 0),
+            "Next Service KM": job.get("next_service_km", 0),
             "Assigned Technicians": job.get("technicians"),
             "Work Type": job.get("work_type"),
             "Primary Issue": job.get("issue_description"),
@@ -126,7 +135,7 @@ def build_excel_response(data: List[dict], filename: str):
         excel_rows.append(row)
 
     df = pd.DataFrame(excel_rows) if excel_rows else pd.DataFrame(columns=[
-        "S/N", "Vehicle Plate", "Vehicle Type", "Driver Name", "Assigned Technicians",
+        "S/N", "Vehicle Plate", "Vehicle Type", "Driver Name", "Current KM", "Next Service KM", "Assigned Technicians",
         "Work Type", "Primary Issue", "Additional Unplanned Work", "Start Time", "End Time", "Effective Time Worked",
         "Replaced Spare Parts Breakdown", "Spare Parts Total Qty", "Spare Parts Total Cost",
         "Lubricants (Liters)", "Lubricant Cost", "Battery Cost", "Tire Cost", "Total Cost", "Status"
@@ -151,7 +160,7 @@ def serve_home():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Steely R.M.I Garage Maintenance Dashboard</title>
+        <title>SteelY R.M.I Garage Maintnace dash Bord</title>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
             :root {
@@ -172,7 +181,7 @@ def serve_home():
                 color: var(--text-main);
             }
             .container { 
-                max-width: 1250px; margin: auto; 
+                max-width: 1350px; margin: auto; 
                 background: var(--card-bg); padding: 30px; 
                 border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); 
             }
@@ -180,7 +189,7 @@ def serve_home():
             h2 { color: var(--primary); font-size: 20px; margin-top: 25px; font-weight: 600; }
             h3 { color: var(--primary-light); font-size: 16px; margin-top: 20px; font-weight: 600; }
             
-            .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; }
+            .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; }
             .form-group { margin-bottom: 12px; }
             .form-group.full-width { grid-column: 1 / -1; }
             
@@ -246,11 +255,14 @@ def serve_home():
             .modal-content { background-color: white; margin: 5% auto; padding: 25px; border-radius: 10px; width: 550px; max-width: 90%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
             .close-btn { color: #94a3b8; float: right; font-size: 24px; font-weight: bold; cursor: pointer; }
             .close-btn:hover { color: var(--text-main); }
+            
+            .km-badge { background-color: #eff6ff; color: #1d4ed8; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid #bfdbfe; }
+            .km-next-badge { background-color: #f0fdf4; color: #15803d; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid #bbf7d0; }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>Steely R.M.I Garage Maintenance Dashboard</h1>
+            <h1>SteelY R.M.I Garage Maintnace dash Bord</h1>
             
             <h2>Executive Summaries (Weekly & Monthly)</h2>
             
@@ -307,6 +319,17 @@ def serve_home():
                         <label>Driver Name:</label>
                         <input type="text" id="driver_name" required placeholder="e.g., Abebe Kebede">
                     </div>
+                    
+                    <!-- KM COLUMNS -->
+                    <div class="form-group">
+                        <label>Current KM:</label>
+                        <input type="number" id="current_km" required placeholder="e.g., 145000" oninput="autoCalcNextKM()">
+                    </div>
+                    <div class="form-group">
+                        <label>Next Service KM (+5,000 KM):</label>
+                        <input type="number" id="next_service_km" readonly style="background-color:#e2e8f0; font-weight:bold; color:#15803d;">
+                    </div>
+
                     <div class="form-group">
                         <label>Assigned Technicians / Mechanics:</label>
                         <input type="text" id="technicians" required placeholder="e.g., Ato Mihret, Dinberu Tefera">
@@ -407,6 +430,8 @@ def serve_home():
                         <th>S/N</th>
                         <th>Plate</th>
                         <th>Vehicle Type</th>
+                        <th>Current KM</th>
+                        <th>Next Service KM</th>
                         <th>Work Type</th>
                         <th>Technicians</th>
                         <th>Replaced Parts Breakdown</th>
@@ -459,6 +484,14 @@ def serve_home():
                             <option value="Completed">Completed</option>
                             <option value="Pending Parts">Pending Parts</option>
                         </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Current KM:</label>
+                        <input type="number" id="edit_current_km" oninput="autoCalcEditNextKM()">
+                    </div>
+                    <div class="form-group">
+                        <label>Next Service KM (+5,000 KM):</label>
+                        <input type="number" id="edit_next_service_km" readonly style="background-color:#e2e8f0; font-weight:bold; color:#15803d;">
                     </div>
                     <div class="form-group">
                         <label>Assigned Technicians:</label>
@@ -517,6 +550,17 @@ def serve_home():
             let createSpareParts = [];
             let editSpareParts = [];
             let activeModalContext = 'create';
+
+            // Automatic +5,000 KM calculation
+            function autoCalcNextKM() {
+                const cKm = parseInt(document.getElementById('current_km').value) || 0;
+                document.getElementById('next_service_km').value = cKm > 0 ? cKm + 5000 : 0;
+            }
+
+            function autoCalcEditNextKM() {
+                const cKm = parseInt(document.getElementById('edit_current_km').value) || 0;
+                document.getElementById('edit_next_service_km').value = cKm > 0 ? cKm + 5000 : 0;
+            }
 
             // UNDO & REDO Stack Management for Summaries
             let filterHistory = [{ from: '', to: '' }];
@@ -731,6 +775,8 @@ def serve_home():
                         <td><b>${j.serial_number}</b></td>
                         <td>${j.vehicle_plate}</td>
                         <td><b>${j.vehicle_type}</b></td>
+                        <td><span class="km-badge">${j.current_km ? j.current_km.toLocaleString() + ' KM' : 'N/A'}</span></td>
+                        <td><span class="km-next-badge">${j.next_service_km ? j.next_service_km.toLocaleString() + ' KM' : 'N/A'}</span></td>
                         <td><span class="stat-highlight" style="padding:2px 6px;">${j.work_type}</span></td>
                         <td>${j.technicians}</td>
                         <td>${partsText}</td>
@@ -757,6 +803,8 @@ def serve_home():
                     vehicle_plate: document.getElementById('vehicle_plate').value,
                     vehicle_type: document.getElementById('vehicle_type').value,
                     driver_name: document.getElementById('driver_name').value,
+                    current_km: parseInt(document.getElementById('current_km').value) || 0,
+                    next_service_km: parseInt(document.getElementById('next_service_km').value) || 0,
                     technicians: document.getElementById('technicians').value,
                     work_type: document.getElementById('work_type').value,
                     issue_description: document.getElementById('issue_description').value,
@@ -793,6 +841,8 @@ def serve_home():
                 document.getElementById('editJobIdTitle').innerText = job.serial_number;
                 document.getElementById('editJobId').value = job.id;
                 document.getElementById('edit_status').value = job.status;
+                document.getElementById('edit_current_km').value = job.current_km || 0;
+                document.getElementById('edit_next_service_km').value = job.next_service_km || 0;
                 document.getElementById('edit_technicians').value = job.technicians || '';
                 document.getElementById('edit_end_time').value = job.end_time || '';
                 document.getElementById('edit_additional_unplanned_work').value = job.additional_unplanned_work || '';
@@ -817,6 +867,8 @@ def serve_home():
                 const jobId = document.getElementById('editJobId').value;
                 const data = {
                     status: document.getElementById('edit_status').value,
+                    current_km: parseInt(document.getElementById('edit_current_km').value) || 0,
+                    next_service_km: parseInt(document.getElementById('edit_next_service_km').value) || 0,
                     technicians: document.getElementById('edit_technicians').value,
                     end_time: document.getElementById('edit_end_time').value,
                     additional_unplanned_work: document.getElementById('edit_additional_unplanned_work').value,
@@ -885,6 +937,10 @@ def create_job(job: JobCreate):
     job_data["spare_parts_cost"] = parts_cost
     job_data["total_cost"] = total
     
+    # Calculate Next Service KM automatically if not provided
+    if not job_data.get("next_service_km") and job_data.get("current_km"):
+        job_data["next_service_km"] = job_data["current_km"] + 5000
+
     jobs_db.append(job_data)
     job_id_counter += 1
     return job_data
@@ -917,6 +973,11 @@ def update_job(job_id: int, job_update: JobUpdate):
             if job_update.additional_unplanned_work is not None:
                 job["additional_unplanned_work"] = job_update.additional_unplanned_work
 
+            if job_update.current_km is not None:
+                job["current_km"] = job_update.current_km
+            if job_update.next_service_km is not None:
+                job["next_service_km"] = job_update.next_service_km
+
             if job_update.spare_parts is not None:
                 job["spare_parts"] = [p.dict() for p in job_update.spare_parts]
 
@@ -945,7 +1006,6 @@ def update_job(job_id: int, job_update: JobUpdate):
 def get_executive_summary(from_date: Optional[str] = Query(None), to_date: Optional[str] = Query(None)):
     now = datetime.now()
     
-    # Custom filter calculation or fallback to standard rolling windows
     if from_date and to_date:
         w_start = datetime.strptime(from_date, "%Y-%m-%d")
         w_end = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
