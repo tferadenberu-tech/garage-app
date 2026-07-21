@@ -27,6 +27,7 @@ class SparePartItem(BaseModel):
 
 class JobCreate(BaseModel):
     serial_number: str
+    work_order_no: str  # 👈 አዲስ የተጨመረ Work Order No
     vehicle_plate: str
     vehicle_type: str
     driver_name: str
@@ -49,6 +50,7 @@ class JobCreate(BaseModel):
     tire_cost: float = 0.0
 
 class JobUpdate(BaseModel):
+    work_order_no: Optional[str] = None
     technicians: Optional[str] = None
     status: Optional[str] = None
     end_time: Optional[str] = None
@@ -110,6 +112,7 @@ def build_excel_response(data: List[dict], filename: str):
         
         row = {
             "S/N": job.get("serial_number"),
+            "Work Order No": job.get("work_order_no"),  # 👈 በኤክሴል ላይ አዲስ ኮለምን
             "Vehicle Plate": job.get("vehicle_plate"),
             "Vehicle Type": job.get("vehicle_type"),
             "Driver Name": job.get("driver_name"),
@@ -135,7 +138,7 @@ def build_excel_response(data: List[dict], filename: str):
         excel_rows.append(row)
 
     df = pd.DataFrame(excel_rows) if excel_rows else pd.DataFrame(columns=[
-        "S/N", "Vehicle Plate", "Vehicle Type", "Driver Name", "Current KM", "Next Service KM", "Assigned Technicians",
+        "S/N", "Work Order No", "Vehicle Plate", "Vehicle Type", "Driver Name", "Current KM", "Next Service KM", "Assigned Technicians",
         "Work Type", "Primary Issue", "Additional Unplanned Work", "Start Time", "End Time", "Effective Time Worked",
         "Replaced Spare Parts Breakdown", "Spare Parts Total Qty", "Spare Parts Total Cost",
         "Lubricants (Liters)", "Lubricant Cost", "Battery Cost", "Tire Cost", "Total Cost", "Status"
@@ -181,7 +184,7 @@ def serve_home():
                 color: var(--text-main);
             }
             .container { 
-                max-width: 1350px; margin: auto; 
+                max-width: 1400px; margin: auto; 
                 background: var(--card-bg); padding: 30px; 
                 border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); 
             }
@@ -258,6 +261,7 @@ def serve_home():
             
             .km-badge { background-color: #eff6ff; color: #1d4ed8; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid #bfdbfe; }
             .km-next-badge { background-color: #f0fdf4; color: #15803d; font-weight: 600; padding: 2px 6px; border-radius: 4px; border: 1px solid #bbf7d0; }
+            .wo-badge { background-color: #fef3c7; color: #b45309; font-weight: 700; padding: 2px 6px; border-radius: 4px; border: 1px solid #fde68a; }
         </style>
     </head>
     <body>
@@ -305,7 +309,11 @@ def serve_home():
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Serial Number (S/N):</label>
-                        <input type="text" id="serial_number" required placeholder="e.g., SN-2026-001">
+                        <input type="text" id="serial_number" required placeholder="e.g., SN-001">
+                    </div>
+                    <div class="form-group">
+                        <label>Work Order No (W.O No):</label>
+                        <input type="text" id="work_order_no" required placeholder="e.g., WO-2026-001">
                     </div>
                     <div class="form-group">
                         <label>Vehicle Plate Number:</label>
@@ -428,6 +436,7 @@ def serve_home():
                 <thead>
                     <tr>
                         <th>S/N</th>
+                        <th>W.O No</th>
                         <th>Plate</th>
                         <th>Vehicle Type</th>
                         <th>Current KM</th>
@@ -474,9 +483,13 @@ def serve_home():
         <div id="editModal" class="modal">
             <div class="modal-content" style="width:650px;">
                 <span class="close-btn" onclick="closeEditModal()">&times;</span>
-                <h3>Edit Work Order #<span id="editJobIdTitle"></span></h3>
+                <h3>Edit Work Order <span id="editJobIdTitle"></span></h3>
                 <form id="editForm">
                     <input type="hidden" id="editJobId">
+                    <div class="form-group">
+                        <label>Work Order No (W.O No):</label>
+                        <input type="text" id="edit_work_order_no" required>
+                    </div>
                     <div class="form-group">
                         <label>Status:</label>
                         <select id="edit_status">
@@ -773,6 +786,7 @@ def serve_home():
 
                     tbody.innerHTML += `<tr>
                         <td><b>${j.serial_number}</b></td>
+                        <td><span class="wo-badge">${j.work_order_no || 'N/A'}</span></td>
                         <td>${j.vehicle_plate}</td>
                         <td><b>${j.vehicle_type}</b></td>
                         <td><span class="km-badge">${j.current_km ? j.current_km.toLocaleString() + ' KM' : 'N/A'}</span></td>
@@ -800,6 +814,7 @@ def serve_home():
                 e.preventDefault();
                 const data = {
                     serial_number: document.getElementById('serial_number').value,
+                    work_order_no: document.getElementById('work_order_no').value,
                     vehicle_plate: document.getElementById('vehicle_plate').value,
                     vehicle_type: document.getElementById('vehicle_type').value,
                     driver_name: document.getElementById('driver_name').value,
@@ -838,8 +853,9 @@ def serve_home():
                 const job = allJobs.find(j => j.id === id);
                 if (!job) return;
 
-                document.getElementById('editJobIdTitle').innerText = job.serial_number;
+                document.getElementById('editJobIdTitle').innerText = '#' + (job.work_order_no || job.serial_number);
                 document.getElementById('editJobId').value = job.id;
+                document.getElementById('edit_work_order_no').value = job.work_order_no || '';
                 document.getElementById('edit_status').value = job.status;
                 document.getElementById('edit_current_km').value = job.current_km || 0;
                 document.getElementById('edit_next_service_km').value = job.next_service_km || 0;
@@ -866,6 +882,7 @@ def serve_home():
                 e.preventDefault();
                 const jobId = document.getElementById('editJobId').value;
                 const data = {
+                    work_order_no: document.getElementById('edit_work_order_no').value,
                     status: document.getElementById('edit_status').value,
                     current_km: parseInt(document.getElementById('edit_current_km').value) || 0,
                     next_service_km: parseInt(document.getElementById('edit_next_service_km').value) || 0,
@@ -964,6 +981,8 @@ def get_jobs(from_date: Optional[str] = None, to_date: Optional[str] = None):
 def update_job(job_id: int, job_update: JobUpdate):
     for job in jobs_db:
         if job["id"] == job_id:
+            if job_update.work_order_no is not None:
+                job["work_order_no"] = job_update.work_order_no
             if job_update.status is not None:
                 job["status"] = job_update.status
             if job_update.technicians is not None:
