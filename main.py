@@ -27,7 +27,7 @@ class SparePartItem(BaseModel):
 
 class JobCreate(BaseModel):
     serial_number: str
-    work_order_no: str  # 👈 አዲስ የተጨመረ Work Order No
+    work_order_no: str
     vehicle_plate: str
     vehicle_type: str
     driver_name: str
@@ -38,7 +38,6 @@ class JobCreate(BaseModel):
     start_time: str
     end_time: Optional[str] = ""
     
-    # Mileage Tracking Columns
     current_km: int = 0
     next_service_km: Optional[int] = 0
 
@@ -104,7 +103,43 @@ def parse_job_date(start_str: str) -> Optional[datetime]:
     except Exception:
         return None
 
-def build_excel_response(data: List[dict], filename: str):
+def compute_summary_dict(period_start, period_end=None):
+    summary = {
+        "total_jobs": 0,
+        "pm_count": 0,
+        "cm_count": 0,
+        "inspection_count": 0,
+        "total_effective_minutes": 0,
+        "spare_parts_qty": 0,
+        "spare_parts_cost": 0.0,
+        "lubricant_liters": 0.0,
+        "lubricant_cost": 0.0,
+        "battery_cost": 0.0,
+        "tire_cost": 0.0,
+        "total_cost": 0.0
+    }
+    for job in jobs_db:
+        job_date = parse_job_date(job.get("start_time", ""))
+        if job_date:
+            in_period = (period_start <= job_date <= period_end) if period_end else (job_date >= period_start)
+            if in_period:
+                summary["total_jobs"] += 1
+                w_type = job.get("work_type", "")
+                if w_type == "Preventive Maintenance": summary["pm_count"] += 1
+                elif w_type == "Corrective Maintenance": summary["cm_count"] += 1
+                elif w_type == "Inspection & Checkup": summary["inspection_count"] += 1
+
+                summary["total_effective_minutes"] += job.get("effective_minutes", 0)
+                summary["spare_parts_qty"] += job.get("spare_parts_qty", 0)
+                summary["spare_parts_cost"] += job.get("spare_parts_cost", 0.0)
+                summary["lubricant_liters"] += job.get("lubricant_liters", 0.0)
+                summary["lubricant_cost"] += job.get("lubricant_cost", 0.0)
+                summary["battery_cost"] += job.get("battery_cost", 0.0)
+                summary["tire_cost"] += job.get("tire_cost", 0.0)
+                summary["total_cost"] += job.get("total_cost", 0.0)
+    return summary
+
+def create_jobs_dataframe(data: List[dict]) -> pd.DataFrame:
     excel_rows = []
     for job in data:
         parts = job.get("spare_parts", [])
@@ -112,7 +147,7 @@ def build_excel_response(data: List[dict], filename: str):
         
         row = {
             "S/N": job.get("serial_number"),
-            "Work Order No": job.get("work_order_no"),  # 👈 በኤክሴል ላይ አዲስ ኮለምን
+            "Work Order No": job.get("work_order_no"),
             "Vehicle Plate": job.get("vehicle_plate"),
             "Vehicle Type": job.get("vehicle_type"),
             "Driver Name": job.get("driver_name"),
@@ -137,20 +172,34 @@ def build_excel_response(data: List[dict], filename: str):
         }
         excel_rows.append(row)
 
-    df = pd.DataFrame(excel_rows) if excel_rows else pd.DataFrame(columns=[
+    return pd.DataFrame(excel_rows) if excel_rows else pd.DataFrame(columns=[
         "S/N", "Work Order No", "Vehicle Plate", "Vehicle Type", "Driver Name", "Current KM", "Next Service KM", "Assigned Technicians",
         "Work Type", "Primary Issue", "Additional Unplanned Work", "Start Time", "End Time", "Effective Time Worked",
         "Replaced Spare Parts Breakdown", "Spare Parts Total Qty", "Spare Parts Total Cost",
         "Lubricants (Liters)", "Lubricant Cost", "Battery Cost", "Tire Cost", "Total Cost", "Status"
     ])
 
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Garage_Report')
+def create_summary_dataframe(summary: dict, title: str) -> pd.DataFrame:
+    hrs = summary["total_effective_minutes"] // 60
+    rem_mins = summary["total_effective_minutes"] % 60
+    eff_time_str = f"{hrs}h {rem_mins}m"
     
-    output.seek(0)
-    headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
-    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    data = [
+        {"KPI Metric": "Report Period / Title", "Value": title},
+        {"KPI Metric": "Total Jobs Executed", "Value": summary["total_jobs"]},
+        {"KPI Metric": "Preventive Maintenance (PM) Count", "Value": summary["pm_count"]},
+        {"KPI Metric": "Corrective Maintenance (CM) Count", "Value": summary["cm_count"]},
+        {"KPI Metric": "Inspection & Checkup Count", "Value": summary["inspection_count"]},
+        {"KPI Metric": "Total Effective Worked Time", "Value": eff_time_str},
+        {"KPI Metric": "Total Replaced Spare Parts Qty (Pcs)", "Value": summary["spare_parts_qty"]},
+        {"KPI Metric": "Total Spare Parts Cost (ETB)", "Value": summary["spare_parts_cost"]},
+        {"KPI Metric": "Total Lubricants Volume (Liters)", "Value": summary["lubricant_liters"]},
+        {"KPI Metric": "Total Lubricant Cost (ETB)", "Value": summary["lubricant_cost"]},
+        {"KPI Metric": "Total Battery Cost (ETB)", "Value": summary["battery_cost"]},
+        {"KPI Metric": "Total Tire Cost (ETB)", "Value": summary["tire_cost"]},
+        {"KPI Metric": "TOTAL EXPENDITURE (ETB)", "Value": summary["total_cost"]}
+    ]
+    return pd.DataFrame(data)
 
 # ----------------------------------------------------
 # 3. API Endpoints
@@ -218,6 +267,8 @@ def serve_home():
             .btn-info:hover { background-color: #0369a1; }
             .btn-excel { background-color: #16a34a; color: white; padding: 6px 12px; font-size: 12px; margin-top: 10px; width: 100%; }
             .btn-excel:hover { background-color: #15803d; }
+            .btn-master { background-color: #7c3aed; color: white; padding: 10px 16px; font-size: 13px; font-weight: 700; border-radius: 6px; }
+            .btn-master:hover { background-color: #6d28d9; }
             .btn-edit { background-color: var(--warning); color: #fff; padding: 5px 12px; font-size: 12px; border-radius: 4px; }
             .btn-edit:hover { background-color: #d97706; }
             .btn-filter { background-color: #475569; }
@@ -266,7 +317,11 @@ def serve_home():
     </head>
     <body>
         <div class="container">
-            <h1>SteelY R.M.I Garage Maintnace dash Bord</h1>
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); padding-bottom: 12px;">
+                <h1 style="border:none; margin:0; padding:0;">SteelY R.M.I Garage Maintnace dash Bord</h1>
+                <!-- MASTER ALL-IN-ONE EXCEL REPORT BUTTON -->
+                <button class="btn-master" onclick="downloadMasterExcel()">📊 Export All-in-One Master Excel Report</button>
+            </div>
             
             <h2>Executive Summaries (Weekly & Monthly)</h2>
             
@@ -291,14 +346,20 @@ def serve_home():
                 <div class="card">
                     <h4>Weekly Summary (Last 7 Days)</h4>
                     <div id="weeklyStats">Loading...</div>
-                    <button class="btn-excel" onclick="downloadWeeklyExcel()">Export Weekly Excel</button>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-excel" onclick="downloadWeeklyJobsExcel()">Export Jobs List (Weekly)</button>
+                        <button class="btn-excel" style="background-color:#0284c7;" onclick="downloadWeeklySummaryExcel()">Export Summary Data Only</button>
+                    </div>
                 </div>
                 
                 <!-- 2. MONTHLY SUMMARY CARD -->
                 <div class="card monthly">
                     <h4>Monthly Summary (Last 30 Days)</h4>
                     <div id="monthlyStats">Loading...</div>
-                    <button class="btn-excel" onclick="downloadMonthlyExcel()">Export Monthly Excel</button>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn-excel" onclick="downloadMonthlyJobsExcel()">Export Jobs List (Monthly)</button>
+                        <button class="btn-excel" style="background-color:#0284c7;" onclick="downloadMonthlySummaryExcel()">Export Summary Data Only</button>
+                    </div>
                 </div>
             </div>
 
@@ -429,7 +490,7 @@ def serve_home():
                 </div>
                 <button type="button" class="btn-filter" onclick="fetchJobs()">Filter Records</button>
                 <button type="button" class="btn-reset" onclick="resetJobsFilter()">Clear Filter / Reset</button>
-                <button type="button" onclick="downloadExcel()" class="btn-info" style="margin-left: auto;">Export Excel Report</button>
+                <button type="button" onclick="downloadExcel()" class="btn-info" style="margin-left: auto;">Export Filtered Registry Excel</button>
             </div>
 
             <table id="jobsTable">
@@ -564,7 +625,6 @@ def serve_home():
             let editSpareParts = [];
             let activeModalContext = 'create';
 
-            // Automatic +5,000 KM calculation
             function autoCalcNextKM() {
                 const cKm = parseInt(document.getElementById('current_km').value) || 0;
                 document.getElementById('next_service_km').value = cKm > 0 ? cKm + 5000 : 0;
@@ -575,7 +635,7 @@ def serve_home():
                 document.getElementById('edit_next_service_km').value = cKm > 0 ? cKm + 5000 : 0;
             }
 
-            // UNDO & REDO Stack Management for Summaries
+            // UNDO & REDO Stack Management
             let filterHistory = [{ from: '', to: '' }];
             let historyIndex = 0;
 
@@ -738,14 +798,12 @@ def serve_home():
                     return `
                         <div class="stat-row"><span>Total Jobs Executed:</span> <b>${data.total_jobs}</b></div>
                         
-                        <!-- PM, CM, Inspection Breakdown -->
                         <div class="stat-highlight">
                             <div class="stat-row"><span>• Preventive Maintenance (PM):</span> <b>${data.pm_count}</b></div>
                             <div class="stat-row"><span>• Corrective Maintenance (CM):</span> <b>${data.cm_count}</b></div>
                             <div class="stat-row"><span>• Inspection & Checkup:</span> <b>${data.inspection_count}</b></div>
                         </div>
 
-                        <!-- Effective Time Worked Calculation -->
                         <div class="stat-row" style="background-color:#e0f2fe; padding:6px; border-radius:4px; font-weight:600; color:#0369a1;">
                             <span>Total Effective Work Time:</span> <span>${formatMinutes(data.total_effective_minutes)}</span>
                         </div>
@@ -909,13 +967,25 @@ def serve_home():
                 fetchSummary();
             });
 
-            // --- Excel Downloads ---
-            function downloadWeeklyExcel() {
+            // --- Excel Download Trigger Functions ---
+            function downloadWeeklyJobsExcel() {
                 window.location.href = `/api/reports/excel/weekly`;
             }
 
-            function downloadMonthlyExcel() {
+            function downloadMonthlyJobsExcel() {
                 window.location.href = `/api/reports/excel/monthly`;
+            }
+
+            function downloadWeeklySummaryExcel() {
+                window.location.href = `/api/reports/excel/summary-only?period=weekly`;
+            }
+
+            function downloadMonthlySummaryExcel() {
+                window.location.href = `/api/reports/excel/summary-only?period=monthly`;
+            }
+
+            function downloadMasterExcel() {
+                window.location.href = `/api/reports/excel/master-all-in-one`;
             }
 
             function downloadExcel() {
@@ -954,7 +1024,6 @@ def create_job(job: JobCreate):
     job_data["spare_parts_cost"] = parts_cost
     job_data["total_cost"] = total
     
-    # Calculate Next Service KM automatically if not provided
     if not job_data.get("next_service_km") and job_data.get("current_km"):
         job_data["next_service_km"] = job_data["current_km"] + 5000
 
@@ -981,21 +1050,14 @@ def get_jobs(from_date: Optional[str] = None, to_date: Optional[str] = None):
 def update_job(job_id: int, job_update: JobUpdate):
     for job in jobs_db:
         if job["id"] == job_id:
-            if job_update.work_order_no is not None:
-                job["work_order_no"] = job_update.work_order_no
-            if job_update.status is not None:
-                job["status"] = job_update.status
-            if job_update.technicians is not None:
-                job["technicians"] = job_update.technicians
-            if job_update.end_time is not None:
-                job["end_time"] = job_update.end_time
-            if job_update.additional_unplanned_work is not None:
-                job["additional_unplanned_work"] = job_update.additional_unplanned_work
+            if job_update.work_order_no is not None: job["work_order_no"] = job_update.work_order_no
+            if job_update.status is not None: job["status"] = job_update.status
+            if job_update.technicians is not None: job["technicians"] = job_update.technicians
+            if job_update.end_time is not None: job["end_time"] = job_update.end_time
+            if job_update.additional_unplanned_work is not None: job["additional_unplanned_work"] = job_update.additional_unplanned_work
 
-            if job_update.current_km is not None:
-                job["current_km"] = job_update.current_km
-            if job_update.next_service_km is not None:
-                job["next_service_km"] = job_update.next_service_km
+            if job_update.current_km is not None: job["current_km"] = job_update.current_km
+            if job_update.next_service_km is not None: job["next_service_km"] = job_update.next_service_km
 
             if job_update.spare_parts is not None:
                 job["spare_parts"] = [p.dict() for p in job_update.spare_parts]
@@ -1024,79 +1086,88 @@ def update_job(job_id: int, job_update: JobUpdate):
 @app.get("/api/reports/executive-summary")
 def get_executive_summary(from_date: Optional[str] = Query(None), to_date: Optional[str] = Query(None)):
     now = datetime.now()
-    
     if from_date and to_date:
         w_start = datetime.strptime(from_date, "%Y-%m-%d")
         w_end = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
-        m_start = w_start
-        m_end = w_end
+        m_start, m_end = w_start, w_end
     else:
-        w_start = now - timedelta(days=7)
-        w_end = None
-        m_start = now - timedelta(days=30)
-        m_end = None
-
-    def summarize(period_start, period_end=None):
-        summary = {
-            "total_jobs": 0,
-            "pm_count": 0,
-            "cm_count": 0,
-            "inspection_count": 0,
-            "total_effective_minutes": 0,
-            "spare_parts_qty": 0,
-            "spare_parts_cost": 0.0,
-            "lubricant_liters": 0.0,
-            "lubricant_cost": 0.0,
-            "battery_cost": 0.0,
-            "tire_cost": 0.0,
-            "total_cost": 0.0
-        }
-        for job in jobs_db:
-            job_date = parse_job_date(job.get("start_time", ""))
-            if job_date:
-                in_period = False
-                if period_end:
-                    in_period = (period_start <= job_date <= period_end)
-                else:
-                    in_period = (job_date >= period_start)
-
-                if in_period:
-                    summary["total_jobs"] += 1
-                    
-                    w_type = job.get("work_type", "")
-                    if w_type == "Preventive Maintenance":
-                        summary["pm_count"] += 1
-                    elif w_type == "Corrective Maintenance":
-                        summary["cm_count"] += 1
-                    elif w_type == "Inspection & Checkup":
-                        summary["inspection_count"] += 1
-
-                    summary["total_effective_minutes"] += job.get("effective_minutes", 0)
-                    summary["spare_parts_qty"] += job.get("spare_parts_qty", 0)
-                    summary["spare_parts_cost"] += job.get("spare_parts_cost", 0.0)
-                    summary["lubricant_liters"] += job.get("lubricant_liters", 0.0)
-                    summary["lubricant_cost"] += job.get("lubricant_cost", 0.0)
-                    summary["battery_cost"] += job.get("battery_cost", 0.0)
-                    summary["tire_cost"] += job.get("tire_cost", 0.0)
-                    summary["total_cost"] += job.get("total_cost", 0.0)
-        return summary
+        w_start, w_end = now - timedelta(days=7), None
+        m_start, m_end = now - timedelta(days=30), None
 
     return {
-        "weekly": summarize(w_start, w_end),
-        "monthly": summarize(m_start, m_end)
+        "weekly": compute_summary_dict(w_start, w_end),
+        "monthly": compute_summary_dict(m_start, m_end)
     }
+
+# --- EXCEL REPORT ENDPOINTS ---
+
+@app.get("/api/reports/excel/summary-only")
+def download_summary_only_excel(period: str = Query("weekly")):
+    """ 1. ሱመሪ ዳታዎችን ብቻ ለብቻ ወደ ኤክሴል ኤክስፖርት ማድረጊያ """
+    now = datetime.now()
+    if period == "weekly":
+        summary = compute_summary_dict(now - timedelta(days=7))
+        title = "Weekly Executive Summary (Last 7 Days)"
+        filename = "weekly_executive_summary_report.xlsx"
+    else:
+        summary = compute_summary_dict(now - timedelta(days=30))
+        title = "Monthly Executive Summary (Last 30 Days)"
+        filename = "monthly_executive_summary_report.xlsx"
+
+    df_summary = create_summary_dataframe(summary, title)
+    
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_summary.to_excel(writer, index=False, sheet_name='Executive_Summary')
+    output.seek(0)
+    
+    headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
+    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+@app.get("/api/reports/excel/master-all-in-one")
+def download_master_all_in_one_excel():
+    """ 2. ሁሉንም ሪፖርቶች በአንድ የኤክሴል ፋይል ውስጥ በ 3 Sheet አጣጥሞ ማስቀመጫ """
+    now = datetime.now()
+    weekly_summary = compute_summary_dict(now - timedelta(days=7))
+    monthly_summary = compute_summary_dict(now - timedelta(days=30))
+
+    df_jobs = create_jobs_dataframe(jobs_db)
+    df_weekly = create_summary_dataframe(weekly_summary, "Weekly Summary (Last 7 Days)")
+    df_monthly = create_summary_dataframe(monthly_summary, "Monthly Summary (Last 30 Days)")
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_jobs.to_excel(writer, index=False, sheet_name='Full_Job_Registry')
+        df_weekly.to_excel(writer, index=False, sheet_name='Weekly_Executive_Summary')
+        df_monthly.to_excel(writer, index=False, sheet_name='Monthly_Executive_Summary')
+    output.seek(0)
+
+    headers = {'Content-Disposition': 'attachment; filename="steely_rmi_master_garage_report.xlsx"'}
+    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 @app.get("/api/reports/excel/weekly")
 def generate_weekly_excel_report():
     seven_days_ago = datetime.now() - timedelta(days=7)
     filtered_jobs = [j for j in jobs_db if parse_job_date(j.get("start_time", "")) and parse_job_date(j.get("start_time", "")) >= seven_days_ago]
-    return build_excel_response(filtered_jobs, "steely_rmi_weekly_garage_report.xlsx")
+    df = create_jobs_dataframe(filtered_jobs)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Weekly_Jobs')
+    output.seek(0)
+    headers = {'Content-Disposition': 'attachment; filename="steely_rmi_weekly_jobs_report.xlsx"'}
+    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 @app.get("/api/reports/excel/monthly")
 def generate_monthly_excel_report():
     thirty_days_ago = datetime.now() - timedelta(days=30)
     filtered_jobs = [j for j in jobs_db if parse_job_date(j.get("start_time", "")) and parse_job_date(j.get("start_time", "")) >= thirty_days_ago]
-    return build_excel_response(filtered_jobs, "steely_rmi_monthly_garage_report.xlsx")
+    df = create_jobs_dataframe(filtered_jobs)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Monthly_Jobs')
+    output.seek(0)
+    headers = {'Content-Disposition': 'attachment; filename="steely_rmi_monthly_jobs_report.xlsx"'}
+    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 @app.get("/api/reports/excel")
 def generate_excel_report(from_date: Optional[str] = Query(None), to_date: Optional[str] = Query(None)):
@@ -1106,4 +1177,10 @@ def generate_excel_report(from_date: Optional[str] = Query(None), to_date: Optio
         t_date = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
         data = [j for j in jobs_db if parse_job_date(j.get("start_time", "")) and f_date <= parse_job_date(j.get("start_time", "")) <= t_date]
 
-    return build_excel_response(data, "steely_rmi_garage_report.xlsx")
+    df = create_jobs_dataframe(data)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Garage_Report')
+    output.seek(0)
+    headers = {'Content-Disposition': 'attachment; filename="steely_rmi_garage_report.xlsx"'}
+    return StreamingResponse(output, headers=headers, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
