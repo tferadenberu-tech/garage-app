@@ -1,20 +1,19 @@
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey
 from sqlalchemy.orm import sessionmaker, declarative_base, relationship, Session
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+import pandas as pd
 
 # ==========================================
 # 1. DATABASE CONFIGURATION (SQLite)
 # ==========================================
-SQLALCHEMY_DATABASE_URL = "sqlite:///./garage.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./steely_rmi_garage.db"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, 
@@ -37,15 +36,29 @@ class MaintenanceRecord(Base):
     __tablename__ = "maintenance_records"
 
     id = Column(Integer, primary_key=True, index=True)
+    serial_number = Column(String, nullable=True)
+    work_order_no = Column(String, nullable=True)
     vehicle_plate = Column(String, index=True, nullable=False)
-    vehicle_model = Column(String, nullable=False)
-    current_mileage = Column(Float, nullable=False)
-    next_service_mileage = Column(Float, nullable=False)
+    vehicle_type = Column(String, nullable=False)
+    driver_name = Column(String, nullable=True)
+    current_km = Column(Float, nullable=False, default=0.0)
+    next_service_km = Column(Float, nullable=False, default=0.0)
+    work_type = Column(String, nullable=False)
+    issue_description = Column(String, nullable=True)
+    additional_unplanned_work = Column(String, nullable=True)
+    status = Column(String, default="Completed")
+
+    # Costs & Lubricants
+    lubricant_liters = Column(Float, default=0.0)
+    lubricant_cost = Column(Float, default=0.0)
+    battery_cost = Column(Float, default=0.0)
+    tire_cost = Column(Float, default=0.0)
+
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
     spare_parts = relationship("SparePartItem", back_populates="record", cascade="all, delete-orphan")
-    assigned_technicians = relationship("TechnicianAssignment", back_populates="record", cascade="all, delete-orphan")
+    technicians = relationship("TechnicianAssignment", back_populates="record", cascade="all, delete-orphan")
 
 
 class SparePartItem(Base):
@@ -53,7 +66,7 @@ class SparePartItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     record_id = Column(Integer, ForeignKey("maintenance_records.id"), nullable=False)
-    spec_name = Column(String, nullable=False)  # Spare Part Name / Spec
+    spec_name = Column(String, nullable=False)  # Spare Part Name (spec)
     qty = Column(Integer, nullable=False, default=1)
     unit_cost = Column(Float, nullable=False, default=0.0)
 
@@ -65,13 +78,13 @@ class TechnicianAssignment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     record_id = Column(Integer, ForeignKey("maintenance_records.id"), nullable=False)
-    technician_name = Column(String, nullable=False)  # Assigned Technician Name
+    technician_name = Column(String, nullable=False)
     assigned_by = Column(String, nullable=True, default="Supervisor")
     assigned_at = Column(DateTime, default=datetime.utcnow)
 
-    record = relationship("MaintenanceRecord", back_populates="assigned_technicians")
+    record = relationship("MaintenanceRecord", back_populates="technicians")
 
-# Create All Tables
+# Create Database Tables Automatically
 Base.metadata.create_all(bind=engine)
 
 # ==========================================
@@ -79,8 +92,8 @@ Base.metadata.create_all(bind=engine)
 # ==========================================
 class SparePartCreate(BaseModel):
     spec_name: str
-    qty: int
-    unit_cost: float
+    qty: int = 1
+    unit_cost: float = 0.0
 
 class SparePartResponse(SparePartCreate):
     id: int
@@ -100,32 +113,58 @@ class TechnicianResponse(BaseModel):
         from_attributes = True
 
 class MaintenanceRecordCreate(BaseModel):
+    serial_number: Optional[str] = ""
+    work_order_no: Optional[str] = ""
     vehicle_plate: str
-    vehicle_model: str
-    current_mileage: float
+    vehicle_type: str
+    driver_name: Optional[str] = ""
+    current_km: float
+    next_service_km: Optional[float] = None
+    work_type: str
+    issue_description: Optional[str] = ""
+    additional_unplanned_work: Optional[str] = ""
+
     spare_parts: List[SparePartCreate] = []
     technicians: List[AssignTechnicianCreate] = []
 
+    lubricant_liters: float = 0.0
+    lubricant_cost: float = 0.0
+    battery_cost: float = 0.0
+    tire_cost: float = 0.0
+
 class MaintenanceRecordResponse(BaseModel):
     id: int
+    serial_number: Optional[str]
+    work_order_no: Optional[str]
     vehicle_plate: str
-    vehicle_model: str
-    current_mileage: float
-    next_service_mileage: float
+    vehicle_type: str
+    driver_name: Optional[str]
+    current_km: float
+    next_service_km: float
+    work_type: str
+    issue_description: Optional[str]
+    additional_unplanned_work: Optional[str]
+    status: str
     created_at: datetime
+
     spare_parts: List[SparePartResponse] = []
-    assigned_technicians: List[TechnicianResponse] = []
-    total_parts_cost: float
+    technicians: List[TechnicianResponse] = []
+
+    lubricant_liters: float
+    lubricant_cost: float
+    battery_cost: float
+    tire_cost: float
+    total_cost: float
 
     class Config:
         from_attributes = True
 
 # ==========================================
-# 4. FASTAPI APP & ENDPOINTS
+# 4. FASTAPI APP & ROUTE API
 # ==========================================
 app = FastAPI(title="SteelY R.M.I Garage Maintnace dash Bord")
 
-# CORS Policy
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -134,23 +173,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- 4.1 CREATE RECORD ---
+# --- 4.1 CREATE MAINTENANCE RECORD ---
 @app.post("/api/records", response_model=MaintenanceRecordResponse, status_code=status.HTTP_201_CREATED)
 def create_record(payload: MaintenanceRecordCreate, db: Session = Depends(get_db)):
-    # Auto-calculate next service mileage (+5000 KM)
-    next_service = payload.current_mileage + 5000.0
+    # Calculate Next Service Mileage (+5000 KM) if not manually sent
+    calculated_next_km = payload.next_service_km if payload.next_service_km else (payload.current_km + 5000.0)
 
     db_record = MaintenanceRecord(
+        serial_number=payload.serial_number,
+        work_order_no=payload.work_order_no,
         vehicle_plate=payload.vehicle_plate,
-        vehicle_model=payload.vehicle_model,
-        current_mileage=payload.current_mileage,
-        next_service_mileage=next_service
+        vehicle_type=payload.vehicle_type,
+        driver_name=payload.driver_name,
+        current_km=payload.current_km,
+        next_service_km=calculated_next_km,
+        work_type=payload.work_type,
+        issue_description=payload.issue_description,
+        additional_unplanned_work=payload.additional_unplanned_work,
+        lubricant_liters=payload.lubricant_liters,
+        lubricant_cost=payload.lubricant_cost,
+        battery_cost=payload.battery_cost,
+        tire_cost=payload.tire_cost
     )
     db.add(db_record)
     db.commit()
     db.refresh(db_record)
 
-    # Save Spare Parts Breakdown
+    # Save Itemized Spare Parts
     for part in payload.spare_parts:
         db.add(SparePartItem(
             record_id=db_record.id,
@@ -159,7 +208,7 @@ def create_record(payload: MaintenanceRecordCreate, db: Session = Depends(get_db
             unit_cost=part.unit_cost
         ))
 
-    # Save Assigned Technicians
+    # Save Technicians
     for tech in payload.technicians:
         db.add(TechnicianAssignment(
             record_id=db_record.id,
@@ -170,39 +219,43 @@ def create_record(payload: MaintenanceRecordCreate, db: Session = Depends(get_db
     db.commit()
     db.refresh(db_record)
 
-    total_cost = sum(p.qty * p.unit_cost for p in db_record.spare_parts)
+    # Calculate Total Expenditure
+    parts_cost = sum(p.qty * p.unit_cost for p in db_record.spare_parts)
+    total_cost = parts_cost + db_record.lubricant_cost + db_record.battery_cost + db_record.tire_cost
 
-    return {
-        "id": db_record.id,
-        "vehicle_plate": db_record.vehicle_plate,
-        "vehicle_model": db_record.vehicle_model,
-        "current_mileage": db_record.current_mileage,
-        "next_service_mileage": db_record.next_service_mileage,
-        "created_at": db_record.created_at,
-        "spare_parts": db_record.spare_parts,
-        "assigned_technicians": db_record.assigned_technicians,
-        "total_parts_cost": total_cost
-    }
+    res = MaintenanceRecordResponse.from_orm(db_record)
+    res.total_cost = total_cost
+    return res
 
-# --- 4.2 GET ALL RECORDS ---
+# --- 4.2 GET RECORDS (WITH DATE FILTER) ---
 @app.get("/api/records", response_model=List[MaintenanceRecordResponse])
-def get_records(db: Session = Depends(get_db)):
-    records = db.query(MaintenanceRecord).all()
-    results = []
+def get_records(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(MaintenanceRecord)
+
+    if from_date:
+        start_dt = datetime.strptime(from_date, "%Y-%m-%d")
+        query = query.filter(MaintenanceRecord.created_at >= start_dt)
+
+    if to_date:
+        end_dt = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1, microseconds=-1)
+        query = query.filter(MaintenanceRecord.created_at <= end_dt)
+
+    records = query.order_by(MaintenanceRecord.created_at.desc()).all()
+
+    response = []
     for r in records:
-        total_cost = sum(p.qty * p.unit_cost for p in r.spare_parts)
-        results.append({
-            "id": r.id,
-            "vehicle_plate": r.vehicle_plate,
-            "vehicle_model": r.vehicle_model,
-            "current_mileage": r.current_mileage,
-            "next_service_mileage": r.next_service_mileage,
-            "created_at": r.created_at,
-            "spare_parts": r.spare_parts,
-            "assigned_technicians": r.assigned_technicians,
-            "total_parts_cost": total_cost
-        })
-    return results
+        parts_cost = sum(p.qty * p.unit_cost for p in r.spare_parts)
+        total_cost = parts_cost + r.lubricant_cost + r.battery_cost + r.tire_cost
+
+        rec_dto = MaintenanceRecordResponse.from_orm(r)
+        rec_dto.total_cost = total_cost
+        response.append(rec_dto)
+
+    return response
 
 # --- 4.3 ASSIGN TECHNICIAN TO EXISTING RECORD ---
 @app.post("/api/records/{record_id}/assign-technician", response_model=TechnicianResponse)
@@ -211,79 +264,97 @@ def assign_technician(record_id: int, payload: AssignTechnicianCreate, db: Sessi
     if not record:
         raise HTTPException(status_code=404, detail="የጥገና መዝገቡ አልተገኘም")
 
-    new_tech = TechnicianAssignment(
+    tech = TechnicianAssignment(
         record_id=record_id,
         technician_name=payload.technician_name,
         assigned_by=payload.assigned_by
     )
-    db.add(new_tech)
+    db.add(tech)
     db.commit()
-    db.refresh(new_tech)
-    return new_tech
+    db.refresh(tech)
+    return tech
 
-# --- 4.4 MASTER EXCEL REPORT EXPORT ---
-@app.get("/api/export-excel")
-def export_master_excel(db: Session = Depends(get_db)):
-    records = db.query(MaintenanceRecord).all()
+# --- 4.4 EXPORT FILTERED MASTER EXCEL REPORT ---
+@app.get("/api/reports/excel/custom-range")
+def export_filtered_excel(
+    from_date: Optional[str] = Query(None),
+    to_date: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    query = db.query(MaintenanceRecord)
 
-    wb = openpyxl.Workbook()
-    
-    # Styles
-    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-    header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
-    center_align = Alignment(horizontal="center", vertical="center")
-    left_align = Alignment(horizontal="left", vertical="center")
-    thin_border = Border(
-        left=Side(style='thin', color='D9D9D9'),
-        right=Side(style='thin', color='D9D9D9'),
-        top=Side(style='thin', color='D9D9D9'),
-        bottom=Side(style='thin', color='D9D9D9')
-    )
+    if from_date:
+        start_dt = datetime.strptime(from_date, "%Y-%m-%d")
+        query = query.filter(MaintenanceRecord.created_at >= start_dt)
 
-    # 1. Full Job Registry Sheet
-    ws1 = wb.active
-    ws1.title = "Full_Job_Registry"
-    headers1 = ["Record ID", "Date", "Plate No", "Model", "Current KM", "Next Service KM", "Assigned Technicians", "Parts Summary", "Total Parts Cost (ETB)"]
-    ws1.append(headers1)
+    if to_date:
+        end_dt = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1, microseconds=-1)
+        query = query.filter(MaintenanceRecord.created_at <= end_dt)
 
-    for cell in ws1[1]:
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = center_align
+    records = query.all()
+
+    detailed_rows = []
+    total_parts = 0.0
+    total_lube = 0.0
+    total_batt = 0.0
+    total_tire = 0.0
 
     for r in records:
-        techs = ", ".join([t.technician_name for t in r.assigned_technicians])
-        parts_summary = "; ".join([f"{p.spec_name} (x{p.qty})" for p in r.spare_parts])
-        total_cost = sum(p.qty * p.unit_cost for p in r.spare_parts)
+        parts_str = "; ".join([f"{p.spec_name} (Qty: {p.qty}, Unit: ETB {p.unit_cost})" for p in r.spare_parts])
+        techs_str = ", ".join([t.technician_name for t in r.technicians])
+        p_cost = sum(p.qty * p.unit_cost for p in r.spare_parts)
 
-        row = [
-            r.id,
-            r.created_at.strftime("%Y-%m-%d %H:%M"),
-            r.vehicle_plate,
-            r.vehicle_model,
-            r.current_mileage,
-            r.next_service_mileage,
-            techs if techs else "Unassigned",
-            parts_summary if parts_summary else "N/A",
-            total_cost
-        ]
-        ws1.append(row)
+        total_parts += p_cost
+        total_lube += r.lubricant_cost
+        total_batt += r.battery_cost
+        total_tire += r.tire_cost
 
-    for row in ws1.iter_rows(min_row=2, max_row=ws1.max_row, min_col=1, max_col=9):
-        for cell in row:
-            cell.border = thin_border
-            cell.alignment = left_align
+        row_total = p_cost + r.lubricant_cost + r.battery_cost + r.tire_cost
 
-    # Save to buffer
-    buffer = io.BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
+        detailed_rows.append({
+            "Date": r.created_at.strftime("%Y-%m-%d %H:%M"),
+            "S/N": r.serial_number,
+            "W.O No": r.work_order_no,
+            "Vehicle Plate": r.vehicle_plate,
+            "Vehicle Type": r.vehicle_type,
+            "Driver Name": r.driver_name,
+            "Current KM": r.current_km,
+            "Next Service KM": r.next_service_km,
+            "Assigned Technicians": techs_str if techs_str else "Unassigned",
+            "Work Type": r.work_type,
+            "Issue Description": r.issue_description,
+            "Replaced Parts Breakdown": parts_str if parts_str else "None",
+            "Spare Parts Cost (ETB)": p_cost,
+            "Lubricants Liters": r.lubricant_liters,
+            "Lubricant Cost (ETB)": r.lubricant_cost,
+            "Battery Cost (ETB)": r.battery_cost,
+            "Tire Cost (ETB)": r.tire_cost,
+            "Total Job Cost (ETB)": row_total
+        })
 
-    filename = f"SteelY_RMI_Garage_Report_{datetime.now().strftime('%Y%m%d')}.xlsx"
-    headers = {'Content-Disposition': f'attachment; filename="{filename}"'}
+    df_details = pd.DataFrame(detailed_rows)
+
+    # Category Cost Summary Sheet
+    summary_rows = [
+        {"Expense Category": "Spare Parts Total", "Cost (ETB)": total_parts},
+        {"Expense Category": "Lubricants Total", "Cost (ETB)": total_lube},
+        {"Expense Category": "Batteries Total", "Cost (ETB)": total_batt},
+        {"Expense Category": "Tires Total", "Cost (ETB)": total_tire},
+        {"Expense Category": "GRAND TOTAL EXPENDITURE", "Cost (ETB)": total_parts + total_lube + total_batt + total_tire}
+    ]
+    df_summary = pd.DataFrame(summary_rows)
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_details.to_excel(writer, index=False, sheet_name="Filtered_Detailed_Log")
+        df_summary.to_excel(writer, index=False, sheet_name="Category_Cost_Summary")
+
+    output.seek(0)
+    file_name = f"SteelY_Garage_Report_{from_date if from_date else 'All'}_to_{to_date if to_date else 'All'}.xlsx"
+    headers = {'Content-Disposition': f'attachment; filename="{file_name}"'}
     
     return StreamingResponse(
-        buffer, 
+        output, 
         headers=headers, 
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
