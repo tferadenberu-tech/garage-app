@@ -1,6 +1,5 @@
 import os
 import json
-from datetime import datetime
 from flask import Flask, render_template_string, request, redirect, url_for
 
 app = Flask(__name__)
@@ -30,43 +29,14 @@ def load_data():
             },
             {
                 "id": 2,
-                "plate_no": "EQUIP-002",
-                "model": "Komatsu Excavator PC200",
-                "type": "Excavator",
+                "plate_no": "AA-3-A12345",
+                "model": "Toyota Hilux Pick-up",
+                "type": "Vehicle",
                 "driver": "Ato Tadesse",
-                "spec": "Hydraulic & Engine Oil Filter Kit",
-                "current_hours": 1890.0,
-                "last_service_hours": 1650.0,
-                "interval_hours": 250.0
-            }
-        ],
-        "spare_parts": [
-            {
-                "id": 1,
-                "spec": "15W-40 Heavy Engine Oil (20L Drum)",
-                "category": "Fluids & Lubricants",
-                "quantity": 18,
-                "unit": "Drums",
-                "min_stock": 5
-            },
-            {
-                "id": 2,
-                "spec": "CAT Oil Filter Element (1R-1808)",
-                "category": "Filters",
-                "quantity": 12,
-                "unit": "Pcs",
-                "min_stock": 4
-            }
-        ],
-        "service_logs": [
-            {
-                "id": 1,
-                "plate_no": "EQUIP-001",
-                "service_type": "250 Hrs Routine Oil & Filter Change",
-                "hour_meter": 3250.0,
-                "spec_used": "15W-40 Heavy Engine Oil + Filter",
-                "technician": "Workshop Maintenance Team",
-                "date": "2026-07-01"
+                "spec": "5W-30 Synthetic Oil Filter Kit",
+                "current_hours": 105000.0,
+                "last_service_hours": 100000.0,
+                "interval_hours": 5000.0
             }
         ]
     }
@@ -85,7 +55,6 @@ HTML_TEMPLATE = """
     <style>
         :root {
             --primary-color: #1e3a8a;
-            --primary-dark: #0f172a;
             --accent-color: #2563eb;
             --bg-color: #f8fafc;
             --card-bg: #ffffff;
@@ -98,7 +67,7 @@ HTML_TEMPLATE = """
 
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; }
-        .container { max-width: 1280px; margin: 0 auto; }
+        .container { max-width: 1200px; margin: 0 auto; }
         
         .header {
             background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
@@ -111,24 +80,8 @@ HTML_TEMPLATE = """
             justify-content: space-between;
             align-items: center;
         }
-        .header h1 { margin: 0; font-size: 26px; }
+        .header h1 { margin: 0; font-size: 24px; }
         .header p { margin: 5px 0 0 0; opacity: 0.85; font-size: 14px; }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 18px;
-            margin-bottom: 25px;
-        }
-        .stat-card {
-            background: var(--card-bg);
-            padding: 20px;
-            border-radius: 10px;
-            border: 1px solid var(--border-color);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-        }
-        .stat-card .title { font-size: 13px; color: #64748b; font-weight: 600; text-transform: uppercase; }
-        .stat-card .value { font-size: 28px; font-weight: 700; color: var(--primary-color); margin-top: 8px; }
 
         .section-card {
             background: var(--card-bg);
@@ -136,7 +89,7 @@ HTML_TEMPLATE = """
             border-radius: 10px;
             border: 1px solid var(--border-color);
             box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-            margin-bottom: 30px;
+            margin-bottom: 25px;
         }
         .section-card h2 {
             margin-top: 0;
@@ -149,9 +102,8 @@ HTML_TEMPLATE = """
 
         .form-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 15px;
-            margin-bottom: 15px;
         }
         .form-group { display: flex; flex-direction: column; gap: 6px; }
         .form-group label { font-size: 13px; font-weight: 600; color: #475569; }
@@ -173,7 +125,7 @@ HTML_TEMPLATE = """
             font-weight: 600;
             cursor: pointer;
             transition: background 0.2s;
-            margin-top: auto;
+            margin-top: 22px;
         }
         .btn-submit:hover { background-color: var(--accent-color); }
 
@@ -196,58 +148,40 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
+        <!-- System Header -->
         <div class="header">
             <div>
                 <h1>SteelY R.M.I Garage Maintnace dash Bord</h1>
-                <p>Fleet Equipment Management & 250-Hour Oil Service Tracking System</p>
+                <p>Equipment & Vehicle Maintenance Interval Monitoring</p>
             </div>
             <div>
-                <span class="badge badge-ok" style="font-size: 14px; padding: 8px 14px;">● System Active</span>
+                <span class="badge badge-ok" style="font-size: 14px; padding: 8px 14px;">● System Ready</span>
             </div>
         </div>
 
-        <!-- 📊 Dashboard Summary Metrics -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="title">Total Fleet Equipment</div>
-                <div class="value">{{ equipments|length }}</div>
-            </div>
-            <div class="stat-card">
-                <div class="title">Service Alerts Needed</div>
-                <div class="value" style="color: var(--danger);">{{ urgent_count }}</div>
-            </div>
-            <div class="stat-card">
-                <div class="title">Spare Parts Registered</div>
-                <div class="value">{{ spare_parts|length }}</div>
-            </div>
-            <div class="stat-card">
-                <div class="title">Logged Maintenance History</div>
-                <div class="value">{{ service_logs|length }}</div>
-            </div>
-        </div>
-
-        <!-- 🚜 SECTION 1: Equipment & 250-Hour Oil Service Tracker -->
+        <!-- 📝 1. Add Equipment & Vehicle Form -->
         <div class="section-card">
-            <h2>🚜 1. Equipment & 250-Hour Oil Service Tracker</h2>
+            <h2>1. Add Equipment / Vehicle</h2>
             
             <form action="/add_equipment" method="POST">
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Plate No / ID</label>
-                        <input type="text" name="plate_no" placeholder="e.g. EQUIP-003" required>
+                        <input type="text" name="plate_no" placeholder="e.g. EQUIP-003 or AA-2-C123" required>
                     </div>
                     <div class="form-group">
-                        <label>Equipment Model</label>
-                        <input type="text" name="model" placeholder="e.g. CAT Loader 950H" required>
+                        <label>Model</label>
+                        <input type="text" name="model" placeholder="e.g. CAT Loader / Toyota Hilux" required>
                     </div>
                     <div class="form-group">
-                        <label>Equipment Type</label>
+                        <label>Category Type</label>
                         <select name="type" required>
                             <option value="Loader">Loader</option>
                             <option value="Excavator">Excavator</option>
+                            <option value="Vehicle / Car">Vehicle / Car</option>
+                            <option value="Truck">Truck</option>
                             <option value="Forklift">Forklift</option>
-                            <option value="Dump Truck">Dump Truck</option>
-                            <option value="Other">Other Equipment</option>
+                            <option value="Other Equipment">Other Equipment</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -256,201 +190,78 @@ HTML_TEMPLATE = """
                     </div>
                     <div class="form-group">
                         <label>Spare Part Name (spec)</label>
-                        <input type="text" name="spec" placeholder="e.g. 15W-40 Oil & Filter Set" required>
+                        <input type="text" name="spec" placeholder="e.g. Oil & Filter Spec" required>
                     </div>
                     <div class="form-group">
-                        <label>Current Hour Meter</label>
-                        <input type="number" step="0.1" name="current_hours" placeholder="0.0" required>
+                        <label>Current Hour / KM</label>
+                        <input type="number" step="0.1" name="current_hours" placeholder="e.g. 3420.0" required>
                     </div>
                     <div class="form-group">
-                        <label>Last Service Hour Meter</label>
-                        <input type="number" step="0.1" name="last_service_hours" placeholder="0.0" required>
+                        <label>Last Service Hour / KM</label>
+                        <input type="number" step="0.1" name="last_service_hours" placeholder="e.g. 3250.0" required>
                     </div>
                     <div class="form-group">
-                        <button type="submit" class="btn-submit">+ Add Equipment</button>
+                        <label>Service Interval (Hours / KM)</label>
+                        <input type="number" step="0.1" name="interval_hours" placeholder="e.g. 250 or 5000" value="250.0" required>
                     </div>
                 </div>
+                <div style="margin-top: 15px;">
+                    <button type="submit" class="btn-submit">+ Save Equipment / Vehicle</button>
+                </div>
             </form>
+        </div>
 
-            <table style="margin-top:20px;">
+        <!-- 📊 2. Current Hours and Last Service Status Table -->
+        <div class="section-card">
+            <h2>2. Current Hours / KM & Last Service Status</h2>
+
+            <table>
                 <thead>
                     <tr>
-                        <th>Plate / ID</th>
+                        <th>Plate No / ID</th>
                         <th>Model</th>
                         <th>Type</th>
+                        <th>Driver</th>
                         <th>Spare Part Name (spec)</th>
-                        <th>Current Hours</th>
-                        <th>Last Service</th>
-                        <th>Next Service Due (250h)</th>
-                        <th>Remaining Hours</th>
+                        <th>Current Hour / KM</th>
+                        <th>Last Service Hour / KM</th>
+                        <th>Service Interval</th>
+                        <th>Remaining Hours / KM</th>
                         <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for eq in equipments %}
-                    {% set next_due = eq.last_service_hours + eq.interval_hours %}
+                    {% set interval = eq.interval_hours if eq.interval_hours is defined else 250.0 %}
+                    {% set next_due = eq.last_service_hours + interval %}
                     {% set rem = next_due - eq.current_hours %}
                     <tr>
                         <td><strong>{{ eq.plate_no }}</strong></td>
                         <td>{{ eq.model }}</td>
                         <td>{{ eq.type }}</td>
+                        <td>{{ eq.driver }}</td>
                         <td>{{ eq.spec }}</td>
-                        <td>{{ eq.current_hours }} hrs</td>
-                        <td>{{ eq.last_service_hours }} hrs</td>
-                        <td>{{ next_due }} hrs</td>
+                        <td><strong>{{ eq.current_hours }}</strong></td>
+                        <td>{{ eq.last_service_hours }}</td>
+                        <td>{{ interval }}</td>
                         <td>
                             {% if rem <= 0 %}
-                                <strong style="color:var(--danger);">{{ rem }} hrs (Overdue!)</strong>
+                                <strong style="color:var(--danger);">{{ rem }} (Overdue!)</strong>
                             {% elif rem <= 30 %}
-                                <strong style="color:var(--warning);">{{ rem }} hrs remaining</strong>
+                                <strong style="color:var(--warning);">{{ rem }} remaining</strong>
                             {% else %}
-                                <strong style="color:var(--success);">{{ rem }} hrs remaining</strong>
+                                <strong style="color:var(--success);">{{ rem }} remaining</strong>
                             {% endif %}
                         </td>
                         <td>
                             {% if rem <= 0 %}
-                                <span class="badge badge-danger">⚠️ Overdue Service</span>
+                                <span class="badge badge-danger">⚠️ Due For Service</span>
                             {% elif rem <= 30 %}
                                 <span class="badge badge-warning">⚡ Service Soon</span>
                             {% else %}
                                 <span class="badge badge-ok">✅ Normal</span>
                             {% endif %}
                         </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- 📦 SECTION 2: Spare Parts Inventory Tracking -->
-        <div class="section-card">
-            <h2>📦 2. Spare Parts Inventory Tracking</h2>
-            
-            <form action="/add_spare_part" method="POST">
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Spare Part Name (spec)</label>
-                        <input type="text" name="spec" placeholder="e.g. CAT Oil Filter 1R-1808" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Category</label>
-                        <select name="category" required>
-                            <option value="Filters">Filters</option>
-                            <option value="Fluids & Lubricants">Fluids & Lubricants</option>
-                            <option value="Hoses & Fittings">Hoses & Fittings</option>
-                            <option value="Engine Parts">Engine Parts</option>
-                            <option value="Hydraulic Parts">Hydraulic Parts</option>
-                            <option value="Other">Other Spare Parts</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Stock Quantity</label>
-                        <input type="number" name="quantity" placeholder="0" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Unit</label>
-                        <input type="text" name="unit" placeholder="e.g. Pcs, Liters, Drums" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Min Stock Warning</label>
-                        <input type="number" name="min_stock" placeholder="5" required>
-                    </div>
-                    <div class="form-group">
-                        <button type="submit" class="btn-submit">+ Add Spare Part</button>
-                    </div>
-                </div>
-            </form>
-
-            <table style="margin-top:20px;">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Spare Part Name (spec)</th>
-                        <th>Category</th>
-                        <th>Current Stock</th>
-                        <th>Unit</th>
-                        <th>Min Stock Threshold</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for sp in spare_parts %}
-                    <tr>
-                        <td>{{ loop.index }}</td>
-                        <td><strong>{{ sp.spec }}</strong></td>
-                        <td>{{ sp.category }}</td>
-                        <td><strong>{{ sp.quantity }}</strong></td>
-                        <td>{{ sp.unit }}</td>
-                        <td>{{ sp.min_stock }} {{ sp.unit }}</td>
-                        <td>
-                            {% if sp.quantity <= sp.min_stock %}
-                                <span class="badge badge-danger">⚠️ Reorder Needed</span>
-                            {% else %}
-                                <span class="badge badge-ok">✅ In Stock</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-
-        <!-- 🛠️ SECTION 3: Service & Maintenance Log -->
-        <div class="section-card">
-            <h2>🛠️ 3. Service & Maintenance History Log</h2>
-            
-            <form action="/add_service_log" method="POST">
-                <div class="form-grid">
-                    <div class="form-group">
-                        <label>Select Equipment</label>
-                        <select name="plate_no" required>
-                            {% for eq in equipments %}
-                            <option value="{{ eq.plate_no }}">{{ eq.plate_no }} - {{ eq.model }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Service Type</label>
-                        <input type="text" name="service_type" placeholder="e.g. 250 Hrs Routine Service" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Service Hour Meter</label>
-                        <input type="number" step="0.1" name="hour_meter" placeholder="3250.0" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Spare Part Used (spec)</label>
-                        <input type="text" name="spec_used" placeholder="e.g. 20L Oil + 1 Filter" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Technician Name</label>
-                        <input type="text" name="technician" placeholder="Mechanic Name" required>
-                    </div>
-                    <div class="form-group">
-                        <button type="submit" class="btn-submit">+ Log Service</button>
-                    </div>
-                </div>
-            </form>
-
-            <table style="margin-top:20px;">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Plate No</th>
-                        <th>Service Type</th>
-                        <th>Hour Meter At Service</th>
-                        <th>Spare Part Used (spec)</th>
-                        <th>Technician</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for log in service_logs %}
-                    <tr>
-                        <td>{{ log.date }}</td>
-                        <td><strong>{{ log.plate_no }}</strong></td>
-                        <td>{{ log.service_type }}</td>
-                        <td>{{ log.hour_meter }} hrs</td>
-                        <td>{{ log.spec_used }}</td>
-                        <td>{{ log.technician }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -465,19 +276,9 @@ HTML_TEMPLATE = """
 @app.route('/')
 def home():
     data = load_data()
-    
-    urgent_count = 0
-    for eq in data.get("equipments", []):
-        rem = (eq["last_service_hours"] + eq.get("interval_hours", 250.0)) - eq["current_hours"]
-        if rem <= 30:
-            urgent_count += 1
-            
     return render_template_string(
         HTML_TEMPLATE,
-        equipments=data.get("equipments", []),
-        spare_parts=data.get("spare_parts", []),
-        service_logs=data.get("service_logs", []),
-        urgent_count=urgent_count
+        equipments=data.get("equipments", [])
     )
 
 @app.route('/add_equipment', methods=['POST'])
@@ -492,47 +293,9 @@ def add_equipment():
         "spec": request.form.get("spec"),
         "current_hours": float(request.form.get("current_hours")),
         "last_service_hours": float(request.form.get("last_service_hours")),
-        "interval_hours": 250.0
+        "interval_hours": float(request.form.get("interval_hours", 250.0))
     }
     data["equipments"].append(new_eq)
-    save_data(data)
-    return redirect(url_for('home'))
-
-@app.route('/add_spare_part', methods=['POST'])
-def add_spare_part():
-    data = load_data()
-    new_sp = {
-        "id": len(data["spare_parts"]) + 1,
-        "spec": request.form.get("spec"),
-        "category": request.form.get("category"),
-        "quantity": int(request.form.get("quantity")),
-        "unit": request.form.get("unit"),
-        "min_stock": int(request.form.get("min_stock"))
-    }
-    data["spare_parts"].append(new_sp)
-    save_data(data)
-    return redirect(url_for('home'))
-
-@app.route('/add_service_log', methods=['POST'])
-def add_service_log():
-    data = load_data()
-    plate_no = request.form.get("plate_no")
-    hour_meter = float(request.form.get("hour_meter"))
-    
-    for eq in data["equipments"]:
-        if eq["plate_no"] == plate_no:
-            eq["last_service_hours"] = hour_meter
-            
-    new_log = {
-        "id": len(data["service_logs"]) + 1,
-        "plate_no": plate_no,
-        "service_type": request.form.get("service_type"),
-        "hour_meter": hour_meter,
-        "spec_used": request.form.get("spec_used"),
-        "technician": request.form.get("technician"),
-        "date": datetime.now().strftime("%Y-%m-%d")
-    }
-    data["service_logs"].append(new_log)
     save_data(data)
     return redirect(url_for('home'))
 
