@@ -1,360 +1,245 @@
-import io
-from datetime import datetime, timedelta
+import os
+from datetime import datetime
 from typing import List, Optional
-
-from fastapi import FastAPI, Depends, HTTPException, Query, status
-from fastapi.responses import StreamingResponse
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey
-from sqlalchemy.orm import sessionmaker, declarative_base, relationship, Session
+from fastapi import FastAPI, HTTPException, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 import pandas as pd
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
 
-# ==========================================
-# 1. DATABASE CONFIGURATION (SQLite)
-# ==========================================
-SQLALCHEMY_DATABASE_URL = "sqlite:///./steely_rmi_garage.db"
+# ---------------------------------------------------------
+# DATABASE CONFIGURATION
+# ---------------------------------------------------------
+DATABASE_URL = "sqlite:///./steely_rmi_garage.db"
+EXCEL_BACKUP_FILE = "garage_maintenance_backup.xlsx"
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, 
-    connect_args={"check_same_thread": False}
-)
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-# ==========================================
-# 2. SQLALCHEMY MODELS (DATABASE TABLES)
-# ==========================================
+# ---------------------------------------------------------
+# DATABASE MODEL (SteelY R.M.I Garage Maintenance Schema)
+# ---------------------------------------------------------
 class MaintenanceRecord(Base):
     __tablename__ = "maintenance_records"
 
     id = Column(Integer, primary_key=True, index=True)
-    serial_number = Column(String, nullable=True)
-    work_order_no = Column(String, nullable=True)
-    vehicle_plate = Column(String, index=True, nullable=False)
-    vehicle_type = Column(String, nullable=False)
-    driver_name = Column(String, nullable=True)
-    current_km = Column(Float, nullable=False, default=0.0)
-    next_service_km = Column(Float, nullable=False, default=0.0)
-    work_type = Column(String, nullable=False)
-    issue_description = Column(String, nullable=True)
-    additional_unplanned_work = Column(String, nullable=True)
+    date = Column(String, index=True)
+    vehicle_plate = Column(String, index=True)
+    vehicle_model = Column(String)
+    maintenance_type = Column(String)
+    spare_part_name = Column(String)  # Spare Part Specification / Name
+    spare_part_qty = Column(Integer, default=0)
+    spare_part_cost = Column(Float, default=0.0)
+    total_cost = Column(Float, default=0.0)
     status = Column(String, default="Completed")
+    created_at = Column(DateTime, default=datetime.now)
 
-    # Costs & Lubricants
-    lubricant_liters = Column(Float, default=0.0)
-    lubricant_cost = Column(Float, default=0.0)
-    battery_cost = Column(Float, default=0.0)
-    tire_cost = Column(Float, default=0.0)
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    # Relationships
-    spare_parts = relationship("SparePartItem", back_populates="record", cascade="all, delete-orphan")
-    technicians = relationship("TechnicianAssignment", back_populates="record", cascade="all, delete-orphan")
-
-
-class SparePartItem(Base):
-    __tablename__ = "spare_parts"
-
-    id = Column(Integer, primary_key=True, index=True)
-    record_id = Column(Integer, ForeignKey("maintenance_records.id"), nullable=False)
-    spec_name = Column(String, nullable=False)  # Spare Part Name (spec)
-    qty = Column(Integer, nullable=False, default=1)
-    unit_cost = Column(Float, nullable=False, default=0.0)
-
-    record = relationship("MaintenanceRecord", back_populates="spare_parts")
-
-
-class TechnicianAssignment(Base):
-    __tablename__ = "technician_assignments"
-
-    id = Column(Integer, primary_key=True, index=True)
-    record_id = Column(Integer, ForeignKey("maintenance_records.id"), nullable=False)
-    technician_name = Column(String, nullable=False)
-    assigned_by = Column(String, nullable=True, default="Supervisor")
-    assigned_at = Column(DateTime, default=datetime.utcnow)
-
-    record = relationship("MaintenanceRecord", back_populates="technicians")
-
-# Create Database Tables Automatically
+# Create Database Tables
 Base.metadata.create_all(bind=engine)
 
-# ==========================================
-# 3. PYDANTIC SCHEMAS (VALIDATION)
-# ==========================================
-class SparePartCreate(BaseModel):
-    spec_name: str
-    qty: int = 1
-    unit_cost: float = 0.0
-
-class SparePartResponse(SparePartCreate):
-    id: int
-    class Config:
-        from_attributes = True
-
-class AssignTechnicianCreate(BaseModel):
-    technician_name: str
-    assigned_by: Optional[str] = "Supervisor"
-
-class TechnicianResponse(BaseModel):
-    id: int
-    technician_name: str
-    assigned_by: Optional[str]
-    assigned_at: datetime
-    class Config:
-        from_attributes = True
-
-class MaintenanceRecordCreate(BaseModel):
-    serial_number: Optional[str] = ""
-    work_order_no: Optional[str] = ""
-    vehicle_plate: str
-    vehicle_type: str
-    driver_name: Optional[str] = ""
-    current_km: float
-    next_service_km: Optional[float] = None
-    work_type: str
-    issue_description: Optional[str] = ""
-    additional_unplanned_work: Optional[str] = ""
-
-    spare_parts: List[SparePartCreate] = []
-    technicians: List[AssignTechnicianCreate] = []
-
-    lubricant_liters: float = 0.0
-    lubricant_cost: float = 0.0
-    battery_cost: float = 0.0
-    tire_cost: float = 0.0
-
-class MaintenanceRecordResponse(BaseModel):
-    id: int
-    serial_number: Optional[str]
-    work_order_no: Optional[str]
-    vehicle_plate: str
-    vehicle_type: str
-    driver_name: Optional[str]
-    current_km: float
-    next_service_km: float
-    work_type: str
-    issue_description: Optional[str]
-    additional_unplanned_work: Optional[str]
-    status: str
-    created_at: datetime
-
-    spare_parts: List[SparePartResponse] = []
-    technicians: List[TechnicianResponse] = []
-
-    lubricant_liters: float
-    lubricant_cost: float
-    battery_cost: float
-    tire_cost: float
-    total_cost: float
-
-    class Config:
-        from_attributes = True
-
-# ==========================================
-# 4. FASTAPI APP & ROUTE API
-# ==========================================
 app = FastAPI(title="SteelY R.M.I Garage Maintnace dash Bord")
 
-# CORS Middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ---------------------------------------------------------
+# HELPER FUNCTIONS (Excel Auto Backup)
+# ---------------------------------------------------------
+def backup_to_excel():
+    """Exports all records from SQLite database to an Excel file backup"""
+    db: Session = SessionLocal()
+    try:
+        records = db.query(MaintenanceRecord).all()
+        data = []
+        for r in records:
+            data.append({
+                "ID": r.id,
+                "Date": r.date,
+                "Plate Number": r.vehicle_plate,
+                "Model": r.vehicle_model,
+                "Maintenance Type": r.maintenance_type,
+                "Spare Part Spec/Name": r.spare_part_name,
+                "Quantity": r.spare_part_qty,
+                "Spare Part Cost": r.spare_part_cost,
+                "Total Cost": r.total_cost,
+                "Status": r.status,
+                "Recorded Date": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else ""
+            })
+        
+        df = pd.DataFrame(data)
+        df.to_excel(EXCEL_BACKUP_FILE, index=False)
+    except Exception as e:
+        print(f"Excel backup error: {e}")
+    finally:
+        db.close()
 
-# --- 4.1 CREATE MAINTENANCE RECORD ---
-@app.post("/api/records", response_model=MaintenanceRecordResponse, status_code=status.HTTP_201_CREATED)
-def create_record(payload: MaintenanceRecordCreate, db: Session = Depends(get_db)):
-    # Calculate Next Service Mileage (+5000 KM) if not manually sent
-    calculated_next_km = payload.next_service_km if payload.next_service_km else (payload.current_km + 5000.0)
-
-    db_record = MaintenanceRecord(
-        serial_number=payload.serial_number,
-        work_order_no=payload.work_order_no,
-        vehicle_plate=payload.vehicle_plate,
-        vehicle_type=payload.vehicle_type,
-        driver_name=payload.driver_name,
-        current_km=payload.current_km,
-        next_service_km=calculated_next_km,
-        work_type=payload.work_type,
-        issue_description=payload.issue_description,
-        additional_unplanned_work=payload.additional_unplanned_work,
-        lubricant_liters=payload.lubricant_liters,
-        lubricant_cost=payload.lubricant_cost,
-        battery_cost=payload.battery_cost,
-        tire_cost=payload.tire_cost
-    )
-    db.add(db_record)
-    db.commit()
-    db.refresh(db_record)
-
-    # Save Itemized Spare Parts
-    for part in payload.spare_parts:
-        db.add(SparePartItem(
-            record_id=db_record.id,
-            spec_name=part.spec_name,
-            qty=part.qty,
-            unit_cost=part.unit_cost
-        ))
-
-    # Save Technicians
-    for tech in payload.technicians:
-        db.add(TechnicianAssignment(
-            record_id=db_record.id,
-            technician_name=tech.technician_name,
-            assigned_by=tech.assigned_by
-        ))
-
-    db.commit()
-    db.refresh(db_record)
-
-    # Calculate Total Expenditure
-    parts_cost = sum(p.qty * p.unit_cost for p in db_record.spare_parts)
-    total_cost = parts_cost + db_record.lubricant_cost + db_record.battery_cost + db_record.tire_cost
-
-    res = MaintenanceRecordResponse.from_orm(db_record)
-    res.total_cost = total_cost
-    return res
-
-# --- 4.2 GET RECORDS (WITH DATE FILTER) ---
-@app.get("/api/records", response_model=List[MaintenanceRecordResponse])
-def get_records(
-    from_date: Optional[str] = None,
-    to_date: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
-    query = db.query(MaintenanceRecord)
-
-    if from_date:
-        start_dt = datetime.strptime(from_date, "%Y-%m-%d")
-        query = query.filter(MaintenanceRecord.created_at >= start_dt)
-
-    if to_date:
-        end_dt = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1, microseconds=-1)
-        query = query.filter(MaintenanceRecord.created_at <= end_dt)
-
-    records = query.order_by(MaintenanceRecord.created_at.desc()).all()
-
-    response = []
-    for r in records:
-        parts_cost = sum(p.qty * p.unit_cost for p in r.spare_parts)
-        total_cost = parts_cost + r.lubricant_cost + r.battery_cost + r.tire_cost
-
-        rec_dto = MaintenanceRecordResponse.from_orm(r)
-        rec_dto.total_cost = total_cost
-        response.append(rec_dto)
-
-    return response
-
-# --- 4.3 ASSIGN TECHNICIAN TO EXISTING RECORD ---
-@app.post("/api/records/{record_id}/assign-technician", response_model=TechnicianResponse)
-def assign_technician(record_id: int, payload: AssignTechnicianCreate, db: Session = Depends(get_db)):
-    record = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == record_id).first()
-    if not record:
-        raise HTTPException(status_code=404, detail="የጥገና መዝገቡ አልተገኘም")
-
-    tech = TechnicianAssignment(
-        record_id=record_id,
-        technician_name=payload.technician_name,
-        assigned_by=payload.assigned_by
-    )
-    db.add(tech)
-    db.commit()
-    db.refresh(tech)
-    return tech
-
-# --- 4.4 EXPORT FILTERED MASTER EXCEL REPORT ---
-@app.get("/api/reports/excel/custom-range")
-def export_filtered_excel(
-    from_date: Optional[str] = Query(None),
-    to_date: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
-):
-    query = db.query(MaintenanceRecord)
-
-    if from_date:
-        start_dt = datetime.strptime(from_date, "%Y-%m-%d")
-        query = query.filter(MaintenanceRecord.created_at >= start_dt)
-
-    if to_date:
-        end_dt = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1, microseconds=-1)
-        query = query.filter(MaintenanceRecord.created_at <= end_dt)
-
-    records = query.all()
-
-    detailed_rows = []
-    total_parts = 0.0
-    total_lube = 0.0
-    total_batt = 0.0
-    total_tire = 0.0
-
-    for r in records:
-        parts_str = "; ".join([f"{p.spec_name} (Qty: {p.qty}, Unit: ETB {p.unit_cost})" for p in r.spare_parts])
-        techs_str = ", ".join([t.technician_name for t in r.technicians])
-        p_cost = sum(p.qty * p.unit_cost for p in r.spare_parts)
-
-        total_parts += p_cost
-        total_lube += r.lubricant_cost
-        total_batt += r.battery_cost
-        total_tire += r.tire_cost
-
-        row_total = p_cost + r.lubricant_cost + r.battery_cost + r.tire_cost
-
-        detailed_rows.append({
-            "Date": r.created_at.strftime("%Y-%m-%d %H:%M"),
-            "S/N": r.serial_number,
-            "W.O No": r.work_order_no,
-            "Vehicle Plate": r.vehicle_plate,
-            "Vehicle Type": r.vehicle_type,
-            "Driver Name": r.driver_name,
-            "Current KM": r.current_km,
-            "Next Service KM": r.next_service_km,
-            "Assigned Technicians": techs_str if techs_str else "Unassigned",
-            "Work Type": r.work_type,
-            "Issue Description": r.issue_description,
-            "Replaced Parts Breakdown": parts_str if parts_str else "None",
-            "Spare Parts Cost (ETB)": p_cost,
-            "Lubricants Liters": r.lubricant_liters,
-            "Lubricant Cost (ETB)": r.lubricant_cost,
-            "Battery Cost (ETB)": r.battery_cost,
-            "Tire Cost (ETB)": r.tire_cost,
-            "Total Job Cost (ETB)": row_total
-        })
-
-    df_details = pd.DataFrame(detailed_rows)
-
-    # Category Cost Summary Sheet
-    summary_rows = [
-        {"Expense Category": "Spare Parts Total", "Cost (ETB)": total_parts},
-        {"Expense Category": "Lubricants Total", "Cost (ETB)": total_lube},
-        {"Expense Category": "Batteries Total", "Cost (ETB)": total_batt},
-        {"Expense Category": "Tires Total", "Cost (ETB)": total_tire},
-        {"Expense Category": "GRAND TOTAL EXPENDITURE", "Cost (ETB)": total_parts + total_lube + total_batt + total_tire}
-    ]
-    df_summary = pd.DataFrame(summary_rows)
-
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df_details.to_excel(writer, index=False, sheet_name="Filtered_Detailed_Log")
-        df_summary.to_excel(writer, index=False, sheet_name="Category_Cost_Summary")
-
-    output.seek(0)
-    file_name = f"SteelY_Garage_Report_{from_date if from_date else 'All'}_to_{to_date if to_date else 'All'}.xlsx"
-    headers = {'Content-Disposition': f'attachment; filename="{file_name}"'}
+# ---------------------------------------------------------
+# DASHBOARD ROUTE
+# ---------------------------------------------------------
+@app.get("/", response_class=HTMLResponse)
+def read_dashboard(msg: str = None):
+    """Main Dashboard View"""
+    db: Session = SessionLocal()
+    records = db.query(MaintenanceRecord).order_by(MaintenanceRecord.id.desc()).all()
+    db.close()
     
-    return StreamingResponse(
-        output, 
-        headers=headers, 
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    # Alert message displayed right under the header
+    alert_html = ""
+    if msg == "saved":
+        alert_html = """
+        <div style="background-color: #d4edda; color: #155724; padding: 12px 20px; 
+                    margin: 15px auto; border: 1px solid #c3e6cb; border-radius: 6px; 
+                    text-align: center; font-weight: bold; font-size: 1.1em; max-width: 800px;">
+            ✅ Work Order Successfully Saved!
+        </div>
+        """
+
+    rows_html = ""
+    for r in records:
+        rows_html += f"""
+        <tr>
+            <td>{r.id}</td>
+            <td>{r.date}</td>
+            <td>{r.vehicle_plate}</td>
+            <td>{r.vehicle_model}</td>
+            <td>{r.maintenance_type}</td>
+            <td>{r.spare_part_name or '-'}</td>
+            <td>{r.spare_part_qty}</td>
+            <td>{r.spare_part_cost:,.2f}</td>
+            <td>{r.total_cost:,.2f}</td>
+            <td><span style="color: green; font-weight: bold;">{r.status}</span></td>
+        </tr>
+        """
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>SteelY R.M.I Garage Maintnace dash Bord</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 20px; background-color: #f4f6f9; }}
+            h1 {{ color: #1a365d; text-align: center; margin-bottom: 5px; }}
+            .card {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }}
+            form {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }}
+            label {{ font-weight: bold; font-size: 0.9em; margin-bottom: 5px; display: block; }}
+            input, select {{ width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }}
+            button {{ grid-column: 1 / -1; background-color: #2b6cb0; color: white; border: none; padding: 12px; font-size: 16px; font-weight: bold; border-radius: 4px; cursor: pointer; }}
+            button:hover {{ background-color: #2c5282; }}
+            table {{ width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+            th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }}
+            th {{ background-color: #2b6cb0; color: white; }}
+            tr:hover {{ background-color: #f1f5f9; }}
+        </style>
+    </head>
+    <body>
+        <!-- Header -->
+        <h1>SteelY R.M.I Garage Maintnace dash Bord</h1>
+        
+        <!-- Success Alert Message -->
+        {alert_html}
+
+        <div class="card">
+            <h2>New Work Order Entry</h2>
+            <form action="/add-record" method="post">
+                <div>
+                    <label>Date:</label>
+                    <input type="date" name="date" required>
+                </div>
+                <div>
+                    <label>Plate Number:</label>
+                    <input type="text" name="vehicle_plate" placeholder="e.g. 3-XXXXX" required>
+                </div>
+                <div>
+                    <label>Vehicle Model:</label>
+                    <input type="text" name="vehicle_model" placeholder="e.g. Isuzu, Sino Truck" required>
+                </div>
+                <div>
+                    <label>Maintenance Type:</label>
+                    <select name="maintenance_type">
+                        <option value="Preventive">Preventive Maintenance</option>
+                        <option value="Corrective">Corrective Maintenance</option>
+                        <option value="Overhaul">Overhaul</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Spare Part Spec / Name:</label>
+                    <input type="text" name="spare_part_name" placeholder="Enter spare part specification/name">
+                </div>
+                <div>
+                    <label>Quantity:</label>
+                    <input type="number" name="spare_part_qty" value="1" min="0">
+                </div>
+                <div>
+                    <label>Spare Part Unit Cost:</label>
+                    <input type="number" step="0.01" name="spare_part_cost" value="0.00">
+                </div>
+                <button type="submit">Submit Work Order</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>Maintenance Records Log</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Date</th>
+                        <th>Plate No.</th>
+                        <th>Model</th>
+                        <th>Type</th>
+                        <th>Spare Part Spec/Name</th>
+                        <th>Qty</th>
+                        <th>Part Cost</th>
+                        <th>Total Cost</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html if rows_html else '<tr><td colspan="10" style="text-align:center;">No maintenance records found.</td></tr>'}
+                </tbody>
+            </table>
+        </div>
+    </body>
+    </html>
+    """
+    return html_content
+
+# ---------------------------------------------------------
+# SAVE WORK ORDER ROUTE
+# ---------------------------------------------------------
+@app.post("/add-record")
+def add_record(
+    date: str = Form(...),
+    vehicle_plate: str = Form(...),
+    vehicle_model: str = Form(...),
+    maintenance_type: str = Form(...),
+    spare_part_name: Optional[str] = Form(None),
+    spare_part_qty: int = Form(0),
+    spare_part_cost: float = Form(0.0)
+):
+    """Saves new Work Order to SQLite and updates Excel backup"""
+    db: Session = SessionLocal()
+    
+    total_cost = spare_part_qty * spare_part_cost
+    
+    new_record = MaintenanceRecord(
+        date=date,
+        vehicle_plate=vehicle_plate,
+        vehicle_model=vehicle_model,
+        maintenance_type=maintenance_type,
+        spare_part_name=spare_part_name,
+        spare_part_qty=spare_part_qty,
+        spare_part_cost=spare_part_cost,
+        total_cost=total_cost,
+        status="Completed"
     )
+    
+    db.add(new_record)
+    db.commit()
+    db.refresh(new_record)
+    db.close()
+    
+    # Auto Backup to Excel
+    backup_to_excel()
+    
+    # Redirect back with success message
+    return RedirectResponse(url="/?msg=saved", status_code=303)
