@@ -28,8 +28,9 @@ class MaintenanceRecord(Base):
     date = Column(String, index=True)
     vehicle_plate = Column(String, index=True)
     vehicle_model = Column(String)
+    working_hours = Column(Float, default=0.0)  # Added Machine Working Hours
     maintenance_type = Column(String)
-    spare_part_name = Column(String)  # Spare Part Specification / Name
+    spare_part_name = Column(String)  # Spare Part Spec / Oil / Filter
     spare_part_qty = Column(Integer, default=0)
     spare_part_cost = Column(Float, default=0.0)
     total_cost = Column(Float, default=0.0)
@@ -54,12 +55,13 @@ def backup_to_excel():
             data.append({
                 "ID": r.id,
                 "Date": r.date,
-                "Plate Number": r.vehicle_plate,
+                "Plate Number / ID": r.vehicle_plate,
                 "Model": r.vehicle_model,
+                "Working Hours": r.working_hours,
                 "Maintenance Type": r.maintenance_type,
-                "Spare Part Spec/Name": r.spare_part_name,
+                "Spare Part / Oil Spec": r.spare_part_name,
                 "Quantity": r.spare_part_qty,
-                "Spare Part Cost": r.spare_part_cost,
+                "Unit Cost": r.spare_part_cost,
                 "Total Cost": r.total_cost,
                 "Status": r.status,
                 "Recorded Date": r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else ""
@@ -82,7 +84,7 @@ def read_dashboard(msg: str = None):
     records = db.query(MaintenanceRecord).order_by(MaintenanceRecord.id.desc()).all()
     db.close()
     
-    # Alert message displayed right under the header
+    # Success message banner
     alert_html = ""
     if msg == "saved":
         alert_html = """
@@ -95,18 +97,27 @@ def read_dashboard(msg: str = None):
 
     rows_html = ""
     for r in records:
+        # Check if oil/filter service is recommended based on 250 hours intervals
+        service_status = r.status
+        if r.working_hours and r.working_hours > 0:
+            next_service = r.working_hours + 250
+            service_note = f"<br><small style='color: #2b6cb0;'>Next Service @ {next_service:,.0f} hrs</small>"
+        else:
+            service_note = ""
+
         rows_html += f"""
         <tr>
             <td>{r.id}</td>
             <td>{r.date}</td>
             <td>{r.vehicle_plate}</td>
             <td>{r.vehicle_model}</td>
+            <td>{r.working_hours:,.1f} hrs</td>
             <td>{r.maintenance_type}</td>
             <td>{r.spare_part_name or '-'}</td>
             <td>{r.spare_part_qty}</td>
             <td>{r.spare_part_cost:,.2f}</td>
             <td>{r.total_cost:,.2f}</td>
-            <td><span style="color: green; font-weight: bold;">{r.status}</span></td>
+            <td><span style="color: green; font-weight: bold;">{service_status}</span>{service_note}</td>
         </tr>
         """
 
@@ -145,31 +156,36 @@ def read_dashboard(msg: str = None):
                     <input type="date" name="date" required>
                 </div>
                 <div>
-                    <label>Plate Number:</label>
-                    <input type="text" name="vehicle_plate" placeholder="e.g. 3-XXXXX" required>
+                    <label>Plate / Machine No:</label>
+                    <input type="text" name="vehicle_plate" placeholder="e.g. Loader-01, Excavator-02" required>
                 </div>
                 <div>
-                    <label>Vehicle Model:</label>
-                    <input type="text" name="vehicle_model" placeholder="e.g. Isuzu, Sino Truck" required>
+                    <label>Machine Model:</label>
+                    <input type="text" name="vehicle_model" placeholder="e.g. CAT 950, Komatsu PC200, Grabber" required>
+                </div>
+                <div>
+                    <label>Current Working Hours (hrs):</label>
+                    <input type="number" step="0.1" name="working_hours" placeholder="e.g. 1250.5" value="0.0">
                 </div>
                 <div>
                     <label>Maintenance Type:</label>
                     <select name="maintenance_type">
+                        <option value="250h Oil & Filter Service">250 Hours Oil & Filter Service</option>
                         <option value="Preventive">Preventive Maintenance</option>
                         <option value="Corrective">Corrective Maintenance</option>
                         <option value="Overhaul">Overhaul</option>
                     </select>
                 </div>
                 <div>
-                    <label>Spare Part Spec / Name:</label>
-                    <input type="text" name="spare_part_name" placeholder="Enter spare part specification/name">
+                    <label>Spare Part / Oil Spec:</label>
+                    <input type="text" name="spare_part_name" placeholder="e.g. Engine Oil 15W40, Oil Filter, Fuel Filter">
                 </div>
                 <div>
-                    <label>Quantity:</label>
+                    <label>Quantity / Liters:</label>
                     <input type="number" name="spare_part_qty" value="1" min="0">
                 </div>
                 <div>
-                    <label>Spare Part Unit Cost:</label>
+                    <label>Unit Cost:</label>
                     <input type="number" step="0.01" name="spare_part_cost" value="0.00">
                 </div>
                 <button type="submit">Submit Work Order</button>
@@ -183,18 +199,19 @@ def read_dashboard(msg: str = None):
                     <tr>
                         <th>ID</th>
                         <th>Date</th>
-                        <th>Plate No.</th>
+                        <th>Plate/Machine No</th>
                         <th>Model</th>
+                        <th>Working Hours</th>
                         <th>Type</th>
-                        <th>Spare Part Spec/Name</th>
+                        <th>Spare Part / Oil Spec</th>
                         <th>Qty</th>
-                        <th>Part Cost</th>
+                        <th>Unit Cost</th>
                         <th>Total Cost</th>
-                        <th>Status</th>
+                        <th>Status / Next Due</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {rows_html if rows_html else '<tr><td colspan="10" style="text-align:center;">No maintenance records found.</td></tr>'}
+                    {rows_html if rows_html else '<tr><td colspan="11" style="text-align:center;">No maintenance records found.</td></tr>'}
                 </tbody>
             </table>
         </div>
@@ -211,6 +228,7 @@ def add_record(
     date: str = Form(...),
     vehicle_plate: str = Form(...),
     vehicle_model: str = Form(...),
+    working_hours: float = Form(0.0),
     maintenance_type: str = Form(...),
     spare_part_name: Optional[str] = Form(None),
     spare_part_qty: int = Form(0),
@@ -225,6 +243,7 @@ def add_record(
         date=date,
         vehicle_plate=vehicle_plate,
         vehicle_model=vehicle_model,
+        working_hours=working_hours,
         maintenance_type=maintenance_type,
         spare_part_name=spare_part_name,
         spare_part_qty=spare_part_qty,
