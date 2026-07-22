@@ -1,10 +1,10 @@
 import os
 from datetime import datetime
-from typing import List, Optional
-from fastapi import FastAPI, HTTPException, Form, Request
+from typing import Optional
+from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse, RedirectResponse
 import pandas as pd
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, inspect, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 
@@ -26,13 +26,13 @@ class MaintenanceRecord(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     date = Column(String, index=True)
-    equipment_category = Column(String) # Loader, Excavator, Grabber, Truck, etc.
-    vehicle_plate = Column(String, index=True) # ID / Plate No
+    equipment_category = Column(String, default="Loader/Excavator")  # Equipment Category
+    vehicle_plate = Column(String, index=True)
     vehicle_model = Column(String)
-    current_hours = Column(Float, default=0.0) # Current Hour Meter
-    last_service_hours = Column(Float, default=0.0) # Hour Meter at last service
+    current_hours = Column(Float, default=0.0)        # Current Hour Meter
+    last_service_hours = Column(Float, default=0.0)   # Hour Meter at Last Service
     maintenance_type = Column(String)
-    spare_part_name = Column(String) # Spare Part Spec / Oil / Filter Specification
+    spare_part_name = Column(String)                  # Spare Part Spec
     spare_part_qty = Column(Integer, default=0)
     spare_part_cost = Column(Float, default=0.0)
     total_cost = Column(Float, default=0.0)
@@ -42,30 +42,47 @@ class MaintenanceRecord(Base):
 # Create Database Tables
 Base.metadata.create_all(bind=engine)
 
+# AUTO-MIGRATION: existing SQLite table ላይ አዳዲስ Columns ከሌሉ በራሱ ይጨምራቸዋል
+def auto_migrate():
+    inspector = inspect(engine)
+    columns = [col['name'] for col in inspector.get_columns('maintenance_records')]
+    
+    with engine.connect() as conn:
+        if 'equipment_category' not in columns:
+            conn.execute(text("ALTER TABLE maintenance_records ADD COLUMN equipment_category VARCHAR DEFAULT 'Machine/Vehicle'"))
+        if 'current_hours' not in columns:
+            conn.execute(text("ALTER TABLE maintenance_records ADD COLUMN current_hours FLOAT DEFAULT 0.0"))
+        if 'last_service_hours' not in columns:
+            conn.execute(text("ALTER TABLE maintenance_records ADD COLUMN last_service_hours FLOAT DEFAULT 0.0"))
+        conn.commit()
+
+auto_migrate()
+
 app = FastAPI(title="SteelY R.M.I Garage Maintnace dash Bord")
 
 # ---------------------------------------------------------
 # HELPER FUNCTIONS (Excel Auto Backup)
 # ---------------------------------------------------------
 def backup_to_excel():
-    """Exports all records from SQLite database to an Excel file backup"""
     db: Session = SessionLocal()
     try:
         records = db.query(MaintenanceRecord).all()
         data = []
         for r in records:
-            hours_run = (r.current_hours or 0.0) - (r.last_service_hours or 0.0)
+            c_h = r.current_hours or 0.0
+            l_h = r.last_service_hours or 0.0
+            hours_run = max(0.0, c_h - l_h)
             data.append({
                 "ID": r.id,
                 "Date": r.date,
-                "Category": r.equipment_category or "Machine/Vehicle",
-                "Machine ID / Plate": r.vehicle_plate,
+                "Equipment Category": r.equipment_category,
+                "Plate / Machine ID": r.vehicle_plate,
                 "Model": r.vehicle_model,
-                "Current Hour Meter": r.current_hours,
-                "Last Service Hour Meter": r.last_service_hours,
-                "Hours Run Since Service": max(0.0, hours_run),
+                "Current Hour Meter": c_h,
+                "Last Service Hour Meter": l_h,
+                "Hours Run Since Service": hours_run,
                 "Maintenance Type": r.maintenance_type,
-                "Spare Part Spec / Name": r.spare_part_name,
+                "Spare Part Spec/Name": r.spare_part_name,
                 "Quantity": r.spare_part_qty,
                 "Unit Cost": r.spare_part_cost,
                 "Total Cost": r.total_cost,
@@ -85,19 +102,17 @@ def backup_to_excel():
 # ---------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 def read_dashboard(msg: str = None):
-    """Main Dashboard View"""
     db: Session = SessionLocal()
     records = db.query(MaintenanceRecord).order_by(MaintenanceRecord.id.desc()).all()
     db.close()
     
-    # Alert banner
     alert_html = ""
     if msg == "saved":
         alert_html = """
         <div style="background-color: #d4edda; color: #155724; padding: 12px 20px; 
                     margin: 15px auto; border: 1px solid #c3e6cb; border-radius: 6px; 
                     text-align: center; font-weight: bold; font-size: 1.1em; max-width: 900px;">
-            ✅ Work Order Successfully Saved & Service Hours Updated!
+            ✅ Work Order Successfully Saved! (Loader/Excavator Working Hours Tracked)
         </div>
         """
 
@@ -108,7 +123,6 @@ def read_dashboard(msg: str = None):
         hours_run = curr_h - last_h
         next_due = last_h + 250.0
 
-        # Calculate 250-hour service alert status
         if curr_h > 0 and last_h > 0:
             if hours_run >= 250.0:
                 service_badge = f"""<span style="background-color: #feb2b2; color: #9b2c2c; padding: 4px 8px; border-radius: 4px; font-weight: bold;">🔴 DUE FOR 250H SERVICE</span>
@@ -118,16 +132,16 @@ def read_dashboard(msg: str = None):
                 service_badge = f"""<span style="background-color: #c6f6d5; color: #22543d; padding: 4px 8px; border-radius: 4px; font-weight: bold;">🟢 OK ({remaining:,.1f} hrs left)</span>
                 <br><small style="color: #718096;">Next Due @ {next_due:,.1f} hrs</small>"""
         else:
-            service_badge = f"""<span style="color: #4a5568; font-weight: bold;">{r.status}</span>"""
+            service_badge = f"""<span style="color: #2b6cb0; font-weight: bold;">{r.status}</span>"""
 
         rows_html += f"""
         <tr>
             <td>{r.id}</td>
             <td>{r.date}</td>
-            <td><strong>{r.equipment_category or 'General'}</strong></td>
+            <td><strong style="color: #2b6cb0;">{r.equipment_category or 'General'}</strong></td>
             <td>{r.vehicle_plate}</td>
             <td>{r.vehicle_model}</td>
-            <td>{curr_h:,.1f} hrs</td>
+            <td><strong>{curr_h:,.1f} hrs</strong></td>
             <td>{last_h:,.1f} hrs</td>
             <td>{service_badge}</td>
             <td>{r.maintenance_type}</td>
@@ -152,21 +166,18 @@ def read_dashboard(msg: str = None):
             input, select {{ width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; box-sizing: border-box; }}
             button {{ grid-column: 1 / -1; background-color: #2b6cb0; color: white; border: none; padding: 12px; font-size: 16px; font-weight: bold; border-radius: 4px; cursor: pointer; }}
             button:hover {{ background-color: #2c5282; }}
-            table {{ width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-size: 0.92em; }}
+            table {{ width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-size: 0.9em; }}
             th, td {{ padding: 10px 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }}
             th {{ background-color: #2b6cb0; color: white; font-weight: 600; }}
             tr:hover {{ background-color: #f7fafc; }}
         </style>
     </head>
     <body>
-        <!-- Header -->
         <h1>SteelY R.M.I Garage Maintnace dash Bord</h1>
-        
-        <!-- Success Alert Message -->
         {alert_html}
 
         <div class="card">
-            <h2>New Work Order Entry (Loader / Excavator / Machine Tracking)</h2>
+            <h2>New Work Order Entry (Loader / Excavator Hour Meter Tracking)</h2>
             <form action="/add-record" method="post">
                 <div>
                     <label>Date:</label>
@@ -181,30 +192,29 @@ def read_dashboard(msg: str = None):
                         <option value="Dump Truck">Dump Truck (ትራክ)</option>
                         <option value="Forklift">Forklift (ፎርክሊፍት)</option>
                         <option value="Rolling Mill Equipment">Rolling Mill Machine</option>
-                        <option value="Other Heavy Equipment">Other Heavy Machine</option>
                     </select>
                 </div>
                 <div>
                     <label>Plate / Machine ID No:</label>
-                    <input type="text" name="vehicle_plate" placeholder="e.g. LDR-01, EXCAV-02, 3-12345" required>
+                    <input type="text" name="vehicle_plate" placeholder="e.g. LDR-01, EXCAV-02" required>
                 </div>
                 <div>
                     <label>Machine / Vehicle Model:</label>
-                    <input type="text" name="vehicle_model" placeholder="e.g. CAT 950, Komatsu PC200, XCMG" required>
+                    <input type="text" name="vehicle_model" placeholder="e.g. CAT 950, Komatsu PC200" required>
                 </div>
                 <div>
                     <label>Current Hour Meter (hrs):</label>
-                    <input type="number" step="0.1" name="current_hours" placeholder="e.g. 1500.0" value="0.0">
+                    <input type="number" step="0.1" name="current_hours" placeholder="Current Hour Meter" value="0.0">
                 </div>
                 <div>
                     <label>Last Service Hour Meter (hrs):</label>
-                    <input type="number" step="0.1" name="last_service_hours" placeholder="e.g. 1250.0" value="0.0">
+                    <input type="number" step="0.1" name="last_service_hours" placeholder="Last Service Hour" value="0.0">
                 </div>
                 <div>
                     <label>Maintenance Type:</label>
                     <select name="maintenance_type">
                         <option value="250h Oil & Filter Service">250 Hours Oil & Filter Service</option>
-                        <option value="500h Hydraulic Service">500 Hours Hydraulic & System Service</option>
+                        <option value="500h Hydraulic Service">500 Hours Hydraulic Service</option>
                         <option value="Preventive Maintenance">Preventive Maintenance</option>
                         <option value="Corrective Maintenance">Corrective Maintenance</option>
                         <option value="Overhaul">Overhaul / Major Repair</option>
@@ -212,7 +222,7 @@ def read_dashboard(msg: str = None):
                 </div>
                 <div>
                     <label>Spare Part Spec / Name:</label>
-                    <input type="text" name="spare_part_name" placeholder="e.g. Engine Oil 15W40, Oil Filter, Fuel Filter">
+                    <input type="text" name="spare_part_name" placeholder="e.g. Engine Oil 15W40, Oil Filter Spec">
                 </div>
                 <div>
                     <label>Quantity / Liters:</label>
@@ -262,7 +272,7 @@ def read_dashboard(msg: str = None):
 @app.post("/add-record")
 def add_record(
     date: str = Form(...),
-    equipment_category: str = Form(...),
+    equipment_category: str = Form("Loader/Excavator"),
     vehicle_plate: str = Form(...),
     vehicle_model: str = Form(...),
     current_hours: float = Form(0.0),
@@ -272,9 +282,7 @@ def add_record(
     spare_part_qty: int = Form(0),
     spare_part_cost: float = Form(0.0)
 ):
-    """Saves new Work Order to SQLite and updates Excel backup"""
     db: Session = SessionLocal()
-    
     total_cost = spare_part_qty * spare_part_cost
     
     new_record = MaintenanceRecord(
@@ -297,8 +305,5 @@ def add_record(
     db.refresh(new_record)
     db.close()
     
-    # Auto Backup to Excel
     backup_to_excel()
-    
-    # Redirect back with success message
     return RedirectResponse(url="/?msg=saved", status_code=303)
