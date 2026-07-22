@@ -26,11 +26,13 @@ class MaintenanceRecord(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     date = Column(String, index=True)
-    vehicle_plate = Column(String, index=True)
+    equipment_category = Column(String) # Loader, Excavator, Grabber, Truck, etc.
+    vehicle_plate = Column(String, index=True) # ID / Plate No
     vehicle_model = Column(String)
-    working_hours = Column(Float, default=0.0)  # Added Machine Working Hours
+    current_hours = Column(Float, default=0.0) # Current Hour Meter
+    last_service_hours = Column(Float, default=0.0) # Hour Meter at last service
     maintenance_type = Column(String)
-    spare_part_name = Column(String)  # Spare Part Spec / Oil / Filter
+    spare_part_name = Column(String) # Spare Part Spec / Oil / Filter Specification
     spare_part_qty = Column(Integer, default=0)
     spare_part_cost = Column(Float, default=0.0)
     total_cost = Column(Float, default=0.0)
@@ -52,14 +54,18 @@ def backup_to_excel():
         records = db.query(MaintenanceRecord).all()
         data = []
         for r in records:
+            hours_run = (r.current_hours or 0.0) - (r.last_service_hours or 0.0)
             data.append({
                 "ID": r.id,
                 "Date": r.date,
-                "Plate Number / ID": r.vehicle_plate,
+                "Category": r.equipment_category or "Machine/Vehicle",
+                "Machine ID / Plate": r.vehicle_plate,
                 "Model": r.vehicle_model,
-                "Working Hours": r.working_hours,
+                "Current Hour Meter": r.current_hours,
+                "Last Service Hour Meter": r.last_service_hours,
+                "Hours Run Since Service": max(0.0, hours_run),
                 "Maintenance Type": r.maintenance_type,
-                "Spare Part / Oil Spec": r.spare_part_name,
+                "Spare Part Spec / Name": r.spare_part_name,
                 "Quantity": r.spare_part_qty,
                 "Unit Cost": r.spare_part_cost,
                 "Total Cost": r.total_cost,
@@ -84,40 +90,51 @@ def read_dashboard(msg: str = None):
     records = db.query(MaintenanceRecord).order_by(MaintenanceRecord.id.desc()).all()
     db.close()
     
-    # Success message banner
+    # Alert banner
     alert_html = ""
     if msg == "saved":
         alert_html = """
         <div style="background-color: #d4edda; color: #155724; padding: 12px 20px; 
                     margin: 15px auto; border: 1px solid #c3e6cb; border-radius: 6px; 
-                    text-align: center; font-weight: bold; font-size: 1.1em; max-width: 800px;">
-            ✅ Work Order Successfully Saved!
+                    text-align: center; font-weight: bold; font-size: 1.1em; max-width: 900px;">
+            ✅ Work Order Successfully Saved & Service Hours Updated!
         </div>
         """
 
     rows_html = ""
     for r in records:
-        # Check if oil/filter service is recommended based on 250 hours intervals
-        service_status = r.status
-        if r.working_hours and r.working_hours > 0:
-            next_service = r.working_hours + 250
-            service_note = f"<br><small style='color: #2b6cb0;'>Next Service @ {next_service:,.0f} hrs</small>"
+        curr_h = r.current_hours or 0.0
+        last_h = r.last_service_hours or 0.0
+        hours_run = curr_h - last_h
+        next_due = last_h + 250.0
+
+        # Calculate 250-hour service alert status
+        if curr_h > 0 and last_h > 0:
+            if hours_run >= 250.0:
+                service_badge = f"""<span style="background-color: #feb2b2; color: #9b2c2c; padding: 4px 8px; border-radius: 4px; font-weight: bold;">🔴 DUE FOR 250H SERVICE</span>
+                <br><small style="color: #718096;">Run: {hours_run:,.1f} hrs / Due @ {next_due:,.1f} hrs</small>"""
+            else:
+                remaining = 250.0 - hours_run
+                service_badge = f"""<span style="background-color: #c6f6d5; color: #22543d; padding: 4px 8px; border-radius: 4px; font-weight: bold;">🟢 OK ({remaining:,.1f} hrs left)</span>
+                <br><small style="color: #718096;">Next Due @ {next_due:,.1f} hrs</small>"""
         else:
-            service_note = ""
+            service_badge = f"""<span style="color: #4a5568; font-weight: bold;">{r.status}</span>"""
 
         rows_html += f"""
         <tr>
             <td>{r.id}</td>
             <td>{r.date}</td>
+            <td><strong>{r.equipment_category or 'General'}</strong></td>
             <td>{r.vehicle_plate}</td>
             <td>{r.vehicle_model}</td>
-            <td>{r.working_hours:,.1f} hrs</td>
+            <td>{curr_h:,.1f} hrs</td>
+            <td>{last_h:,.1f} hrs</td>
+            <td>{service_badge}</td>
             <td>{r.maintenance_type}</td>
             <td>{r.spare_part_name or '-'}</td>
             <td>{r.spare_part_qty}</td>
             <td>{r.spare_part_cost:,.2f}</td>
-            <td>{r.total_cost:,.2f}</td>
-            <td><span style="color: green; font-weight: bold;">{service_status}</span>{service_note}</td>
+            <td><strong>{r.total_cost:,.2f}</strong></td>
         </tr>
         """
 
@@ -130,15 +147,15 @@ def read_dashboard(msg: str = None):
             body {{ font-family: Arial, sans-serif; margin: 20px; background-color: #f4f6f9; }}
             h1 {{ color: #1a365d; text-align: center; margin-bottom: 5px; }}
             .card {{ background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }}
-            form {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }}
-            label {{ font-weight: bold; font-size: 0.9em; margin-bottom: 5px; display: block; }}
-            input, select {{ width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }}
+            form {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; }}
+            label {{ font-weight: bold; font-size: 0.88em; margin-bottom: 4px; display: block; color: #2d3748; }}
+            input, select {{ width: 100%; padding: 8px; border: 1px solid #cbd5e0; border-radius: 4px; box-sizing: border-box; }}
             button {{ grid-column: 1 / -1; background-color: #2b6cb0; color: white; border: none; padding: 12px; font-size: 16px; font-weight: bold; border-radius: 4px; cursor: pointer; }}
             button:hover {{ background-color: #2c5282; }}
-            table {{ width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-            th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }}
-            th {{ background-color: #2b6cb0; color: white; }}
-            tr:hover {{ background-color: #f1f5f9; }}
+            table {{ width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); font-size: 0.92em; }}
+            th, td {{ padding: 10px 12px; text-align: left; border-bottom: 1px solid #e2e8f0; }}
+            th {{ background-color: #2b6cb0; color: white; font-weight: 600; }}
+            tr:hover {{ background-color: #f7fafc; }}
         </style>
     </head>
     <body>
@@ -149,35 +166,52 @@ def read_dashboard(msg: str = None):
         {alert_html}
 
         <div class="card">
-            <h2>New Work Order Entry</h2>
+            <h2>New Work Order Entry (Loader / Excavator / Machine Tracking)</h2>
             <form action="/add-record" method="post">
                 <div>
                     <label>Date:</label>
                     <input type="date" name="date" required>
                 </div>
                 <div>
-                    <label>Plate / Machine No:</label>
-                    <input type="text" name="vehicle_plate" placeholder="e.g. Loader-01, Excavator-02" required>
+                    <label>Equipment Category:</label>
+                    <select name="equipment_category">
+                        <option value="Loader">Loader (ሎደር)</option>
+                        <option value="Excavator">Excavator (እስካቫተር)</option>
+                        <option value="Grabber">Grabber (ግራበር)</option>
+                        <option value="Dump Truck">Dump Truck (ትራክ)</option>
+                        <option value="Forklift">Forklift (ፎርክሊፍት)</option>
+                        <option value="Rolling Mill Equipment">Rolling Mill Machine</option>
+                        <option value="Other Heavy Equipment">Other Heavy Machine</option>
+                    </select>
                 </div>
                 <div>
-                    <label>Machine Model:</label>
-                    <input type="text" name="vehicle_model" placeholder="e.g. CAT 950, Komatsu PC200, Grabber" required>
+                    <label>Plate / Machine ID No:</label>
+                    <input type="text" name="vehicle_plate" placeholder="e.g. LDR-01, EXCAV-02, 3-12345" required>
                 </div>
                 <div>
-                    <label>Current Working Hours (hrs):</label>
-                    <input type="number" step="0.1" name="working_hours" placeholder="e.g. 1250.5" value="0.0">
+                    <label>Machine / Vehicle Model:</label>
+                    <input type="text" name="vehicle_model" placeholder="e.g. CAT 950, Komatsu PC200, XCMG" required>
+                </div>
+                <div>
+                    <label>Current Hour Meter (hrs):</label>
+                    <input type="number" step="0.1" name="current_hours" placeholder="e.g. 1500.0" value="0.0">
+                </div>
+                <div>
+                    <label>Last Service Hour Meter (hrs):</label>
+                    <input type="number" step="0.1" name="last_service_hours" placeholder="e.g. 1250.0" value="0.0">
                 </div>
                 <div>
                     <label>Maintenance Type:</label>
                     <select name="maintenance_type">
                         <option value="250h Oil & Filter Service">250 Hours Oil & Filter Service</option>
-                        <option value="Preventive">Preventive Maintenance</option>
-                        <option value="Corrective">Corrective Maintenance</option>
-                        <option value="Overhaul">Overhaul</option>
+                        <option value="500h Hydraulic Service">500 Hours Hydraulic & System Service</option>
+                        <option value="Preventive Maintenance">Preventive Maintenance</option>
+                        <option value="Corrective Maintenance">Corrective Maintenance</option>
+                        <option value="Overhaul">Overhaul / Major Repair</option>
                     </select>
                 </div>
                 <div>
-                    <label>Spare Part / Oil Spec:</label>
+                    <label>Spare Part Spec / Name:</label>
                     <input type="text" name="spare_part_name" placeholder="e.g. Engine Oil 15W40, Oil Filter, Fuel Filter">
                 </div>
                 <div>
@@ -193,25 +227,27 @@ def read_dashboard(msg: str = None):
         </div>
 
         <div class="card">
-            <h2>Maintenance Records Log</h2>
+            <h2>Maintenance Records & 250-Hour Service Tracking Log</h2>
             <table>
                 <thead>
                     <tr>
                         <th>ID</th>
                         <th>Date</th>
-                        <th>Plate/Machine No</th>
+                        <th>Category</th>
+                        <th>Machine ID/Plate</th>
                         <th>Model</th>
-                        <th>Working Hours</th>
+                        <th>Current Hours</th>
+                        <th>Last Service Hours</th>
+                        <th>250h Service Status</th>
                         <th>Type</th>
-                        <th>Spare Part / Oil Spec</th>
+                        <th>Spare Part Spec/Name</th>
                         <th>Qty</th>
                         <th>Unit Cost</th>
                         <th>Total Cost</th>
-                        <th>Status / Next Due</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {rows_html if rows_html else '<tr><td colspan="11" style="text-align:center;">No maintenance records found.</td></tr>'}
+                    {rows_html if rows_html else '<tr><td colspan="13" style="text-align:center;">No maintenance records found.</td></tr>'}
                 </tbody>
             </table>
         </div>
@@ -226,9 +262,11 @@ def read_dashboard(msg: str = None):
 @app.post("/add-record")
 def add_record(
     date: str = Form(...),
+    equipment_category: str = Form(...),
     vehicle_plate: str = Form(...),
     vehicle_model: str = Form(...),
-    working_hours: float = Form(0.0),
+    current_hours: float = Form(0.0),
+    last_service_hours: float = Form(0.0),
     maintenance_type: str = Form(...),
     spare_part_name: Optional[str] = Form(None),
     spare_part_qty: int = Form(0),
@@ -241,9 +279,11 @@ def add_record(
     
     new_record = MaintenanceRecord(
         date=date,
+        equipment_category=equipment_category,
         vehicle_plate=vehicle_plate,
         vehicle_model=vehicle_model,
-        working_hours=working_hours,
+        current_hours=current_hours,
+        last_service_hours=last_service_hours if last_service_hours > 0 else current_hours,
         maintenance_type=maintenance_type,
         spare_part_name=spare_part_name,
         spare_part_qty=spare_part_qty,
