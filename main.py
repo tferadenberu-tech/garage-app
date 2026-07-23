@@ -25,18 +25,20 @@ def load_data():
                 "spec": "15W-40 Heavy Duty Engine Oil Filter Set",
                 "current_hours": 3420.0,
                 "last_service_hours": 3250.0,
-                "interval_hours": 250.0
+                "interval_hours": 250.0,
+                "unit": "Hours"
             },
             {
                 "id": 2,
                 "plate_no": "AA-3-A12345",
                 "model": "Toyota Hilux Pick-up",
-                "type": "Vehicle",
+                "type": "Vehicle / Car",
                 "driver": "Ato Tadesse",
                 "spec": "5W-30 Synthetic Oil Filter Kit",
                 "current_hours": 105000.0,
                 "last_service_hours": 100000.0,
-                "interval_hours": 5000.0
+                "interval_hours": 5000.0,
+                "unit": "KM"
             }
         ]
     }
@@ -67,7 +69,7 @@ HTML_TEMPLATE = """
 
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; }
+        .container { max-width: 1250px; margin: 0 auto; }
         
         .header {
             background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
@@ -102,7 +104,7 @@ HTML_TEMPLATE = """
 
         .form-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 15px;
         }
         .form-group { display: flex; flex-direction: column; gap: 6px; }
@@ -152,10 +154,10 @@ HTML_TEMPLATE = """
         <div class="header">
             <div>
                 <h1>SteelY R.M.I Garage Maintnace dash Bord</h1>
-                <p>Equipment & Vehicle Maintenance Interval Monitoring</p>
+                <p>Equipment 250-Hour & Vehicle 5000-KM Oil Service Monitoring</p>
             </div>
             <div>
-                <span class="badge badge-ok" style="font-size: 14px; padding: 8px 14px;">● System Ready</span>
+                <span class="badge badge-ok" style="font-size: 14px; padding: 8px 14px;">● System Active</span>
             </div>
         </div>
 
@@ -190,19 +192,27 @@ HTML_TEMPLATE = """
                     </div>
                     <div class="form-group">
                         <label>Spare Part Name (spec)</label>
-                        <input type="text" name="spec" placeholder="e.g. Oil & Filter Spec" required>
+                        <input type="text" name="spec" placeholder="e.g. Engine Oil & Filter Spec" required>
                     </div>
                     <div class="form-group">
-                        <label>Current Hour / KM</label>
-                        <input type="number" step="0.1" name="current_hours" placeholder="e.g. 3420.0" required>
+                        <label>Current Meter Value</label>
+                        <input type="number" step="0.1" name="current_hours" placeholder="Current Value" required>
                     </div>
                     <div class="form-group">
-                        <label>Last Service Hour / KM</label>
-                        <input type="number" step="0.1" name="last_service_hours" placeholder="e.g. 3250.0" required>
+                        <label>Last Service Meter Value</label>
+                        <input type="number" step="0.1" name="last_service_hours" placeholder="Last Service Value" required>
                     </div>
+                    
+                    <!-- 🎯 Service Interval Options (250 Hrs and 5000 KM Side-by-Side) -->
                     <div class="form-group">
-                        <label>Service Interval (Hours / KM)</label>
-                        <input type="number" step="0.1" name="interval_hours" placeholder="e.g. 250 or 5000" value="250.0" required>
+                        <label>Service Interval</label>
+                        <select name="interval_option" required>
+                            <option value="250_Hours" selected>250 Hours (Equipment Oil Service)</option>
+                            <option value="5000_KM">5,000 KM (Vehicle Oil Service)</option>
+                            <option value="500_Hours">500 Hours (Heavy Duty Service)</option>
+                            <option value="10000_KM">10,000 KM (Vehicle Long Service)</option>
+                            <option value="1000_KM">1,000 KM (Break-in Service)</option>
+                        </select>
                     </div>
                 </div>
                 <div style="margin-top: 15px;">
@@ -211,9 +221,9 @@ HTML_TEMPLATE = """
             </form>
         </div>
 
-        <!-- 📊 2. Current Hours and Last Service Status Table -->
+        <!-- 📊 2. Current Meter & Last Service Status Table -->
         <div class="section-card">
-            <h2>2. Current Hours / KM & Last Service Status</h2>
+            <h2>2. Current Hours/KM & Last Service Status</h2>
 
             <table>
                 <thead>
@@ -223,16 +233,17 @@ HTML_TEMPLATE = """
                         <th>Type</th>
                         <th>Driver</th>
                         <th>Spare Part Name (spec)</th>
-                        <th>Current Hour / KM</th>
-                        <th>Last Service Hour / KM</th>
-                        <th>Service Interval</th>
-                        <th>Remaining Hours / KM</th>
+                        <th>Current Meter</th>
+                        <th>Last Service</th>
+                        <th>Interval</th>
+                        <th>Remaining</th>
                         <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for eq in equipments %}
                     {% set interval = eq.interval_hours if eq.interval_hours is defined else 250.0 %}
+                    {% set unit = eq.unit if eq.unit is defined else 'Hours' %}
                     {% set next_due = eq.last_service_hours + interval %}
                     {% set rem = next_due - eq.current_hours %}
                     <tr>
@@ -241,16 +252,16 @@ HTML_TEMPLATE = """
                         <td>{{ eq.type }}</td>
                         <td>{{ eq.driver }}</td>
                         <td>{{ eq.spec }}</td>
-                        <td><strong>{{ eq.current_hours }}</strong></td>
-                        <td>{{ eq.last_service_hours }}</td>
-                        <td>{{ interval }}</td>
+                        <td><strong>{{ eq.current_hours }} {{ unit }}</strong></td>
+                        <td>{{ eq.last_service_hours }} {{ unit }}</td>
+                        <td>{{ interval }} {{ unit }}</td>
                         <td>
                             {% if rem <= 0 %}
-                                <strong style="color:var(--danger);">{{ rem }} (Overdue!)</strong>
+                                <strong style="color:var(--danger);">{{ rem }} {{ unit }} (Overdue!)</strong>
                             {% elif rem <= 30 %}
-                                <strong style="color:var(--warning);">{{ rem }} remaining</strong>
+                                <strong style="color:var(--warning);">{{ rem }} {{ unit }} remaining</strong>
                             {% else %}
-                                <strong style="color:var(--success);">{{ rem }} remaining</strong>
+                                <strong style="color:var(--success);">{{ rem }} {{ unit }} remaining</strong>
                             {% endif %}
                         </td>
                         <td>
@@ -284,6 +295,15 @@ def home():
 @app.route('/add_equipment', methods=['POST'])
 def add_equipment():
     data = load_data()
+    
+    interval_raw = request.form.get("interval_option", "250_Hours")
+    if "_" in interval_raw:
+        val_str, unit = interval_raw.split("_")
+        interval_hours = float(val_str)
+    else:
+        interval_hours = 250.0
+        unit = "Hours"
+
     new_eq = {
         "id": len(data["equipments"]) + 1,
         "plate_no": request.form.get("plate_no"),
@@ -293,7 +313,8 @@ def add_equipment():
         "spec": request.form.get("spec"),
         "current_hours": float(request.form.get("current_hours")),
         "last_service_hours": float(request.form.get("last_service_hours")),
-        "interval_hours": float(request.form.get("interval_hours", 250.0))
+        "interval_hours": interval_hours,
+        "unit": unit
     }
     data["equipments"].append(new_eq)
     save_data(data)
