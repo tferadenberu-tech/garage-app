@@ -5,7 +5,7 @@ import pandas as pd
 from flask import Flask, render_template_string, request, redirect, url_for, send_file, session
 
 app = Flask(__name__)
-app.secret_key = "steely_garage_secret_key"  # Required for session management
+app.secret_key = "steely_garage_secret_key"
 
 # --- In-Memory System Database ---
 garage_data = {
@@ -36,7 +36,7 @@ garage_data = {
                 {"part_name": "Oil Filter (LF16015)", "qty": 1, "unit_price": 1200.0, "total_cost": 1200.0},
                 {"part_name": "Fuel Filter (FF5421)", "qty": 1, "unit_price": 1800.0, "total_cost": 1800.0}
             ],
-            "battery_qty": 0, "battery_cost": 0.0,
+            "battery_qty": 1, "battery_cost": 15000.0,
             "lubrication_qty": 20.0, "lubrication_cost": 4500.0,
             "tire_qty": 0, "tire_cost": 0.0
         }
@@ -183,6 +183,24 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
+            <!-- Date Range Filter Bar -->
+            <div class="summary-card mb-4 bg-light">
+                <form method="GET" action="/" class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">📅 Filter From Date:</label>
+                        <input type="date" name="start_date" class="form-control form-control-sm" value="{{ request.args.get('start_date', '') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">📅 Filter To Date:</label>
+                        <input type="date" name="end_date" class="form-control form-control-sm" value="{{ request.args.get('end_date', '') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-primary btn-sm fw-bold px-4">🔍 Filter Report</button>
+                        <a href="/" class="btn btn-outline-secondary btn-sm ms-2">Reset</a>
+                    </div>
+                </form>
+            </div>
+
             <!-- Form: Create New Work Order -->
             <div class="summary-card mb-4" id="create-wo-section">
                 <div class="form-section-title text-primary fw-bold mb-3">
@@ -249,7 +267,7 @@ HTML_TEMPLATE = """
                             <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. Engine Maintenance and Spare Parts Replacement" required>
                         </div>
 
-                        <!-- Dynamic +Add Replaced Spare Part Section with Auto Calculation -->
+                        <!-- Dynamic Replaced Spare Parts Section -->
                         <div class="col-md-12">
                             <div class="p-3 border rounded bg-light border-warning">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -278,29 +296,45 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
 
-                        <!-- Consumables Inputs with Auto Calculation -->
+                        <!-- Separate Consumables Inputs (Battery, Lubrication, Tire) -->
                         <div class="col-md-12">
                             <div class="p-3 border rounded bg-light">
-                                <h6 class="fw-bold text-dark mb-2">🔋 Consumables Usage (Auto Total Calculation)</h6>
-                                <div class="row g-2 align-items-center">
-                                    <div class="col-md-2">
-                                        <label class="form-label small">Battery Qty / Cost:</label>
-                                        <input type="number" name="battery_qty" id="bat_qty" class="form-control form-control-sm mb-1" value="0" placeholder="Qty" oninput="calcConsumables()">
-                                        <input type="number" step="0.01" name="battery_cost" id="bat_cost" class="form-control form-control-sm" value="0.00" placeholder="Total Cost" oninput="calcConsumables()">
+                                <h6 class="fw-bold text-dark mb-2">🔋 Separate Consumables Tracking (Battery, Lubrication, Tire)</h6>
+                                <div class="row g-3 align-items-center">
+                                    <div class="col-md-4 border-end">
+                                        <label class="form-label small fw-bold text-primary">Battery:</label>
+                                        <div class="input-group input-group-sm mb-1">
+                                            <span class="input-group-text">Qty</span>
+                                            <input type="number" name="battery_qty" class="form-control" value="0" placeholder="0">
+                                        </div>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Cost (ETB)</span>
+                                            <input type="number" step="0.01" name="battery_cost" class="form-control" value="0.00" placeholder="0.00">
+                                        </div>
                                     </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label small">Lubrication Qty(L) / Cost:</label>
-                                        <input type="number" step="0.1" name="lubrication_qty" id="lub_qty" class="form-control form-control-sm mb-1" value="0.0" placeholder="Qty (L)">
-                                        <input type="number" step="0.01" name="lubrication_cost" id="lub_cost" class="form-control form-control-sm" value="0.00" placeholder="Total Cost" oninput="calcConsumables()">
+
+                                    <div class="col-md-4 border-end">
+                                        <label class="form-label small fw-bold text-primary">Lubrication (Oil/Grease):</label>
+                                        <div class="input-group input-group-sm mb-1">
+                                            <span class="input-group-text">Qty (L)</span>
+                                            <input type="number" step="0.1" name="lubrication_qty" class="form-control" value="0.0" placeholder="0.0">
+                                        </div>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Cost (ETB)</span>
+                                            <input type="number" step="0.01" name="lubrication_cost" class="form-control" value="0.00" placeholder="0.00">
+                                        </div>
                                     </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label small">Tire Qty / Cost:</label>
-                                        <input type="number" name="tire_qty" id="tire_qty" class="form-control form-control-sm mb-1" value="0" placeholder="Qty">
-                                        <input type="number" step="0.01" name="tire_cost" id="tire_cost" class="form-control form-control-sm" value="0.00" placeholder="Total Cost" oninput="calcConsumables()">
-                                    </div>
-                                    <div class="col-md-3 d-flex flex-column justify-content-end">
-                                        <span class="small text-muted">Total Consumables Cost:</span>
-                                        <span class="fw-bold text-success fs-5" id="total-consumables-display">0.00 ETB</span>
+
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-bold text-primary">Tire:</label>
+                                        <div class="input-group input-group-sm mb-1">
+                                            <span class="input-group-text">Qty</span>
+                                            <input type="number" name="tire_qty" class="form-control" value="0" placeholder="0">
+                                        </div>
+                                        <div class="input-group input-group-sm">
+                                            <span class="input-group-text">Cost (ETB)</span>
+                                            <input type="number" step="0.01" name="tire_cost" class="form-control" value="0.00" placeholder="0.00">
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -329,8 +363,10 @@ HTML_TEMPLATE = """
                                 <th>Start Time</th>
                                 <th>End Time</th>
                                 <th>Effective Hours</th>
-                                <th>⚙️ Replaced Spare Parts</th>
-                                <th>Consumables Cost</th>
+                                <th>⚙️ Replaced Spares</th>
+                                <th>Battery Cost</th>
+                                <th>Lubrication Cost</th>
+                                <th>Tire Cost</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -362,9 +398,9 @@ HTML_TEMPLATE = """
                                         <span class="text-muted">None</span>
                                     {% endif %}
                                 </td>
-                                <td class="fw-bold text-end">
-                                    {{ "{:,.2f}".format(log.battery_cost + log.lubrication_cost + log.tire_cost) }} ETB
-                                </td>
+                                <td class="fw-bold text-success">{{ "{:,.2f}".format(log.battery_cost) }} ETB</td>
+                                <td class="fw-bold text-success">{{ "{:,.2f}".format(log.lubrication_cost) }} ETB</td>
+                                <td class="fw-bold text-success">{{ "{:,.2f}".format(log.tire_cost) }} ETB</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -447,14 +483,6 @@ HTML_TEMPLATE = """
         const total = qty * price;
         row.querySelector('.row-total-text').innerText = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " ETB";
     }
-
-    function calcConsumables() {
-        const bat = parseFloat(document.getElementById('bat_cost').value) || 0;
-        const lub = parseFloat(document.getElementById('lub_cost').value) || 0;
-        const tire = parseFloat(document.getElementById('tire_cost').value) || 0;
-        const total = bat + lub + tire;
-        document.getElementById('total-consumables-display').innerText = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " ETB";
-    }
 </script>
 </body>
 </html>
@@ -491,21 +519,17 @@ LOGIN_TEMPLATE = """
 </html>
 """
 
-# --- Helper Summaries Calculator ---
-def get_summaries():
-    logs = garage_data['maintenance_logs']
+def get_summaries(logs_list):
     now = datetime.now()
-    
-    # Weekly (last 7 days)
     week_ago = now - timedelta(days=7)
     weekly_logs = []
-    for l in logs:
+    for l in logs_list:
         try:
             dt = datetime.strptime(l['start_time'], "%Y-%m-%d %H:%M")
             if dt >= week_ago:
                 weekly_logs.append(l)
         except:
-            weekly_logs.append(l) # fallback if date format differs
+            weekly_logs.append(l)
             
     weekly_summary = {
         "total_jobs": len(weekly_logs),
@@ -515,10 +539,9 @@ def get_summaries():
         "total_spares_cost": sum(sum(sp['total_cost'] for sp in l.get('replaced_spares', [])) for l in weekly_logs)
     }
 
-    # Monthly (last 30 days)
     month_ago = now - timedelta(days=30)
     monthly_logs = []
-    for l in logs:
+    for l in logs_list:
         try:
             dt = datetime.strptime(l['start_time'], "%Y-%m-%d %H:%M")
             if dt >= month_ago:
@@ -536,7 +559,6 @@ def get_summaries():
 
     return weekly_summary, monthly_summary
 
-# --- App Routes ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     error = None
@@ -561,10 +583,30 @@ def dashboard():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
         
-    weekly, monthly = get_summaries()
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+    
+    filtered_logs = garage_data['maintenance_logs']
+    if start_date and end_date:
+        try:
+            s_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            e_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) # include full end day
+            temp_logs = []
+            for l in filtered_logs:
+                try:
+                    l_dt = datetime.strptime(l['start_time'][:10], "%Y-%m-%d")
+                    if s_dt <= l_dt < e_dt:
+                        temp_logs.append(l)
+                except:
+                    pass
+            filtered_logs = temp_logs
+        except:
+            pass
+
+    weekly, monthly = get_summaries(garage_data['maintenance_logs'])
     return render_template_string(
         HTML_TEMPLATE, 
-        logs=garage_data['maintenance_logs'], 
+        logs=filtered_logs, 
         inventory=garage_data['spare_parts'],
         weekly=weekly,
         monthly=monthly,
@@ -645,14 +687,14 @@ def add_work_order():
     garage_data['maintenance_logs'].append(new_log)
     return redirect(url_for('dashboard'))
 
-# Master Excel Export including Weekly and Monthly Summaries
+# Master Excel Export with Separate Sheets for Weekly/Monthly Summaries & Logs
 @app.route('/export/master_excel')
 def export_master_excel():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
 
     output = io.BytesIO()
-    weekly, monthly = get_summaries()
+    weekly, monthly = get_summaries(garage_data['maintenance_logs'])
     
     # 1. Logs Dataframe
     logs_export = []
@@ -675,11 +717,16 @@ def export_master_excel():
             'Effective Hours': l['effective_hours'],
             'Replaced Spare Part (spec)': sp_text,
             'Spare Parts Total Cost (ETB)': sp_cost,
-            'Consumables Total Cost (ETB)': l['battery_cost'] + l['lubrication_cost'] + l['tire_cost']
+            'Battery Qty': l['battery_qty'],
+            'Battery Cost (ETB)': l['battery_cost'],
+            'Lubrication Qty (L)': l['lubrication_qty'],
+            'Lubrication Cost (ETB)': l['lubrication_cost'],
+            'Tire Qty': l['tire_qty'],
+            'Tire Cost (ETB)': l['tire_cost']
         })
     logs_df = pd.DataFrame(logs_export)
 
-    # 2. Summary Dataframe
+    # 2. Weekly & Monthly Summary Dataframe
     summary_data = [
         {"Report Type": "WEEKLY SUMMARY (Last 7 Days)", "Total Jobs": weekly['total_jobs'], "PM Jobs": weekly['pm_jobs'], "CM Jobs": weekly['cm_jobs'], "Total Work Hours (hrs)": weekly['total_work_hours'], "Spare Parts Total Cost (ETB)": weekly['total_spares_cost']},
         {"Report Type": "MONTHLY SUMMARY (Last 30 Days)", "Total Jobs": monthly['total_jobs'], "PM Jobs": monthly['pm_jobs'], "CM Jobs": monthly['cm_jobs'], "Total Work Hours (hrs)": monthly['total_work_hours'], "Spare Parts Total Cost (ETB)": monthly['total_spares_cost']}
@@ -687,7 +734,7 @@ def export_master_excel():
     summary_df = pd.DataFrame(summary_data)
     
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        summary_df.to_excel(writer, sheet_name='Summaries Report', index=False)
+        summary_df.to_excel(writer, sheet_name='Weekly & Monthly Summaries', index=False)
         logs_df.to_excel(writer, sheet_name='Master Maintenance Log', index=False)
         
     output.seek(0)
