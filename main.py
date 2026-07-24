@@ -14,6 +14,9 @@ garage_data = {
         {"id": 2, "part_name": "Fuel Filter", "spec": "FF5421 / High Efficiency", "qty": 15, "unit_price": 1800.00},
         {"id": 3, "part_name": "Brake Shoe Set", "spec": "Rear Axle / Heavy Duty Standard", "qty": 8, "unit_price": 4500.00}
     ],
+    "technicians_list": [
+        "Mekonnen Kebede", "Abebe Kassahun", "Dawit Tadesse", "Kassahun Bekele", "Solomon Worku", "Ephrem Hailu"
+    ],
     "maintenance_logs": [
         {
             "id": 1,
@@ -25,7 +28,7 @@ garage_data = {
             "reading_unit": "KM",
             "next_service": "129,500 KM (+5000)",
             "driver": "Alemayehu T.",
-            "technician": "Mekonnen Kebede",
+            "technicians": ["Mekonnen Kebede", "Dawit Tadesse"],
             "type": "PM",
             "work_status": "Completed",
             "start_time": "2026-07-20 08:00",
@@ -66,7 +69,7 @@ def calculate_next_service(val, unit):
         next_val = val_int + 5000
         return f"{next_val:,} KM (+5000)"
 
-# --- Frontend HTML Template with Enhanced UI & Top Header Logout ---
+# --- Frontend HTML Template with Fixed Assign Technicians & Delete/Reset Buttons ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -77,44 +80,38 @@ HTML_TEMPLATE = """
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7fa; color: #334155; }
-        
-        /* Modern Dark Sidebar with Vibrant Accents */
         .sidebar { background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; color: #cbd5e1; padding: 25px 15px; box-shadow: 4px 0 10px rgba(0,0,0,0.05); }
         .sidebar .brand-title { color: #38bdf8; font-size: 1.4rem; font-weight: 800; margin-bottom: 2px; letter-spacing: 0.5px; }
-        .admin-badge { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; font-size: 0.7rem; font-weight: bold; padding: 4px 10px; border-radius: 6px; display: inline-block; margin-bottom: 20px; text-transform: uppercase; box-shadow: 0 2px 4px rgba(245, 158, 11, 0.3); }
+        .admin-badge { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white; font-size: 0.7rem; font-weight: bold; padding: 4px 10px; border-radius: 6px; display: inline-block; margin-bottom: 20px; text-transform: uppercase; }
         
-        .btn-export-main { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; font-weight: 600; border: none; border-radius: 8px; width: 100%; text-align: left; padding: 12px 15px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2); transition: all 0.2s; }
-        .btn-export-main:hover { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; transform: translateY(-1px); }
+        .btn-export-main { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; font-weight: 600; border: none; border-radius: 8px; width: 100%; text-align: left; padding: 12px 15px; margin-bottom: 20px; }
+        .btn-export-main:hover { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; }
         
         .nav-link-custom { color: #94a3b8; text-decoration: none; display: flex; align-items: center; gap: 10px; padding: 12px 15px; font-size: 0.95rem; font-weight: 500; border-radius: 8px; margin-bottom: 6px; transition: all 0.2s; }
         .nav-link-custom:hover { background-color: rgba(56, 189, 248, 0.1); color: #38bdf8; }
         
-        /* Main Workspace Header */
-        .main-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; background: white; padding: 20px 25px; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); border: 1px solid #e2e8f0; }
+        .main-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; background: white; padding: 20px 25px; border-radius: 12px; border: 1px solid #e2e8f0; }
         .main-title { font-size: 1.8rem; font-weight: 800; color: #0f172a; margin-bottom: 2px; }
         .main-subtitle { color: #64748b; font-size: 0.9rem; }
         
-        /* Top Header User & Logout Box */
         .top-user-panel { display: flex; align-items: center; gap: 15px; }
         .user-box { text-align: right; border-right: 2px solid #e2e8f0; padding-right: 15px; }
         .user-name { font-weight: 700; color: #1e293b; display: block; font-size: 0.95rem; }
         .user-role { background-color: #3b82f6; color: white; font-size: 0.7rem; font-weight: bold; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; }
         
-        .btn-header-logout { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; font-weight: 600; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2); transition: all 0.2s; }
-        .btn-header-logout:hover { background: linear-gradient(135deg, #dc2626 100%, #b91c1c 100%); color: white; }
-        
-        .btn-header-export { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; font-weight: 600; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2); }
-        .btn-header-export:hover { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; }
+        .btn-header-logout { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; font-weight: 600; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 0.9rem; }
+        .btn-header-export { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; font-weight: 600; padding: 8px 16px; border-radius: 8px; text-decoration: none; font-size: 0.9rem; }
 
-        /* Cards & Containers */
         .summary-card { background: #ffffff; border-radius: 12px; padding: 20px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
-        .summary-card h6 { color: #0284c7; font-weight: 700; font-size: 0.85rem; letter-spacing: 0.5px; border-bottom: 2px solid #f0fdf4; padding-bottom: 10px; margin-bottom: 15px; text-transform: uppercase; }
+        .summary-card h6 { color: #0284c7; font-weight: 700; font-size: 0.85rem; border-bottom: 2px solid #f0fdf4; padding-bottom: 10px; margin-bottom: 15px; text-transform: uppercase; }
         .stat-line { font-size: 0.92rem; margin-bottom: 8px; color: #475569; }
         .cost-line { color: #059669; font-weight: 700; font-size: 1.05rem; margin-top: 12px; background: #f0fdf4; padding: 8px 12px; border-radius: 6px; display: inline-block; }
         
-        .total-hours-card { background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 12px; padding: 20px; border: 1px solid #e2e8f0; height: 100%; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
+        .total-hours-card { background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 12px; padding: 20px; border: 1px solid #e2e8f0; height: 100%; display: flex; flex-direction: column; justify-content: center; }
         .total-hours-num { font-size: 2.3rem; font-weight: 800; color: #0284c7; }
         .badge-calculated { background-color: #0ea5e9; color: white; font-size: 0.75rem; font-weight: 600; padding: 4px 10px; border-radius: 6px; display: inline-block; width: fit-content; margin-top: 8px; }
+        
+        .technician-checkbox-box { max-height: 160px; overflow-y: auto; background: #fff; border: 2px solid #198754; border-radius: 6px; padding: 10px; }
     </style>
 </head>
 <body>
@@ -141,7 +138,7 @@ HTML_TEMPLATE = """
         <!-- Right Main Workspace -->
         <div class="col-md-10 p-4">
             
-            <!-- Top Header Banner with Logout Button on Top -->
+            <!-- Top Header Banner -->
             <div class="main-header">
                 <div>
                     <h1 class="main-title">SteelY R.M.I Garage Maintnace dash Bord</h1>
@@ -152,12 +149,8 @@ HTML_TEMPLATE = """
                         <span class="user-name">{{ user.name }}</span>
                         <span class="user-role">{{ user.role }}</span>
                     </div>
-                    <a href="/export/master_excel" class="btn-header-export shadow-sm">
-                        📊 Export Excel
-                    </a>
-                    <a href="/logout" class="btn-header-logout shadow-sm">
-                        🚪 Logout
-                    </a>
+                    <a href="/export/master_excel" class="btn-header-export shadow-sm">📊 Export Excel</a>
+                    <a href="/logout" class="btn-header-logout shadow-sm">🚪 Logout</a>
                 </div>
             </div>
 
@@ -195,7 +188,7 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- Date Range Filter Bar -->
+            <!-- Date Range Filter & Reset Bar -->
             <div class="summary-card mb-4 bg-light border-0 shadow-sm">
                 <form method="GET" action="/" class="row g-3 align-items-end">
                     <div class="col-md-3">
@@ -208,7 +201,10 @@ HTML_TEMPLATE = """
                     </div>
                     <div class="col-md-3">
                         <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm">🔍 Filter Report</button>
-                        <a href="/" class="btn btn-outline-secondary btn-sm ms-2">Reset</a>
+                        <a href="/" class="btn btn-outline-secondary btn-sm ms-2">Reset Filter</a>
+                    </div>
+                    <div class="col-md-3 text-end">
+                        <a href="/reset_all_logs" class="btn btn-danger btn-sm fw-bold shadow-sm" onclick="return confirm('Are you sure you want to reset/clear all execution logs?');">🔄 Reset All Logs</a>
                     </div>
                 </form>
             </div>
@@ -261,15 +257,26 @@ HTML_TEMPLATE = """
                             <label class="form-label small fw-bold">Driver Name:</label>
                             <input type="text" name="driver" class="form-control form-control-sm" placeholder="e.g. Abebe K.">
                         </div>
+                        
+                        <!-- Multi-Assign Technicians Section (Prominent Checkboxes) -->
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold text-success">👥 +Assign Technicians (Select Multiple):</label>
+                            <div class="technician-checkbox-box shadow-sm">
+                                {% for tech in technicians_list %}
+                                <div class="form-check mb-1">
+                                    <input class="form-check-input border-success" type="checkbox" name="assigned_technicians[]" value="{{ tech }}" id="tech_chk_{{ loop.index }}">
+                                    <label class="form-check-label small fw-semibold text-dark" for="tech_chk_{{ loop.index }}">
+                                        {{ tech }}
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+
                         <div class="col-md-3">
-                            <label class="form-label small fw-bold">Assigned Technician:</label>
-                            <input type="text" name="technician" class="form-control form-control-sm" placeholder="e.g. Mekonnen K." required>
-                        </div>
-                        <div class="col-md-2">
                             <label class="form-label small fw-bold text-primary">🗓️ Start Date & Time:</label>
-                            <input type="datetime-local" name="start_time" class="form-control form-control-sm border-primary" required>
-                        </div>
-                        <div class="col-md-2">
+                            <input type="datetime-local" name="start_time" class="form-control form-control-sm border-primary mb-2" required>
+                            
                             <label class="form-label small fw-bold text-primary">🏁 End Date & Time:</label>
                             <input type="datetime-local" name="finish_time" class="form-control form-control-sm border-primary" required>
                         </div>
@@ -308,7 +315,7 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
 
-                        <!-- Separate Consumables Inputs (Battery, Lubrication, Tire) -->
+                        <!-- Separate Consumables Inputs -->
                         <div class="col-md-12">
                             <div class="p-3 border rounded bg-white shadow-sm">
                                 <h6 class="fw-bold text-dark mb-3">🔋 Separate Consumables Tracking (Battery, Lubrication, Tire)</h6>
@@ -317,11 +324,11 @@ HTML_TEMPLATE = """
                                         <label class="form-label small fw-bold text-primary">Battery:</label>
                                         <div class="input-group input-group-sm mb-1">
                                             <span class="input-group-text">Qty</span>
-                                            <input type="number" name="battery_qty" class="form-control" value="0" placeholder="0">
+                                            <input type="number" name="battery_qty" class="form-control" value="0">
                                         </div>
                                         <div class="input-group input-group-sm">
                                             <span class="input-group-text">Cost (ETB)</span>
-                                            <input type="number" step="0.01" name="battery_cost" class="form-control" value="0.00" placeholder="0.00">
+                                            <input type="number" step="0.01" name="battery_cost" class="form-control" value="0.00">
                                         </div>
                                     </div>
 
@@ -329,11 +336,11 @@ HTML_TEMPLATE = """
                                         <label class="form-label small fw-bold text-primary">Lubrication (Oil/Grease):</label>
                                         <div class="input-group input-group-sm mb-1">
                                             <span class="input-group-text">Qty (L)</span>
-                                            <input type="number" step="0.1" name="lubrication_qty" class="form-control" value="0.0" placeholder="0.0">
+                                            <input type="number" step="0.1" name="lubrication_qty" class="form-control" value="0.0">
                                         </div>
                                         <div class="input-group input-group-sm">
                                             <span class="input-group-text">Cost (ETB)</span>
-                                            <input type="number" step="0.01" name="lubrication_cost" class="form-control" value="0.00" placeholder="0.00">
+                                            <input type="number" step="0.01" name="lubrication_cost" class="form-control" value="0.00">
                                         </div>
                                     </div>
 
@@ -341,11 +348,11 @@ HTML_TEMPLATE = """
                                         <label class="form-label small fw-bold text-primary">Tire:</label>
                                         <div class="input-group input-group-sm mb-1">
                                             <span class="input-group-text">Qty</span>
-                                            <input type="number" name="tire_qty" class="form-control" value="0" placeholder="0">
+                                            <input type="number" name="tire_qty" class="form-control" value="0">
                                         </div>
                                         <div class="input-group input-group-sm">
                                             <span class="input-group-text">Cost (ETB)</span>
-                                            <input type="number" step="0.01" name="tire_cost" class="form-control" value="0.00" placeholder="0.00">
+                                            <input type="number" step="0.01" name="tire_cost" class="form-control" value="0.00">
                                         </div>
                                     </div>
                                 </div>
@@ -359,9 +366,14 @@ HTML_TEMPLATE = """
                 </form>
             </div>
 
-            <!-- Table 1: Execution & Work Time Log -->
+            <!-- Table 1: Execution & Work Time Log with Delete Row & Reset Buttons -->
             <div class="summary-card mb-4" id="execution-log-section">
-                <h5 class="fw-bold text-dark mb-3">🛠️ Maintenance Execution & Work Time Log</h5>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold text-dark m-0">🛠️ Maintenance Execution & Work Time Log</h5>
+                    <div>
+                        <a href="/reset_all_logs" class="btn btn-danger btn-sm fw-bold shadow-sm" onclick="return confirm('Are you sure you want to clear/reset all logs?');">🔄 Reset All Data</a>
+                    </div>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-bordered table-hover align-middle table-sm">
                         <thead class="table-dark">
@@ -371,7 +383,7 @@ HTML_TEMPLATE = """
                                 <th>Current Reading</th>
                                 <th>🔔 Next Service Alert</th>
                                 <th>Status</th>
-                                <th>Technician</th>
+                                <th>Assigned Technicians</th>
                                 <th>Start Time</th>
                                 <th>End Time</th>
                                 <th>Effective Hours</th>
@@ -379,6 +391,7 @@ HTML_TEMPLATE = """
                                 <th>Battery Cost</th>
                                 <th>Lubrication Cost</th>
                                 <th>Tire Cost</th>
+                                <th class="text-center bg-danger text-white">Action (Delete)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -397,9 +410,15 @@ HTML_TEMPLATE = """
                                         <span class="badge bg-danger">Pending</span>
                                     {% endif %}
                                 </td>
-                                <td class="small fw-bold">{{ log.technician }}</td>
-                                <td class="small text-primary fw-bold">{{ log.start_time }}</td>
-                                <td class="small text-primary fw-bold">{{ log.finish_time }}</td>
+                                <td class="small fw-bold text-primary">
+                                    {% if log.technicians %}
+                                        {{ log.technicians | join(', ') }}
+                                    {% else %}
+                                        <span class="text-muted">None</span>
+                                    {% endif %}
+                                </td>
+                                <td class="small text-muted">{{ log.start_time }}</td>
+                                <td class="small text-muted">{{ log.finish_time }}</td>
                                 <td class="fw-bold text-center text-success bg-light">{{ log.effective_hours }} hrs</td>
                                 <td class="small">
                                     {% if log.replaced_spares %}
@@ -413,6 +432,13 @@ HTML_TEMPLATE = """
                                 <td class="fw-bold text-success">{{ "{:,.2f}".format(log.battery_cost) }} ETB</td>
                                 <td class="fw-bold text-success">{{ "{:,.2f}".format(log.lubrication_cost) }} ETB</td>
                                 <td class="fw-bold text-success">{{ "{:,.2f}".format(log.tire_cost) }} ETB</td>
+                                <td class="text-center">
+                                    <a href="/delete_log/{{ log.id }}" class="btn btn-outline-danger btn-sm px-2 py-0 fw-bold" onclick="return confirm('Delete this specific log row?');">🗑️ Delete Row</a>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="14" class="text-center text-muted py-3">No maintenance logs found.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -620,6 +646,7 @@ def dashboard():
         HTML_TEMPLATE, 
         logs=filtered_logs, 
         inventory=garage_data['spare_parts'],
+        technicians_list=garage_data['technicians_list'],
         weekly=weekly,
         monthly=monthly,
         user=session.get('user')
@@ -646,6 +673,8 @@ def add_work_order():
     r_unit = request.form.get('reading_unit', 'KM')
     next_serv = calculate_next_service(r_val, r_unit)
     
+    assigned_techs = request.form.getlist('assigned_technicians[]')
+    
     spare_names = request.form.getlist('spare_name_spec[]')
     spare_qtys = request.form.getlist('spare_qty[]')
     spare_prices = request.form.getlist('spare_price[]')
@@ -670,7 +699,7 @@ def add_work_order():
                 "total_cost": qty * price
             })
 
-    new_id = len(garage_data['maintenance_logs']) + 1
+    new_id = (max([l['id'] for l in garage_data['maintenance_logs']]) + 1) if garage_data['maintenance_logs'] else 1
     new_log = {
         "id": new_id,
         "sn": request.form.get('sn', f'SN-00{new_id}'),
@@ -682,7 +711,7 @@ def add_work_order():
         "next_service": next_serv,
         "work_status": request.form.get('work_status', 'Completed'),
         "driver": request.form.get('driver', 'N/A'),
-        "technician": request.form.get('technician', 'N/A'),
+        "technicians": assigned_techs if assigned_techs else ["N/A"],
         "type": "PM",
         "start_time": start_disp,
         "finish_time": finish_disp,
@@ -699,7 +728,22 @@ def add_work_order():
     garage_data['maintenance_logs'].append(new_log)
     return redirect(url_for('dashboard'))
 
-# Master Excel Export with Separate Sheets for Weekly/Monthly Summaries & Logs
+@app.route('/delete_log/<int:log_id>')
+def delete_log(log_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    
+    garage_data['maintenance_logs'] = [l for l in garage_data['maintenance_logs'] if l['id'] != log_id]
+    return redirect(url_for('dashboard'))
+
+@app.route('/reset_all_logs')
+def reset_all_logs():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    
+    garage_data['maintenance_logs'] = []
+    return redirect(url_for('dashboard'))
+
 @app.route('/export/master_excel')
 def export_master_excel():
     if not session.get('logged_in'):
@@ -708,11 +752,11 @@ def export_master_excel():
     output = io.BytesIO()
     weekly, monthly = get_summaries(garage_data['maintenance_logs'])
     
-    # 1. Logs Dataframe
     logs_export = []
     for l in garage_data['maintenance_logs']:
         sp_text = ", ".join([f"{sp['part_name']} ({sp['qty']} pcs)" for sp in l.get('replaced_spares', [])])
         sp_cost = sum([sp['total_cost'] for sp in l.get('replaced_spares', [])])
+        techs_text = ", ".join(l.get('technicians', []))
         
         logs_export.append({
             'Serial Number': l['sn'],
@@ -723,22 +767,18 @@ def export_master_excel():
             'Reading Unit': l['reading_unit'],
             'Next Service Schedule': l['next_service'],
             'Work Status': l['work_status'],
-            'Technician': l['technician'],
+            'Assigned Technicians': techs_text,
             'Start Time': l['start_time'],
             'End Time': l['finish_time'],
             'Effective Hours': l['effective_hours'],
             'Replaced Spare Part (spec)': sp_text,
             'Spare Parts Total Cost (ETB)': sp_cost,
-            'Battery Qty': l['battery_qty'],
             'Battery Cost (ETB)': l['battery_cost'],
-            'Lubrication Qty (L)': l['lubrication_qty'],
             'Lubrication Cost (ETB)': l['lubrication_cost'],
-            'Tire Qty': l['tire_qty'],
             'Tire Cost (ETB)': l['tire_cost']
         })
     logs_df = pd.DataFrame(logs_export)
 
-    # 2. Weekly & Monthly Summary Dataframe
     summary_data = [
         {"Report Type": "WEEKLY SUMMARY (Last 7 Days)", "Total Jobs": weekly['total_jobs'], "PM Jobs": weekly['pm_jobs'], "CM Jobs": weekly['cm_jobs'], "Total Work Hours (hrs)": weekly['total_work_hours'], "Spare Parts Total Cost (ETB)": weekly['total_spares_cost']},
         {"Report Type": "MONTHLY SUMMARY (Last 30 Days)", "Total Jobs": monthly['total_jobs'], "PM Jobs": monthly['pm_jobs'], "CM Jobs": monthly['cm_jobs'], "Total Work Hours (hrs)": monthly['total_work_hours'], "Spare Parts Total Cost (ETB)": monthly['total_spares_cost']}
