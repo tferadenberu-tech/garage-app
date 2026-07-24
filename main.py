@@ -66,7 +66,7 @@ def calculate_next_service(val, unit):
         next_val = val_int + 5000
         return f"{next_val:,} KM (+5000)"
 
-# --- Frontend HTML Template (International Sleek Tech Theme) ---
+# --- Frontend HTML Template ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -282,12 +282,13 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
 
-                        <div class="col-md-2">
+                        <!-- Start Date & Time and End Date & Time (ጎን ለጎን ተደርገዋል) -->
+                        <div class="col-md-3">
                             <label class="form-label small fw-bold text-primary">🗓️ Start Date & Time:</label>
                             <input type="datetime-local" name="start_time" class="form-control form-control-sm border-primary" required>
                         </div>
 
-                        <div class="col-md-2">
+                        <div class="col-md-3">
                             <label class="form-label small fw-bold text-primary">🏁 End Date & Time:</label>
                             <input type="datetime-local" name="finish_time" class="form-control form-control-sm border-primary" required>
                         </div>
