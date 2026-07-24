@@ -5,9 +5,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, sen
 
 app = Flask(__name__)
 
-# ==========================================
-# 1. DATA STORE WITH NEW FIELDS
-# ==========================================
+# Initial Data Store
 garage_data = {
     "vehicles": [
         {"id": 1, "plate": "AA-3-12345", "model": "Sino Truck 371", "status": "In Service"},
@@ -20,7 +18,6 @@ garage_data = {
         {"id": 3, "part_name": "Brake Shoe Set", "spec": "Rear Axle / Sino Heavy Duty Standard", "qty": 6, "unit_price": 4500.00},
         {"id": 4, "part_name": "Hydraulic Oil", "spec": "ISO VG 68 - 20L Drum", "qty": 8, "unit_price": 15000.00}
     ],
-    # Expanded Maintenance Logs with Start/Finish Time, Effective Hours, Battery, Lubrication, Tire
     "maintenance_logs": [
         {
             "id": 1,
@@ -33,7 +30,7 @@ garage_data = {
             "spares_used": "Oil Filter, Fuel Filter",
             "spare_cost": 3000.00,
             "battery_qty": 0, "battery_cost": 0.0,
-            "lubrication_qty": 20, "lubrication_cost": 4500.0,  # Liters / ETB
+            "lubrication_qty": 20, "lubrication_cost": 4500.0,
             "tire_qty": 0, "tire_cost": 0.0
         },
         {
@@ -43,7 +40,7 @@ garage_data = {
             "start_time": "2026-07-22 09:00",
             "finish_time": "2026-07-23 11:00",
             "effective_hours": 26.0,
-            "description": "Hydraulic Pump Overhaul + Battery & Rear Tires Replacement",
+            "description": "Hydraulic Pump Repair + Battery & Rear Tires Replacement",
             "spares_used": "Hydraulic Oil, Seal Kit",
             "spare_cost": 15000.00,
             "battery_qty": 2, "battery_cost": 18000.0,
@@ -53,20 +50,24 @@ garage_data = {
     ]
 }
 
-# Helper to calculate Effective Work Time
 def calculate_effective_hours(start_str, finish_str):
     try:
-        fmt = "%Y-%m-%d %H:%M"
+        fmt = "%Y-%m-%dT%H:%M"
         t1 = datetime.strptime(start_str, fmt)
         t2 = datetime.strptime(finish_str, fmt)
         diff = (t2 - t1).total_seconds() / 3600.0
         return round(max(diff, 0.0), 2)
     except:
-        return 0.0
+        try:
+            fmt = "%Y-%m-%d %H:%M"
+            t1 = datetime.strptime(start_str, fmt)
+            t2 = datetime.strptime(finish_str, fmt)
+            diff = (t2 - t1).total_seconds() / 3600.0
+            return round(max(diff, 0.0), 2)
+        except:
+            return 0.0
 
-# ==========================================
-# 2. BILINGUAL DASHBOARD HTML
-# ==========================================
+# HTML DASHBOARD TEMPLATE WITH FORM
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="am">
@@ -78,29 +79,30 @@ HTML_TEMPLATE = """
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9; }
         .sidebar { min-height: 100vh; background-color: #0f172a; color: white; }
-        .header-title { background: linear-gradient(135deg, #1e293b, #0f172a); color: white; padding: 22px; border-radius: 12px; }
-        .card-custom { border-radius: 12px; border: none; box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        .header-title { background: linear-gradient(135deg, #1e293b, #0f172a); color: white; padding: 20px; border-radius: 12px; }
+        .card-custom { border-radius: 12px; border: none; box-shadow: 0 4px 10px rgba(0,0,0,0.06); }
         .btn-excel { background-color: #16a34a; color: white; font-weight: bold; }
         .btn-excel:hover { background-color: #15803d; color: white; }
-        .table-custom th { background-color: #1e293b; color: white; }
+        .form-section { background-color: #ffffff; border-left: 5px solid #2563eb; }
     </style>
 </head>
 <body>
 <div class="container-fluid">
     <div class="row">
-        <!-- Sidebar Navigation -->
+        <!-- Sidebar -->
         <div class="col-md-2 sidebar p-3">
             <h4 class="text-info fw-bold">SteelY R.M.I</h4>
             <p class="text-secondary small">የጋራዥ ጥገና ዳሽቦርድ</p>
             <hr class="border-secondary">
             <div class="d-grid gap-2 mb-4">
                 <a href="/export/master_excel" class="btn btn-excel btn-sm shadow">
-                    📥 EXPORT MASTER EXCEL (ALL IN ONE)
+                    📥 EXPORT MASTER EXCEL
                 </a>
             </div>
             <ul class="nav nav-pills flex-column">
+                <li class="nav-item mb-2"><a href="#add-form" class="nav-link text-white fw-bold">➕ አዲስ ጥገና መመዝገቢያ (Form)</a></li>
                 <li class="nav-item mb-2"><a href="#summary" class="nav-link text-white">📊 ማጠቃለያ (Summary)</a></li>
-                <li class="nav-item mb-2"><a href="#maintenance" class="nav-link text-white">🛠️ የጥገና መዝገብ (Work Hours)</a></li>
+                <li class="nav-item mb-2"><a href="#maintenance" class="nav-link text-white">🛠️ የጥገና መዝገብ (Logs)</a></li>
                 <li class="nav-item mb-2"><a href="#spares" class="nav-link text-white">⚙️ እስፔር ፓርት (Spare Parts)</a></li>
             </ul>
         </div>
@@ -118,7 +120,79 @@ HTML_TEMPLATE = """
                 </a>
             </div>
 
-            <!-- Weekly / Monthly Consumables Summary (Battery, Lubrication & Tire) -->
+            <!-- 📝 1. NEW WORK ORDER INPUT FORM -->
+            <div class="card card-custom p-4 mb-4 form-section" id="add-form">
+                <h4 class="fw-bold text-primary mb-3">📝 አዲስ የጥገና እና ወጪ መመዝገቢያ ፎርም (Create Work Order)</h4>
+                <form action="/add_work_order" method="POST">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold small">የሰሌዳ ቁጥር (Vehicle Plate):</label>
+                            <input type="text" name="vehicle" class="form-control" placeholder="e.g. AA-3-12345" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold small">የጥገና ዓይነት (Type):</label>
+                            <select name="type" class="form-select" required>
+                                <option value="PM">PM (መደበኛ ጥገና / Preventive)</option>
+                                <option value="CM">CM (ድንገተኛ ጥገና / Corrective)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold small">የተጀመረበት ቀንና ሰዓት (Start Time):</label>
+                            <input type="datetime-local" name="start_time" class="form-control" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold small">የተጠናቀቀበት ቀንና ሰዓት (Finish Time):</label>
+                            <input type="datetime-local" name="finish_time" class="form-control" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small">የተከናወነ የጥገና ሥራ መግለጫ (Work Description):</label>
+                            <input type="text" name="description" class="form-control" placeholder="e.g. Engine Oil Change & Brake Adjustment" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold small">ጥቅም ላይ የዋለ እስፔር ፓርት (Spares Used):</label>
+                            <input type="text" name="spares_used" class="form-control" placeholder="e.g. Oil Filter, Fuel Filter">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold small">የእስፔር ፓርት ወጪ (Spare Cost - ETB):</label>
+                            <input type="number" step="0.01" name="spare_cost" class="form-control" value="0.00">
+                        </div>
+
+                        <div class="col-md-2">
+                            <label class="form-label fw-bold small text-warning">ባታሪ ብዛት (Battery Qty):</label>
+                            <input type="number" name="battery_qty" class="form-control" value="0">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-bold small text-warning">ባታሪ ወጪ (Battery Cost):</label>
+                            <input type="number" step="0.01" name="battery_cost" class="form-control" value="0.00">
+                        </div>
+
+                        <div class="col-md-2">
+                            <label class="form-label fw-bold small text-info">ሉብሪኬሽን/ዘይት (Liters):</label>
+                            <input type="number" step="0.1" name="lubrication_qty" class="form-control" value="0.0">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-bold small text-info">ሉብሪኬሽን ወጪ (Lubricant Cost):</label>
+                            <input type="number" step="0.01" name="lubrication_cost" class="form-control" value="0.00">
+                        </div>
+
+                        <div class="col-md-2">
+                            <label class="form-label fw-bold small text-danger">ጎማ ብዛት (Tire Qty):</label>
+                            <input type="number" name="tire_qty" class="form-control" value="0">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-bold small text-danger">ጎማ ወጪ (Tire Cost):</label>
+                            <input type="number" step="0.01" name="tire_cost" class="form-control" value="0.00">
+                        </div>
+
+                        <div class="col-md-12 text-end mt-3">
+                            <button type="submit" class="btn btn-primary px-4 fw-bold">💾 መዝግብ (Save Work Order)</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Weekly / Monthly Consumables Summary -->
             <div class="card card-custom p-4 mb-4" id="summary">
                 <h4 class="fw-bold text-dark mb-3">🔋 Weekly & Monthly Consumables Summary (ባታሪ፣ ሉብሪኬሽን እና ጎማ ማጠቃለያ)</h4>
                 <div class="row g-3">
@@ -146,7 +220,7 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- Maintenance & Work Time Execution Table -->
+            <!-- Maintenance Table -->
             <div class="card card-custom p-4 mb-4" id="maintenance">
                 <h4 class="fw-bold text-dark mb-3">🛠️ Work Time & Maintenance Execution Log</h4>
                 <div class="table-responsive">
@@ -160,9 +234,9 @@ HTML_TEMPLATE = """
                                 <th>Finished Date & Hour</th>
                                 <th>Effective Work Time</th>
                                 <th>Work Description</th>
-                                <th>Battery (Qty/Cost)</th>
-                                <th>Lubrication (Qty/Cost)</th>
-                                <th>Tire (Qty/Cost)</th>
+                                <th>Battery</th>
+                                <th>Lubrication</th>
+                                <th>Tire</th>
                                 <th>Spare Cost (ETB)</th>
                             </tr>
                         </thead>
@@ -187,12 +261,12 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- Spare Parts Inventory Table -->
+            <!-- Spare Parts Table -->
             <div class="card card-custom p-4 mb-4" id="spares">
                 <h4 class="fw-bold text-dark mb-3">⚙️ Spare Parts Inventory & Specifications</h4>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle">
-                        <thead class="table-custom">
+                        <thead class="table-dark">
                             <tr>
                                 <th>#</th>
                                 <th>Spare Part Name</th>
@@ -223,12 +297,9 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# ==========================================
-# 3. ROUTES & EXCEL EXPORT ENGINE
-# ==========================================
+# ROUTES
 @app.route('/')
 def dashboard():
-    # Consumables Aggregation
     summary = {
         "total_battery_qty": sum(l['battery_qty'] for l in garage_data['maintenance_logs']),
         "total_battery_cost": sum(l['battery_cost'] for l in garage_data['maintenance_logs']),
@@ -239,12 +310,41 @@ def dashboard():
     }
     return render_template_string(HTML_TEMPLATE, data=garage_data, summary=summary)
 
-# MASTER EXCEL (ALL IN ONE) EXPORT ROUTE
+@app.route('/add_work_order', methods=['POST'])
+def add_work_order():
+    start_raw = request.form.get('start_time')
+    finish_raw = request.form.get('finish_time')
+    
+    start_disp = start_raw.replace('T', ' ') if start_raw else ''
+    finish_disp = finish_raw.replace('T', ' ') if finish_raw else ''
+    
+    eff_hours = calculate_effective_hours(start_raw, finish_raw)
+    
+    new_id = len(garage_data['maintenance_logs']) + 1
+    new_log = {
+        "id": new_id,
+        "vehicle": request.form.get('vehicle', 'N/A'),
+        "type": request.form.get('type', 'PM'),
+        "start_time": start_disp,
+        "finish_time": finish_disp,
+        "effective_hours": eff_hours,
+        "description": request.form.get('description', ''),
+        "spares_used": request.form.get('spares_used', ''),
+        "spare_cost": float(request.form.get('spare_cost', 0) or 0),
+        "battery_qty": int(request.form.get('battery_qty', 0) or 0),
+        "battery_cost": float(request.form.get('battery_cost', 0) or 0),
+        "lubrication_qty": float(request.form.get('lubrication_qty', 0) or 0),
+        "lubrication_cost": float(request.form.get('lubrication_cost', 0) or 0),
+        "tire_qty": int(request.form.get('tire_qty', 0) or 0),
+        "tire_cost": float(request.form.get('tire_cost', 0) or 0)
+    }
+    garage_data['maintenance_logs'].append(new_log)
+    return redirect(url_for('dashboard'))
+
 @app.route('/export/master_excel')
 def export_master_excel():
     output = io.BytesIO()
     
-    # Sheet 1: Maintenance Logs & Effective Work Time
     logs_df = pd.DataFrame(garage_data['maintenance_logs'])
     logs_df.rename(columns={
         'id': 'Work Order ID',
@@ -264,7 +364,6 @@ def export_master_excel():
         'tire_cost': 'Tire Cost (ETB)'
     }, inplace=True)
     
-    # Sheet 2: Consumables Summary (Weekly / Monthly)
     consumables_summary = [{
         'Category': 'Battery (ባታሪ)',
         'Total Quantity (Pcs)': sum(l['battery_qty'] for l in garage_data['maintenance_logs']),
@@ -280,7 +379,6 @@ def export_master_excel():
     }]
     consumables_df = pd.DataFrame(consumables_summary)
     
-    # Sheet 3: Spare Parts Inventory
     spares_df = pd.DataFrame(garage_data['spare_parts'])
     spares_df.rename(columns={
         'id': 'Part ID',
@@ -290,10 +388,8 @@ def export_master_excel():
         'unit_price': 'Unit Price (ETB)'
     }, inplace=True)
     
-    # Sheet 4: Vehicle Fleet
     vehicles_df = pd.DataFrame(garage_data['vehicles'])
     
-    # Write to All-in-One Master Excel Workbook
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         logs_df.to_excel(writer, sheet_name='Maintenance & Work Hours', index=False)
         consumables_df.to_excel(writer, sheet_name='Consumables Summary', index=False)
@@ -310,5 +406,4 @@ def export_master_excel():
     )
 
 if __name__ == '__main__':
-    # Make sure pandas and openpyxl are installed
     app.run(debug=True, port=5000)
