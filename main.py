@@ -87,7 +87,6 @@ HTML_TEMPLATE = """
         }
         body { font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-main); color: var(--text-main); }
         
-        /* Sidebar International Styling */
         .sidebar { background: linear-gradient(180deg, #090d16 0%, #111827 100%); min-height: 100vh; color: #94a3b8; padding: 30px 18px; box-shadow: 4px 0 20px rgba(0,0,0,0.08); border-right: 1px solid rgba(255,255,255,0.05); }
         .sidebar .brand-title { color: #f8fafc; font-size: 1.5rem; font-weight: 800; margin-bottom: 4px; letter-spacing: -0.5px; }
         .admin-badge { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; font-size: 0.68rem; font-weight: 700; padding: 4px 10px; border-radius: 6px; display: inline-block; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 0.8px; box-shadow: 0 2px 5px rgba(37,99,235,0.3); }
@@ -98,7 +97,6 @@ HTML_TEMPLATE = """
         .nav-link-custom { color: #94a3b8; text-decoration: none; display: flex; align-items: center; gap: 12px; padding: 12px 16px; font-size: 0.93rem; font-weight: 500; border-radius: 10px; margin-bottom: 8px; transition: all 0.2s ease; }
         .nav-link-custom:hover { background-color: rgba(37, 99, 235, 0.12); color: #60a5fa; transform: translateX(3px); }
         
-        /* Main Header Workspace */
         .main-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; background: var(--card-bg); padding: 22px 30px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 2px 10px rgba(0,0,0,0.01); }
         .main-title { font-size: 1.7rem; font-weight: 800; color: #0f172a; margin-bottom: 2px; letter-spacing: -0.5px; }
         .main-subtitle { color: var(--text-muted); font-size: 0.88rem; font-weight: 500; }
@@ -111,14 +109,12 @@ HTML_TEMPLATE = """
         .btn-header-logout { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; font-weight: 600; padding: 9px 18px; border-radius: 10px; text-decoration: none; font-size: 0.88rem; box-shadow: 0 2px 6px rgba(239,68,68,0.2); }
         .btn-header-export { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; font-weight: 600; padding: 9px 18px; border-radius: 10px; text-decoration: none; font-size: 0.88rem; box-shadow: 0 2px 6px rgba(5,150,105,0.2); }
 
-        /* Summary Cards & Layout Polish */
         .summary-card { background: var(--card-bg); border-radius: 16px; padding: 24px; border: 1px solid #e2e8f0; box-shadow: 0 4px 15px -3px rgba(0,0,0,0.03); transition: transform 0.2s ease; }
         .summary-card:hover { transform: translateY(-2px); }
         .summary-card h6 { color: #2563eb; font-weight: 700; font-size: 0.82rem; border-bottom: 2px solid #eff6ff; padding-bottom: 12px; margin-bottom: 18px; text-transform: uppercase; letter-spacing: 0.5px; }
         .stat-line { font-size: 0.92rem; margin-bottom: 10px; color: #475569; font-weight: 500; }
         .cost-line { color: #047857; font-weight: 700; font-size: 1.05rem; margin-top: 15px; background: #ecfdf5; padding: 10px 14px; border-radius: 8px; display: inline-block; border: 1px solid #d1fae5; }
         
-        /* Fixed Water Blue Table Headers with High Contrast White Text */
         table.table thead.table-water-blue, 
         .table-water-blue { 
             background: #0284c7 !important; 
@@ -132,7 +128,6 @@ HTML_TEMPLATE = """
             border-color: #0284c7 !important; 
         }
 
-        /* Buttons & Forms Upgrade */
         .btn-primary { background-color: #2563eb; border: none; border-radius: 8px; font-weight: 600; padding: 8px 16px; box-shadow: 0 2px 5px rgba(37,99,235,0.2); }
         .btn-primary:hover { background-color: #1d4ed8; }
         .form-control, .form-select { border-radius: 8px; border-color: #cbd5e1; padding: 9px 12px; font-size: 0.9rem; }
@@ -179,7 +174,7 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- Top Summary Cards (Weekly & Monthly with Consumables Included) -->
+            <!-- Top Summary Cards -->
             <div class="row g-3 mb-4" id="summary-section">
                 <div class="col-md-6">
                     <div class="summary-card">
@@ -319,7 +314,7 @@ HTML_TEMPLATE = """
                             <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. Engine Maintenance and Spare Parts Replacement" required>
                         </div>
 
-                        <!-- Dynamic Replaced Spare Parts Section -->
+                        <!-- Dynamic Replaced Spare Parts Section (Using Descriptive Breakdown Schema) -->
                         <div class="col-md-12">
                             <div class="p-3 border rounded bg-light shadow-sm">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -328,13 +323,16 @@ HTML_TEMPLATE = """
                                 </div>
                                 <div id="spare-rows-container">
                                     <div class="row g-2 spare-row mb-2 align-items-center">
-                                        <div class="col-md-4">
-                                            <input type="text" name="spare_name_spec[]" class="form-control form-control-sm" placeholder="Spare Part Name & Spec" required>
-                                        </div>
-                                        <div class="col-md-2">
-                                            <input type="number" name="spare_qty[]" class="form-control form-control-sm spare-qty" placeholder="Qty" value="1" min="1" required oninput="calculateRowTotal(this)">
+                                        <div class="col-md-3">
+                                            <input type="text" name="spare_name[]" class="form-control form-control-sm" placeholder="Spare Part Name" required>
                                         </div>
                                         <div class="col-md-3">
+                                            <input type="text" name="spare_spec[]" class="form-control form-control-sm" placeholder="Specification" required>
+                                        </div>
+                                        <div class="col-md-1">
+                                            <input type="number" name="spare_qty[]" class="form-control form-control-sm spare-qty" placeholder="Qty" value="1" min="1" required oninput="calculateRowTotal(this)">
+                                        </div>
+                                        <div class="col-md-2">
                                             <input type="number" step="0.01" name="spare_price[]" class="form-control form-control-sm spare-price" placeholder="Unit Price (ETB)" value="0.00" required oninput="calculateRowTotal(this)">
                                         </div>
                                         <div class="col-md-2">
@@ -399,11 +397,12 @@ HTML_TEMPLATE = """
                 </form>
             </div>
 
-            <!-- Table 1: Execution & Work Time Log (Water Blue Header) -->
+            <!-- Table 1: Execution & Work Time Log (Water Blue Header with Save Report & Action Delete) -->
             <div class="summary-card mb-4" id="execution-log-section">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="fw-bold text-dark m-0">🛠️ Maintenance Execution & Work Time Log</h5>
-                    <div>
+                    <div class="d-flex gap-2">
+                        <a href="/export/execution_excel" class="btn btn-success btn-sm fw-bold shadow-sm">📥 Save Report (Excel)</a>
                         <a href="/reset_all_logs" class="btn btn-outline-danger btn-sm fw-bold shadow-sm" onclick="return confirm('Are you sure you want to clear/reset all logs?');">🔄 Reset All Data</a>
                     </div>
                 </div>
@@ -450,7 +449,7 @@ HTML_TEMPLATE = """
                                 <td class="small">
                                     {% if log.replaced_spares %}
                                         {% for sp in log.replaced_spares %}
-                                            <div>• <strong>{{ sp.part_name }}</strong> x{{ sp.qty }} ({{ "{:,.2f}".format(sp.total_cost) }} ETB)</div>
+                                            <div>• <strong>{{ sp.part_name }}</strong> ({{ sp.spec }}) x{{ sp.qty }} ({{ "{:,.2f}".format(sp.total_cost) }} ETB)</div>
                                         {% endfor %}
                                     {% else %}
                                         <span class="text-muted">None</span>
@@ -473,7 +472,7 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- Table 2: Spare Parts Inventory (Water Blue Header) -->
+            <!-- Table 2: Spare Parts Inventory -->
             <div class="summary-card mb-4" id="inventory-section">
                 <h5 class="fw-bold text-dark mb-3">⚙️ Spare Parts Inventory</h5>
                 <div class="table-responsive">
@@ -512,13 +511,16 @@ HTML_TEMPLATE = """
         const newRow = document.createElement('div');
         newRow.className = 'row g-2 spare-row mb-2 align-items-center';
         newRow.innerHTML = `
-            <div class="col-md-4">
-                <input type="text" name="spare_name_spec[]" class="form-control form-control-sm" placeholder="Spare Part Name & Spec" required>
-            </div>
-            <div class="col-md-2">
-                <input type="number" name="spare_qty[]" class="form-control form-control-sm spare-qty" placeholder="Qty" value="1" min="1" required oninput="calculateRowTotal(this)">
+            <div class="col-md-3">
+                <input type="text" name="spare_name[]" class="form-control form-control-sm" placeholder="Spare Part Name" required>
             </div>
             <div class="col-md-3">
+                <input type="text" name="spare_spec[]" class="form-control form-control-sm" placeholder="Specification" required>
+            </div>
+            <div class="col-md-1">
+                <input type="number" name="spare_qty[]" class="form-control form-control-sm spare-qty" placeholder="Qty" value="1" min="1" required oninput="calculateRowTotal(this)">
+            </div>
+            <div class="col-md-2">
                 <input type="number" step="0.01" name="spare_price[]" class="form-control form-control-sm spare-price" placeholder="Unit Price (ETB)" value="0.00" required oninput="calculateRowTotal(this)">
             </div>
             <div class="col-md-2">
@@ -708,13 +710,15 @@ def add_work_order():
     
     techs_input = request.form.get('technicians', '').strip()
     
-    spare_names = request.form.getlist('spare_name_spec[]')
+    spare_names = request.form.getlist('spare_name[]')
+    spare_specs = request.form.getlist('spare_spec[]')
     spare_qtys = request.form.getlist('spare_qty[]')
     spare_prices = request.form.getlist('spare_price[]')
     
     replaced_list = []
     for i in range(len(spare_names)):
         name = spare_names[i].strip()
+        spec = spare_specs[i].strip() if i < len(spare_specs) else ""
         if name:
             try:
                 qty = int(spare_qtys[i])
@@ -727,6 +731,7 @@ def add_work_order():
                 
             replaced_list.append({
                 "part_name": name,
+                "spec": spec,
                 "qty": qty,
                 "unit_price": price,
                 "total_cost": qty * price
@@ -777,6 +782,41 @@ def reset_all_logs():
     garage_data['maintenance_logs'] = []
     return redirect(url_for('dashboard'))
 
+@app.route('/export/execution_excel')
+def export_execution_excel():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
+    output = io.BytesIO()
+    logs_export = []
+    for l in garage_data['maintenance_logs']:
+        sp_text = ", ".join([f"{sp['part_name']} ({sp['spec']}) - {sp['qty']} pcs" for sp in l.get('replaced_spares', [])])
+        sp_cost = sum([sp['total_cost'] for sp in l.get('replaced_spares', [])])
+        
+        logs_export.append({
+            'Work Order No': l['wo_no'],
+            'Vehicle Plate': l['vehicle'],
+            'Current Reading': f"{l['reading_value']} {l['reading_unit']}",
+            'Next Service Alert': l['next_service'],
+            'Status': l['work_status'],
+            'Assigned Technicians': l['technicians'],
+            'Start Time': l['start_time'],
+            'End Time': l['finish_time'],
+            'Effective Hours (hrs)': l['effective_hours'],
+            'Replaced Spare Parts': sp_text,
+            'Spare Parts Total Cost (ETB)': sp_cost,
+            'Battery Cost (ETB)': l['battery_cost'],
+            'Lubrication Cost (ETB)': l['lubrication_cost'],
+            'Tire Cost (ETB)': l['tire_cost']
+        })
+    logs_df = pd.DataFrame(logs_export)
+    
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        logs_df.to_excel(writer, sheet_name='Execution & Work Time Log', index=False)
+        
+    output.seek(0)
+    return send_file(output, download_name='SteelY_Maintenance_Execution_Log.xlsx', as_attachment=True)
+
 @app.route('/export/master_excel')
 def export_master_excel():
     if not session.get('logged_in'):
@@ -787,7 +827,7 @@ def export_master_excel():
     
     logs_export = []
     for l in garage_data['maintenance_logs']:
-        sp_text = ", ".join([f"{sp['part_name']} ({sp['qty']} pcs)" for sp in l.get('replaced_spares', [])])
+        sp_text = ", ".join([f"{sp['part_name']} ({sp['spec']}) ({sp['qty']} pcs)" for sp in l.get('replaced_spares', [])])
         sp_cost = sum([sp['total_cost'] for sp in l.get('replaced_spares', [])])
         
         logs_export.append({
