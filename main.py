@@ -1,5 +1,5 @@
 import io
-import re
+import json
 from datetime import datetime
 import pandas as pd
 from flask import Flask, render_template_string, request, redirect, url_for, send_file
@@ -36,34 +36,12 @@ garage_data = {
             "effective_hours": 6.5,
             "description": "Engine Oil & Filter Change",
             "replaced_spares": [
-                {"part_name": "Oil Filter", "qty": 1, "unit_price": 1200.0, "total_cost": 1200.0},
-                {"part_name": "Fuel Filter", "qty": 1, "unit_price": 1800.0, "total_cost": 1800.0}
+                {"part_name": "Oil Filter (LF16015)", "qty": 1, "unit_price": 1200.0, "total_cost": 1200.0},
+                {"part_name": "Fuel Filter (FF5421)", "qty": 1, "unit_price": 1800.0, "total_cost": 1800.0}
             ],
             "battery_qty": 0, "battery_cost": 0.0,
             "lubrication_qty": 20.0, "lubrication_cost": 4500.0,
             "tire_qty": 0, "tire_cost": 0.0
-        },
-        {
-            "id": 2,
-            "sn": "SN-002",
-            "wo_no": "WO-2026-002",
-            "vehicle": "AA-3-11223",
-            "model": "CAT Wheel Loader 950H",
-            "reading_value": 8450,
-            "reading_unit": "Hour",
-            "next_service": "8,700 Hours (+250)",
-            "driver": "Getachew M.",
-            "technician": "Tadesse Hailu",
-            "type": "CM",
-            "work_status": "In Progress",
-            "start_time": "2026-07-22 09:00",
-            "finish_time": "2026-07-23 11:00",
-            "effective_hours": 26.0,
-            "description": "Hydraulic Pump Repair",
-            "replaced_spares": [],
-            "battery_qty": 2, "battery_cost": 18000.0,
-            "lubrication_qty": 40.0, "lubrication_cost": 9000.0,
-            "tire_qty": 2, "tire_cost": 32000.0
         }
     ]
 }
@@ -78,7 +56,6 @@ def calculate_effective_hours(start_str, finish_str):
     except:
         return 0.0
 
-# Automatic +5000 KM or +250 Hour calculation based on selected unit
 def calculate_next_service(val, unit):
     try:
         val_int = int(val)
@@ -213,11 +190,11 @@ HTML_TEMPLATE = """
                     <div class="row g-3">
                         <div class="col-md-2">
                             <label class="form-label small fw-bold">Serial Number (S/N):</label>
-                            <input type="text" name="sn" class="form-control form-control-sm" placeholder="e.g. SN-003" required>
+                            <input type="text" name="sn" class="form-control form-control-sm" placeholder="e.g. SN-002" required>
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small fw-bold">Work Order No:</label>
-                            <input type="text" name="wo_no" class="form-control form-control-sm" placeholder="e.g. WO-2026-003" required>
+                            <input type="text" name="wo_no" class="form-control form-control-sm" placeholder="e.g. WO-2026-002" required>
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small fw-bold">Vehicle Plate Number:</label>
@@ -228,13 +205,13 @@ HTML_TEMPLATE = """
                             <input type="text" name="model" class="form-control form-control-sm" placeholder="e.g. Sino Truck 371">
                         </div>
                         
-                        <!-- KM / Hour Dedicated Inputs -->
+                        <!-- KM / Hour Inputs with Auto Next Service Preview -->
                         <div class="col-md-2">
-                            <label class="form-label small fw-bold text-danger">Reading Value:</label>
+                            <label class="form-label small fw-bold text-danger">Current Reading:</label>
                             <input type="number" name="reading_value" class="form-control form-control-sm border-danger" placeholder="e.g. 125000" required>
                         </div>
                         <div class="col-md-2">
-                            <label class="form-label small fw-bold text-danger">KM / Hour Unit:</label>
+                            <label class="form-label small fw-bold text-danger">Reading Unit:</label>
                             <select name="reading_unit" class="form-select form-select-sm border-danger" required>
                                 <option value="KM">KM (+5000)</option>
                                 <option value="Hour">Hour (+250)</option>
@@ -271,25 +248,27 @@ HTML_TEMPLATE = """
                             <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. Engine Maintenance and Spare Parts Replacement" required>
                         </div>
 
-                        <!-- Add Replaced Spare Part Section -->
+                        <!-- Dynamic +Add Replaced Spare Part Section -->
                         <div class="col-md-12">
                             <div class="p-3 border rounded bg-light border-warning">
-                                <h6 class="fw-bold text-dark mb-2">⚙️ +Add Replaced Spare Part</h6>
-                                <div class="row g-2">
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold">Spare Part Name (spec):</label>
-                                        <input type="text" name="replaced_part_name" class="form-control form-control-sm" placeholder="e.g. Fuel Filter FF5421">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label small fw-bold">Quantity (Pcs):</label>
-                                        <input type="number" name="replaced_qty" class="form-control form-control-sm" value="0">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label small fw-bold">Unit Price (ETB):</label>
-                                        <input type="number" step="0.01" name="replaced_price" class="form-control form-control-sm" value="0.00">
-                                    </div>
-                                    <div class="col-md-2 d-flex align-items-end">
-                                        <span class="small text-muted">Auto Total Calculation</span>
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h6 class="fw-bold text-dark m-0">⚙️ Replaced Spare Parts (Add Multiple Rows)</h6>
+                                    <button type="button" class="btn btn-outline-dark btn-sm fw-bold" onclick="addSpareRow()">+ Add Spare Part Row</button>
+                                </div>
+                                <div id="spare-rows-container">
+                                    <div class="row g-2 spare-row mb-2">
+                                        <div class="col-md-5">
+                                            <input type="text" name="spare_name_spec[]" class="form-control form-control-sm" placeholder="Spare Part Name & Spec (e.g. Fuel Filter LF16015)" required>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="number" name="spare_qty[]" class="form-control form-control-sm" placeholder="Quantity" value="1" required>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <input type="number" step="0.01" name="spare_price[]" class="form-control form-control-sm" placeholder="Unit Price (ETB)" value="0.00" required>
+                                        </div>
+                                        <div class="col-md-1 d-flex align-items-center">
+                                            <button type="button" class="btn btn-danger btn-sm w-100" onclick="removeSpareRow(this)">X</button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -351,7 +330,7 @@ HTML_TEMPLATE = """
                                 <th>Start Time</th>
                                 <th>End Time</th>
                                 <th>Effective Hours</th>
-                                <th>⚙️ Replaced Spare Part</th>
+                                <th>⚙️ Replaced Spare Parts</th>
                                 <th>Consumables Cost</th>
                             </tr>
                         </thead>
@@ -433,6 +412,39 @@ HTML_TEMPLATE = """
         </div>
     </div>
 </div>
+
+<script>
+    function addSpareRow() {
+        const container = document.getElementById('spare-rows-container');
+        const newRow = document.createElement('div');
+        newRow.className = 'row g-2 spare-row mb-2';
+        newRow.innerHTML = `
+            <div class="col-md-5">
+                <input type="text" name="spare_name_spec[]" class="form-control form-control-sm" placeholder="Spare Part Name & Spec" required>
+            </div>
+            <div class="col-md-3">
+                <input type="number" name="spare_qty[]" class="form-control form-control-sm" placeholder="Quantity" value="1" required>
+            </div>
+            <div class="col-md-3">
+                <input type="number" step="0.01" name="spare_price[]" class="form-control form-control-sm" placeholder="Unit Price (ETB)" value="0.00" required>
+            </div>
+            <div class="col-md-1 d-flex align-items-center">
+                <button type="button" class="btn btn-danger btn-sm w-100" onclick="removeSpareRow(this)">X</button>
+            </div>
+        `;
+        container.appendChild(newRow);
+    }
+
+    function removeSpareRow(button) {
+        const row = button.closest('.spare-row');
+        const container = document.getElementById('spare-rows-container');
+        if (container.children.length > 1) {
+            row.remove();
+        } else {
+            alert("At least one spare part row is required!");
+        }
+    }
+</script>
 </body>
 </html>
 """
@@ -466,7 +478,7 @@ def add_work_order():
     
     eff_hours = calculate_effective_hours(start_raw, finish_raw)
     
-    # Read KM / Hour Inputs
+    # Read KM / Hour Inputs & Calculate Next Service
     try:
         r_val = int(request.form.get('reading_value', 0))
     except:
@@ -475,26 +487,30 @@ def add_work_order():
     r_unit = request.form.get('reading_unit', 'KM')
     next_serv = calculate_next_service(r_val, r_unit)
     
-    # Process Replaced Spare Part
-    rep_name = request.form.get('replaced_part_name', '').strip()
-    try:
-        rep_qty = int(request.form.get('replaced_qty', 0))
-    except:
-        rep_qty = 0
-        
-    try:
-        rep_price = float(request.form.get('replaced_price', 0.0))
-    except:
-        rep_price = 0.0
+    # Process Multiple Replaced Spare Parts Lists
+    spare_names = request.form.getlist('spare_name_spec[]')
+    spare_qtys = request.form.getlist('spare_qty[]')
+    spare_prices = request.form.getlist('spare_price[]')
     
     replaced_list = []
-    if rep_name and rep_qty > 0:
-        replaced_list.append({
-            "part_name": rep_name,
-            "qty": rep_qty,
-            "unit_price": rep_price,
-            "total_cost": rep_qty * rep_price
-        })
+    for i in range(len(spare_names)):
+        name = spare_names[i].strip()
+        if name:
+            try:
+                qty = int(spare_qtys[i])
+            except:
+                qty = 1
+            try:
+                price = float(spare_prices[i])
+            except:
+                price = 0.0
+                
+            replaced_list.append({
+                "part_name": name,
+                "qty": qty,
+                "unit_price": price,
+                "total_cost": qty * price
+            })
 
     new_id = len(garage_data['maintenance_logs']) + 1
     new_log = {
