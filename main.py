@@ -17,11 +17,6 @@ garage_data = {
         {"id": 2, "part_name": "Fuel Filter", "spec": "FF5421 / High Efficiency", "qty": 15, "unit_price": 1800.00},
         {"id": 3, "part_name": "Brake Shoe Set", "spec": "Rear Axle / Heavy Duty Standard", "qty": 8, "unit_price": 4500.00}
     ],
-    "technicians": [
-        {"rank": 1, "name": "Mekonnen Kebede", "lead_jobs": 5, "total_hours": 32.5, "score": "98%"},
-        {"rank": 2, "name": "Tadesse Hailu", "lead_jobs": 4, "total_hours": 28.0, "score": "92%"},
-        {"rank": 3, "name": "Dawit Girma", "lead_jobs": 3, "total_hours": 22.5, "score": "87%"}
-    ],
     "maintenance_logs": [
         {
             "id": 1,
@@ -29,8 +24,9 @@ garage_data = {
             "wo_no": "WO-2026-001",
             "vehicle": "AA-3-12345",
             "model": "Sino Truck 371",
-            "km_or_hr": "124500 km",
-            "next_service": "129,500 km (+5000)",
+            "reading_value": 124500,
+            "reading_unit": "KM",
+            "next_service": "129,500 KM (+5000)",
             "driver": "Alemayehu T.",
             "technician": "Mekonnen Kebede",
             "type": "PM",
@@ -53,8 +49,9 @@ garage_data = {
             "wo_no": "WO-2026-002",
             "vehicle": "AA-3-11223",
             "model": "CAT Wheel Loader 950H",
-            "km_or_hr": "8450 hrs",
-            "next_service": "8,700 hrs (+250)",
+            "reading_value": 8450,
+            "reading_unit": "Hour",
+            "next_service": "8,700 Hours (+250)",
             "driver": "Getachew M.",
             "technician": "Tadesse Hailu",
             "type": "CM",
@@ -81,26 +78,19 @@ def calculate_effective_hours(start_str, finish_str):
     except:
         return 0.0
 
-# Automatic +5000 km / +250 hrs calculation
-def calculate_next_service(km_or_hr_str):
-    if not km_or_hr_str:
+# Automatic +5000 KM or +250 Hour calculation based on selected unit
+def calculate_next_service(val, unit):
+    try:
+        val_int = int(val)
+    except:
         return "N/A"
     
-    # Extract numbers
-    numbers = re.findall(r'\d+', km_or_hr_str.replace(',', ''))
-    if not numbers:
-        return km_or_hr_str
-    
-    val = int(numbers[0])
-    text_lower = km_or_hr_str.lower()
-    
-    if "hr" in text_lower or "hour" in text_lower:
-        next_val = val + 250
-        return f"{next_val:,} hrs (+250)"
+    if unit == "Hour":
+        next_val = val_int + 250
+        return f"{next_val:,} Hours (+250)"
     else:
-        # Default to KM
-        next_val = val + 5000
-        return f"{next_val:,} km (+5000)"
+        next_val = val_int + 5000
+        return f"{next_val:,} KM (+5000)"
 
 # --- Frontend HTML Template ---
 HTML_TEMPLATE = """
@@ -109,7 +99,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SteelY Fleet Dashboard - Maintenance Dashboard</title>
+    <title>SteelY R.M.I Garage Maintnace dash Bord</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #eef2f5; color: #1f2937; }
@@ -166,7 +156,7 @@ HTML_TEMPLATE = """
             <!-- Top Header Banner -->
             <div class="main-header">
                 <div>
-                    <h1 class="main-title">SteelY R.M.I Garage Maintenance Dashboard</h1>
+                    <h1 class="main-title">SteelY R.M.I Garage Maintnace dash Bord</h1>
                     <div class="main-subtitle">Integrated Work Time, Consumables & Maintenance Tracking</div>
                 </div>
                 <div class="d-flex align-items-center gap-4">
@@ -237,11 +227,20 @@ HTML_TEMPLATE = """
                             <label class="form-label small fw-bold">Vehicle Type / Model:</label>
                             <input type="text" name="model" class="form-control form-control-sm" placeholder="e.g. Sino Truck 371">
                         </div>
+                        
+                        <!-- KM / Hour Dedicated Inputs -->
                         <div class="col-md-2">
-                            <label class="form-label small fw-bold text-danger">Current Reading (KM / Hr):</label>
-                            <input type="text" name="km_or_hr" class="form-control form-control-sm border-danger" placeholder="e.g. 150000 km or 4200 hrs" required>
-                            <span class="small text-muted" style="font-size:0.75rem;">💡 Auto +5000km / +250hrs</span>
+                            <label class="form-label small fw-bold text-danger">Reading Value:</label>
+                            <input type="number" name="reading_value" class="form-control form-control-sm border-danger" placeholder="e.g. 125000" required>
                         </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold text-danger">KM / Hour Unit:</label>
+                            <select name="reading_unit" class="form-select form-select-sm border-danger" required>
+                                <option value="KM">KM (+5000)</option>
+                                <option value="Hour">Hour (+250)</option>
+                            </select>
+                        </div>
+
                         <div class="col-md-2">
                             <label class="form-label small fw-bold">Job Status:</label>
                             <select name="work_status" class="form-select form-select-sm" required>
@@ -250,7 +249,6 @@ HTML_TEMPLATE = """
                                 <option value="Pending">Pending</option>
                             </select>
                         </div>
-
                         <div class="col-md-3">
                             <label class="form-label small fw-bold">Driver Name:</label>
                             <input type="text" name="driver" class="form-control form-control-sm" placeholder="e.g. Abebe K.">
@@ -259,12 +257,12 @@ HTML_TEMPLATE = """
                             <label class="form-label small fw-bold">Assigned Technician:</label>
                             <input type="text" name="technician" class="form-control form-control-sm" placeholder="e.g. Mekonnen K." required>
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label small fw-bold text-primary">🗓️ Work Start Day & Hour:</label>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold text-primary">🗓️ Start Date & Time:</label>
                             <input type="datetime-local" name="start_time" class="form-control form-control-sm border-primary" required>
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label small fw-bold text-primary">🏁 End Work Day & Hour:</label>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold text-primary">🏁 End Date & Time:</label>
                             <input type="datetime-local" name="finish_time" class="form-control form-control-sm border-primary" required>
                         </div>
 
@@ -273,13 +271,13 @@ HTML_TEMPLATE = """
                             <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. Engine Maintenance and Spare Parts Replacement" required>
                         </div>
 
-                        <!-- Feature 2: Add Replaced Spare Parts Section -->
+                        <!-- Add Replaced Spare Part Section -->
                         <div class="col-md-12">
                             <div class="p-3 border rounded bg-light border-warning">
-                                <h6 class="fw-bold text-dark mb-2">⚙️ +Add Replaced Spare Parts</h6>
+                                <h6 class="fw-bold text-dark mb-2">⚙️ +Add Replaced Spare Part</h6>
                                 <div class="row g-2">
                                     <div class="col-md-4">
-                                        <label class="form-label small fw-bold">Spare Part Name / Spec:</label>
+                                        <label class="form-label small fw-bold">Spare Part Name (spec):</label>
                                         <input type="text" name="replaced_part_name" class="form-control form-control-sm" placeholder="e.g. Fuel Filter FF5421">
                                     </div>
                                     <div class="col-md-3">
@@ -347,13 +345,13 @@ HTML_TEMPLATE = """
                                 <th>WO #</th>
                                 <th>Plate No</th>
                                 <th>Current Reading</th>
-                                <th>🔔 Next Service (+5000km / +250hr)</th>
+                                <th>🔔 Next Service Alert</th>
                                 <th>Status</th>
                                 <th>Technician</th>
                                 <th>Start Time</th>
                                 <th>End Time</th>
                                 <th>Effective Hours</th>
-                                <th>⚙️ Replaced Spare Parts</th>
+                                <th>⚙️ Replaced Spare Part</th>
                                 <th>Consumables Cost</th>
                             </tr>
                         </thead>
@@ -362,7 +360,7 @@ HTML_TEMPLATE = """
                             <tr>
                                 <td class="fw-bold">{{ log.wo_no }}</td>
                                 <td><span class="badge bg-secondary">{{ log.vehicle }}</span></td>
-                                <td class="small">{{ log.km_or_hr }}</td>
+                                <td class="small fw-bold">{{ "{:,}".format(log.reading_value) }} {{ log.reading_unit }}</td>
                                 <td><span class="badge bg-info text-dark fw-bold">{{ log.next_service }}</span></td>
                                 <td>
                                     {% if log.work_status == 'Completed' %}
@@ -444,7 +442,6 @@ HTML_TEMPLATE = """
 def dashboard():
     total_hours = sum(l['effective_hours'] for l in garage_data['maintenance_logs'])
     
-    # Calculate replaced spares cost
     total_spares_cost = 0.0
     for l in garage_data['maintenance_logs']:
         for sp in l.get('replaced_spares', []):
@@ -469,13 +466,26 @@ def add_work_order():
     
     eff_hours = calculate_effective_hours(start_raw, finish_raw)
     
-    km_input = request.form.get('km_or_hr', '')
-    next_serv = calculate_next_service(km_input)
+    # Read KM / Hour Inputs
+    try:
+        r_val = int(request.form.get('reading_value', 0))
+    except:
+        r_val = 0
+        
+    r_unit = request.form.get('reading_unit', 'KM')
+    next_serv = calculate_next_service(r_val, r_unit)
     
     # Process Replaced Spare Part
     rep_name = request.form.get('replaced_part_name', '').strip()
-    rep_qty = int(request.form.get('replaced_qty', 0) or 0)
-    rep_price = float(request.form.get('replaced_price', 0) or 0)
+    try:
+        rep_qty = int(request.form.get('replaced_qty', 0))
+    except:
+        rep_qty = 0
+        
+    try:
+        rep_price = float(request.form.get('replaced_price', 0.0))
+    except:
+        rep_price = 0.0
     
     replaced_list = []
     if rep_name and rep_qty > 0:
@@ -493,7 +503,8 @@ def add_work_order():
         "wo_no": request.form.get('wo_no', f'WO-2026-00{new_id}'),
         "vehicle": request.form.get('vehicle', 'N/A'),
         "model": request.form.get('model', 'N/A'),
-        "km_or_hr": km_input,
+        "reading_value": r_val,
+        "reading_unit": r_unit,
         "next_service": next_serv,
         "work_status": request.form.get('work_status', 'Completed'),
         "driver": request.form.get('driver', 'N/A'),
@@ -529,14 +540,15 @@ def export_master_excel():
             'Work Order No': l['wo_no'],
             'Vehicle Plate': l['vehicle'],
             'Vehicle Model': l['model'],
-            'Current KM / Hours': l['km_or_hr'],
-            'Next Service Schedule (+5000/250)': l['next_service'],
+            'Reading Value': l['reading_value'],
+            'Reading Unit': l['reading_unit'],
+            'Next Service Schedule': l['next_service'],
             'Work Status': l['work_status'],
             'Technician': l['technician'],
             'Start Time': l['start_time'],
             'End Time': l['finish_time'],
             'Effective Hours': l['effective_hours'],
-            'Replaced Spare Parts': sp_text,
+            'Replaced Spare Part (spec)': sp_text,
             'Spare Parts Total Cost (ETB)': sp_cost,
             'Consumables Total Cost (ETB)': l['battery_cost'] + l['lubrication_cost'] + l['tire_cost']
         })
