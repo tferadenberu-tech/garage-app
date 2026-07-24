@@ -118,10 +118,10 @@ HTML_TEMPLATE = """
         .stat-line { font-size: 0.92rem; margin-bottom: 10px; color: #475569; font-weight: 500; }
         .cost-line { color: #047857; font-weight: 700; font-size: 1.05rem; margin-top: 15px; background: #ecfdf5; padding: 10px 14px; border-radius: 8px; display: inline-block; border: 1px solid #d1fae5; }
         
-        .total-hours-card { background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%); border-radius: 16px; padding: 24px; border: 1px solid #e2e8f0; height: 100%; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 4px 15px -3px rgba(0,0,0,0.03); }
-        .total-hours-num { font-size: 2.5rem; font-weight: 800; color: #2563eb; letter-spacing: -1px; }
-        .badge-calculated { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%); color: white; font-size: 0.72rem; font-weight: 600; padding: 5px 12px; border-radius: 6px; display: inline-block; width: fit-content; margin-top: 10px; }
-        
+        /* Custom Water Blue Table Headers */
+        .table-water-blue { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important; color: white !important; }
+        .table-water-blue th { color: white !important; font-weight: 600; border-color: #0284c7; }
+
         /* Buttons & Forms Upgrade */
         .btn-primary { background-color: #2563eb; border: none; border-radius: 8px; font-weight: 600; padding: 8px 16px; box-shadow: 0 2px 5px rgba(37,99,235,0.2); }
         .btn-primary:hover { background-color: #1d4ed8; }
@@ -338,7 +338,7 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
 
-                        <!-- Separate Consumables Inputs (ባሉበት እንዲቀጥሉ የተደረገ) -->
+                        <!-- Separate Consumables Inputs -->
                         <div class="col-md-12">
                             <div class="p-3 border rounded bg-light shadow-sm">
                                 <h6 class="fw-bold text-dark mb-3">🔋 Separate Consumables Tracking (Battery, Lubrication, Tire)</h6>
@@ -389,7 +389,7 @@ HTML_TEMPLATE = """
                 </form>
             </div>
 
-            <!-- Table 1: Execution & Work Time Log -->
+            <!-- Table 1: Execution & Work Time Log (Water Blue Header) -->
             <div class="summary-card mb-4" id="execution-log-section">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="fw-bold text-dark m-0">🛠️ Maintenance Execution & Work Time Log</h5>
@@ -399,7 +399,7 @@ HTML_TEMPLATE = """
                 </div>
                 <div class="table-responsive">
                     <table class="table table-bordered table-hover align-middle table-sm">
-                        <thead class="table-dark">
+                        <thead class="table-water-blue">
                             <tr>
                                 <th>WO #</th>
                                 <th>Plate No</th>
@@ -463,12 +463,12 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- Table 2: Spare Parts Inventory -->
+            <!-- Table 2: Spare Parts Inventory (Water Blue Header) -->
             <div class="summary-card mb-4" id="inventory-section">
                 <h5 class="fw-bold text-dark mb-3">⚙️ Spare Parts Inventory</h5>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle table-sm">
-                        <thead class="table-dark">
+                        <thead class="table-water-blue">
                             <tr>
                                 <th>#</th>
                                 <th>Spare Part Name</th>
