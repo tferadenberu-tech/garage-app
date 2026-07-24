@@ -1,6 +1,5 @@
 Flask
 Flask-Login
-Werkzeug
 pandas
 openpyxl
 gunicorn
