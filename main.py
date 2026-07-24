@@ -5,12 +5,12 @@ from flask import Flask, render_template_string, request, redirect, url_for, sen
 
 app = Flask(__name__)
 
-# Initial Data Store
+# --- Core Data Structure ---
 garage_data = {
     "vehicles": [
-        {"id": 1, "plate": "AA-3-12345", "model": "Sino Truck 371", "status": "In Service"},
-        {"id": 2, "plate": "AA-3-67890", "model": "Toyota Hilux 2022", "status": "Ready"},
-        {"id": 3, "plate": "AA-3-11223", "model": "CAT Wheel Loader 950H", "status": "Under Repair"}
+        {"id": 1, "plate": "AA-3-12345", "model": "Sino Truck 371", "driver": "Alemayehu T.", "status": "In Service"},
+        {"id": 2, "plate": "AA-3-67890", "model": "Toyota Hilux 2022", "driver": "Kassahun B.", "status": "Ready"},
+        {"id": 3, "plate": "AA-3-11223", "model": "CAT Wheel Loader 950H", "driver": "Getachew M.", "status": "Under Repair"}
     ],
     "spare_parts": [
         {"id": 1, "part_name": "Oil Filter", "spec": "LF16015 / Fleetguard Heavy Duty", "qty": 18, "unit_price": 1200.00},
@@ -21,7 +21,10 @@ garage_data = {
     "maintenance_logs": [
         {
             "id": 1,
+            "wo_no": "WO-2026-001",
             "vehicle": "AA-3-12345",
+            "model": "Sino Truck 371",
+            "driver": "Alemayehu T.",
             "type": "PM",
             "start_time": "2026-07-20 08:00",
             "finish_time": "2026-07-20 14:30",
@@ -35,7 +38,10 @@ garage_data = {
         },
         {
             "id": 2,
+            "wo_no": "WO-2026-002",
             "vehicle": "AA-3-11223",
+            "model": "CAT Wheel Loader 950H",
+            "driver": "Getachew M.",
             "type": "CM",
             "start_time": "2026-07-22 09:00",
             "finish_time": "2026-07-23 11:00",
@@ -67,152 +73,236 @@ def calculate_effective_hours(start_str, finish_str):
         except:
             return 0.0
 
-# HTML DASHBOARD TEMPLATE WITH FORM
 HTML_TEMPLATE = """
 <!DOCTYPE html>
-<html lang="am">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SteelY R.M.I Garage Maintnace dash Bord</title>
+    <title>SteelY R.M.I Garage Maintenance Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f1f5f9; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; color: #1e293b; }
         .sidebar { min-height: 100vh; background-color: #0f172a; color: white; }
-        .header-title { background: linear-gradient(135deg, #1e293b, #0f172a); color: white; padding: 20px; border-radius: 12px; }
-        .card-custom { border-radius: 12px; border: none; box-shadow: 0 4px 10px rgba(0,0,0,0.06); }
-        .btn-excel { background-color: #16a34a; color: white; font-weight: bold; }
-        .btn-excel:hover { background-color: #15803d; color: white; }
-        .form-section { background-color: #ffffff; border-left: 5px solid #2563eb; }
+        .header-banner { background: #ffffff; border-bottom: 2px solid #e2e8f0; padding: 20px; border-radius: 10px; }
+        .card-summary { background: #ffffff; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 2px 6px rgba(0,0,0,0.02); }
+        .btn-excel { background-color: #10b981; color: white; font-weight: bold; border: none; }
+        .btn-excel:hover { background-color: #059669; color: white; }
+        .form-card { background: #ffffff; border-top: 4px solid #2563eb; border-radius: 10px; }
     </style>
 </head>
 <body>
 <div class="container-fluid">
     <div class="row">
-        <!-- Sidebar -->
+        <!-- Sidebar Navigation -->
         <div class="col-md-2 sidebar p-3">
-            <h4 class="text-info fw-bold">SteelY R.M.I</h4>
-            <p class="text-secondary small">የጋራዥ ጥገና ዳሽቦርድ</p>
+            <h4 class="text-primary fw-bold">SteelY R.M.I</h4>
+            <p class="text-secondary small">Garage Maintenance System</p>
             <hr class="border-secondary">
+            
             <div class="d-grid gap-2 mb-4">
-                <a href="/export/master_excel" class="btn btn-excel btn-sm shadow">
-                    📥 EXPORT MASTER EXCEL
-                </a>
-            </div>
-            <ul class="nav nav-pills flex-column">
-                <li class="nav-item mb-2"><a href="#add-form" class="nav-link text-white fw-bold">➕ አዲስ ጥገና መመዝገቢያ (Form)</a></li>
-                <li class="nav-item mb-2"><a href="#summary" class="nav-link text-white">📊 ማጠቃለያ (Summary)</a></li>
-                <li class="nav-item mb-2"><a href="#maintenance" class="nav-link text-white">🛠️ የጥገና መዝገብ (Logs)</a></li>
-                <li class="nav-item mb-2"><a href="#spares" class="nav-link text-white">⚙️ እስፔር ፓርት (Spare Parts)</a></li>
-            </ul>
-        </div>
-
-        <!-- Main Content -->
-        <div class="col-md-10 p-4">
-            <!-- Header Banner -->
-            <div class="header-title mb-4 d-flex justify-content-between align-items-center">
-                <div>
-                    <h2 class="fw-bold mb-1">SteelY R.M.I Garage Maintnace dash Bord</h2>
-                    <p class="mb-0 text-light opacity-75">Integrated Maintenance, Consumables & Work Time Dashboard</p>
-                </div>
-                <a href="/export/master_excel" class="btn btn-success btn-lg shadow-sm">
+                <a href="/export/master_excel" class="btn btn-excel shadow-sm btn-sm">
                     📊 Export Master Excel (All in One)
                 </a>
             </div>
 
-            <!-- 📝 1. NEW WORK ORDER INPUT FORM -->
-            <div class="card card-custom p-4 mb-4 form-section" id="add-form">
-                <h4 class="fw-bold text-primary mb-3">📝 አዲስ የጥገና እና ወጪ መመዝገቢያ ፎርም (Create Work Order)</h4>
+            <ul class="nav nav-pills flex-column">
+                <li class="nav-item mb-2"><a href="#dashboard-summary" class="nav-link text-white">📊 Weekly & Monthly Summaries</a></li>
+                <li class="nav-item mb-2"><a href="#new-work-order" class="nav-link text-white fw-bold">➕ Create New Work Order</a></li>
+                <li class="nav-item mb-2"><a href="#maintenance-logs" class="nav-link text-white">🛠️ Execution & Work Time Log</a></li>
+                <li class="nav-item mb-2"><a href="#consumables-summary" class="nav-link text-white">🔋 Consumables Summary</a></li>
+                <li class="nav-item mb-2"><a href="#spare-parts" class="nav-link text-white">⚙️ Spare Parts Inventory</a></li>
+            </ul>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="col-md-10 p-4">
+            
+            <!-- Header Bar -->
+            <div class="header-banner mb-4 d-flex justify-content-between align-items-center shadow-sm">
+                <div>
+                    <h2 class="fw-bold mb-1" style="color:#0f172a;">SteelY R.M.I Garage Maintenance Dashboard</h2>
+                    <span class="text-muted small">Integrated Maintenance, Consumables & Work Time Tracking System</span>
+                </div>
+                <div>
+                    <a href="/export/master_excel" class="btn btn-excel btn-lg shadow-sm">
+                        📥 Export Filtered Excel Report
+                    </a>
+                </div>
+            </div>
+
+            <!-- 1. WEEKLY & MONTHLY SUMMARIES + FILTER SECTION -->
+            <div class="row g-3 mb-4" id="dashboard-summary">
+                <!-- Weekly Summary -->
+                <div class="col-md-6">
+                    <div class="card card-summary p-3 h-100">
+                        <h6 class="fw-bold text-primary border-bottom pb-2">WEEKLY SUMMARY (LAST 7 DAYS)</h6>
+                        <div class="row mt-2">
+                            <div class="col-6">
+                                <p class="mb-1">Total Jobs Executed: <strong>{{ summary.total_jobs }}</strong></p>
+                                <p class="mb-1 text-muted small">• Preventive Maintenance (PM): <strong>{{ summary.pm_jobs }}</strong></p>
+                                <p class="mb-1 text-muted small">• Corrective Maintenance (CM): <strong>{{ summary.cm_jobs }}</strong></p>
+                                <p class="mb-0 text-muted small">• Inspection & Checkup: <strong>0</strong></p>
+                            </div>
+                            <div class="col-6 text-end">
+                                <h5 class="fw-bold text-dark mt-2">Spare Parts Cost:</h5>
+                                <h4 class="fw-bold text-success">{{ "{:,.2f}".format(summary.total_spare_cost) }} ETB</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Monthly Summary -->
+                <div class="col-md-6">
+                    <div class="card card-summary p-3 h-100">
+                        <h6 class="fw-bold text-primary border-bottom pb-2">MONTHLY SUMMARY (LAST 30 DAYS)</h6>
+                        <div class="row mt-2">
+                            <div class="col-6">
+                                <p class="mb-1">Total Jobs Executed: <strong>{{ summary.total_jobs }}</strong></p>
+                                <p class="mb-1 text-muted small">• Preventive Maintenance (PM): <strong>{{ summary.pm_jobs }}</strong></p>
+                                <p class="mb-1 text-muted small">• Corrective Maintenance (CM): <strong>{{ summary.cm_jobs }}</strong></p>
+                                <p class="mb-0 text-muted small">• Inspection & Checkup: <strong>0</strong></p>
+                            </div>
+                            <div class="col-6 text-end">
+                                <h5 class="fw-bold text-dark mt-2">Spare Parts Cost:</h5>
+                                <h4 class="fw-bold text-success">{{ "{:,.2f}".format(summary.total_spare_cost) }} ETB</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter Controls -->
+            <div class="card card-summary p-3 mb-4">
+                <div class="row align-items-end g-3">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">From Date:</label>
+                        <input type="date" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold">To Date:</label>
+                        <input type="date" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-primary btn-sm w-100 fw-bold">Filter Reports</button>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="/export/master_excel" class="btn btn-excel btn-sm w-100 shadow-sm">📊 Export Filtered Excel Report</a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. CREATE NEW WORK ORDER FORM -->
+            <div class="card card-summary p-4 mb-4 form-card" id="new-work-order">
+                <h5 class="fw-bold text-primary mb-3">📝 Create New Work Order</h5>
                 <form action="/add_work_order" method="POST">
                     <div class="row g-3">
                         <div class="col-md-3">
-                            <label class="form-label fw-bold small">የሰሌዳ ቁጥር (Vehicle Plate):</label>
-                            <input type="text" name="vehicle" class="form-control" placeholder="e.g. AA-3-12345" required>
+                            <label class="form-label small fw-bold">Serial Number (S/N):</label>
+                            <input type="text" name="sn" class="form-control form-control-sm" placeholder="e.g. SN-001">
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label fw-bold small">የጥገና ዓይነት (Type):</label>
-                            <select name="type" class="form-select" required>
-                                <option value="PM">PM (መደበኛ ጥገና / Preventive)</option>
-                                <option value="CM">CM (ድንገተኛ ጥገና / Corrective)</option>
+                            <label class="form-label small fw-bold">Work Order No (W.O No):</label>
+                            <input type="text" name="wo_no" class="form-control form-control-sm" placeholder="e.g. WO-2026-003" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Vehicle Plate Number:</label>
+                            <input type="text" name="vehicle" class="form-control form-control-sm" placeholder="e.g. AA-3-12345" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Vehicle Type / Model:</label>
+                            <input type="text" name="model" class="form-control form-control-sm" placeholder="e.g. Sino Truck / Hilux">
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Driver Name:</label>
+                            <input type="text" name="driver" class="form-control form-control-sm" placeholder="e.g. Kebede M.">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold">Maintenance Type:</label>
+                            <select name="type" class="form-select form-select-sm" required>
+                                <option value="PM">PM (Preventive Maintenance)</option>
+                                <option value="CM">CM (Corrective Maintenance)</option>
                             </select>
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label fw-bold small">የተጀመረበት ቀንና ሰዓት (Start Time):</label>
-                            <input type="datetime-local" name="start_time" class="form-control" required>
+                            <label class="form-label small fw-bold">Starting Day & Hour:</label>
+                            <input type="datetime-local" name="start_time" class="form-control form-control-sm" required>
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label fw-bold small">የተጠናቀቀበት ቀንና ሰዓት (Finish Time):</label>
-                            <input type="datetime-local" name="finish_time" class="form-control" required>
+                            <label class="form-label small fw-bold">Finished Day & Hour:</label>
+                            <input type="datetime-local" name="finish_time" class="form-control form-control-sm" required>
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label fw-bold small">የተከናወነ የጥገና ሥራ መግለጫ (Work Description):</label>
-                            <input type="text" name="description" class="form-control" placeholder="e.g. Engine Oil Change & Brake Adjustment" required>
+                            <label class="form-label small fw-bold">Work Description:</label>
+                            <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. Engine Overhaul, Oil Filter Replacement" required>
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label fw-bold small">ጥቅም ላይ የዋለ እስፔር ፓርት (Spares Used):</label>
-                            <input type="text" name="spares_used" class="form-control" placeholder="e.g. Oil Filter, Fuel Filter">
+                            <label class="form-label small fw-bold">Spare Part Name Used:</label>
+                            <input type="text" name="spares_used" class="form-control form-control-sm" placeholder="e.g. Oil Filter, Air Filter">
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label fw-bold small">የእስፔር ፓርት ወጪ (Spare Cost - ETB):</label>
-                            <input type="number" step="0.01" name="spare_cost" class="form-control" value="0.00">
+                            <label class="form-label small fw-bold">Spare Parts Cost (ETB):</label>
+                            <input type="number" step="0.01" name="spare_cost" class="form-control form-control-sm" value="0.00">
+                        </div>
+
+                        <!-- Consumables Inputs -->
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold text-warning">Battery Qty (Pcs):</label>
+                            <input type="number" name="battery_qty" class="form-control form-control-sm" value="0">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold text-warning">Battery Cost (ETB):</label>
+                            <input type="number" step="0.01" name="battery_cost" class="form-control form-control-sm" value="0.00">
                         </div>
 
                         <div class="col-md-2">
-                            <label class="form-label fw-bold small text-warning">ባታሪ ብዛት (Battery Qty):</label>
-                            <input type="number" name="battery_qty" class="form-control" value="0">
+                            <label class="form-label small fw-bold text-info">Lubrication Qty (Liters):</label>
+                            <input type="number" step="0.1" name="lubrication_qty" class="form-control form-control-sm" value="0.0">
                         </div>
                         <div class="col-md-2">
-                            <label class="form-label fw-bold small text-warning">ባታሪ ወጪ (Battery Cost):</label>
-                            <input type="number" step="0.01" name="battery_cost" class="form-control" value="0.00">
-                        </div>
-
-                        <div class="col-md-2">
-                            <label class="form-label fw-bold small text-info">ሉብሪኬሽን/ዘይት (Liters):</label>
-                            <input type="number" step="0.1" name="lubrication_qty" class="form-control" value="0.0">
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label fw-bold small text-info">ሉብሪኬሽን ወጪ (Lubricant Cost):</label>
-                            <input type="number" step="0.01" name="lubrication_cost" class="form-control" value="0.00">
+                            <label class="form-label small fw-bold text-info">Lubrication Cost (ETB):</label>
+                            <input type="number" step="0.01" name="lubrication_cost" class="form-control form-control-sm" value="0.00">
                         </div>
 
                         <div class="col-md-2">
-                            <label class="form-label fw-bold small text-danger">ጎማ ብዛት (Tire Qty):</label>
-                            <input type="number" name="tire_qty" class="form-control" value="0">
+                            <label class="form-label small fw-bold text-danger">Tire Qty (Pcs):</label>
+                            <input type="number" name="tire_qty" class="form-control form-control-sm" value="0">
                         </div>
                         <div class="col-md-2">
-                            <label class="form-label fw-bold small text-danger">ጎማ ወጪ (Tire Cost):</label>
-                            <input type="number" step="0.01" name="tire_cost" class="form-control" value="0.00">
+                            <label class="form-label small fw-bold text-danger">Tire Cost (ETB):</label>
+                            <input type="number" step="0.01" name="tire_cost" class="form-control form-control-sm" value="0.00">
                         </div>
 
                         <div class="col-md-12 text-end mt-3">
-                            <button type="submit" class="btn btn-primary px-4 fw-bold">💾 መዝግብ (Save Work Order)</button>
+                            <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold">💾 Save Work Order & Calculate Time</button>
                         </div>
                     </div>
                 </form>
             </div>
 
-            <!-- Weekly / Monthly Consumables Summary -->
-            <div class="card card-custom p-4 mb-4" id="summary">
-                <h4 class="fw-bold text-dark mb-3">🔋 Weekly & Monthly Consumables Summary (ባታሪ፣ ሉብሪኬሽን እና ጎማ ማጠቃለያ)</h4>
+            <!-- 3. CONSUMABLES SUMMARY -->
+            <div class="card card-summary p-4 mb-4" id="consumables-summary">
+                <h5 class="fw-bold text-dark mb-3">🔋 Weekly & Monthly Consumables Summary</h5>
                 <div class="row g-3">
                     <div class="col-md-4">
-                        <div class="p-3 border rounded bg-white border-start border-warning border-4">
-                            <h6 class="text-muted fw-bold">Total Battery (ባታሪ)</h6>
+                        <div class="p-3 border rounded bg-white border-start border-warning border-4 shadow-sm">
+                            <h6 class="text-muted fw-bold">Total Battery</h6>
                             <p class="mb-1"><strong>Qty:</strong> {{ summary.total_battery_qty }} Pcs</p>
                             <p class="mb-0 text-primary fw-bold"><strong>Cost:</strong> {{ "{:,.2f}".format(summary.total_battery_cost) }} ETB</p>
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <div class="p-3 border rounded bg-white border-start border-info border-4">
-                            <h6 class="text-muted fw-bold">Total Lubrication (ዘይት/ቅባት)</h6>
+                        <div class="p-3 border rounded bg-white border-start border-info border-4 shadow-sm">
+                            <h6 class="text-muted fw-bold">Total Lubrication</h6>
                             <p class="mb-1"><strong>Qty:</strong> {{ summary.total_lubrication_qty }} Liters</p>
                             <p class="mb-0 text-primary fw-bold"><strong>Cost:</strong> {{ "{:,.2f}".format(summary.total_lubrication_cost) }} ETB</p>
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <div class="p-3 border rounded bg-white border-start border-danger border-4">
-                            <h6 class="text-muted fw-bold">Total Tires (ጎማ)</h6>
+                        <div class="p-3 border rounded bg-white border-start border-danger border-4 shadow-sm">
+                            <h6 class="text-muted fw-bold">Total Tires</h6>
                             <p class="mb-1"><strong>Qty:</strong> {{ summary.total_tire_qty }} Pcs</p>
                             <p class="mb-0 text-primary fw-bold"><strong>Cost:</strong> {{ "{:,.2f}".format(summary.total_tire_cost) }} ETB</p>
                         </div>
@@ -220,11 +310,11 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- Maintenance Table -->
-            <div class="card card-custom p-4 mb-4" id="maintenance">
-                <h4 class="fw-bold text-dark mb-3">🛠️ Work Time & Maintenance Execution Log</h4>
+            <!-- 4. WORK TIME & MAINTENANCE LOG TABLE -->
+            <div class="card card-summary p-4 mb-4" id="maintenance-logs">
+                <h5 class="fw-bold text-dark mb-3">🛠️ Work Time & Maintenance Execution Log</h5>
                 <div class="table-responsive">
-                    <table class="table table-bordered align-middle">
+                    <table class="table table-bordered align-middle table-sm">
                         <thead class="table-dark">
                             <tr>
                                 <th>WO #</th>
@@ -232,18 +322,18 @@ HTML_TEMPLATE = """
                                 <th>Type</th>
                                 <th>Start Date & Hour</th>
                                 <th>Finished Date & Hour</th>
-                                <th>Effective Work Time</th>
+                                <th>Total Effective Work Time</th>
                                 <th>Work Description</th>
-                                <th>Battery</th>
-                                <th>Lubrication</th>
-                                <th>Tire</th>
+                                <th>Battery (Qty/Cost)</th>
+                                <th>Lubrication (Qty/Cost)</th>
+                                <th>Tire (Qty/Cost)</th>
                                 <th>Spare Cost (ETB)</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for log in data.maintenance_logs %}
                             <tr>
-                                <td>WO-{{ log.id }}</td>
+                                <td class="fw-bold">{{ log.wo_no }}</td>
                                 <td><span class="badge bg-secondary">{{ log.vehicle }}</span></td>
                                 <td><span class="badge bg-{{ 'success' if log.type == 'PM' else 'danger' }}">{{ log.type }}</span></td>
                                 <td class="small">{{ log.start_time }}</td>
@@ -261,11 +351,11 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- Spare Parts Table -->
-            <div class="card card-custom p-4 mb-4" id="spares">
-                <h4 class="fw-bold text-dark mb-3">⚙️ Spare Parts Inventory & Specifications</h4>
+            <!-- 5. SPARE PARTS INVENTORY WITH SPEC -->
+            <div class="card card-summary p-4 mb-4" id="spare-parts">
+                <h5 class="fw-bold text-dark mb-3">⚙️ Spare Parts Inventory & Specifications</h5>
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle">
+                    <table class="table table-hover align-middle table-sm">
                         <thead class="table-dark">
                             <tr>
                                 <th>#</th>
@@ -297,10 +387,13 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# ROUTES
 @app.route('/')
 def dashboard():
     summary = {
+        "total_jobs": len(garage_data['maintenance_logs']),
+        "pm_jobs": sum(1 for l in garage_data['maintenance_logs'] if l['type'] == 'PM'),
+        "cm_jobs": sum(1 for l in garage_data['maintenance_logs'] if l['type'] == 'CM'),
+        "total_spare_cost": sum(l['spare_cost'] for l in garage_data['maintenance_logs']),
         "total_battery_qty": sum(l['battery_qty'] for l in garage_data['maintenance_logs']),
         "total_battery_cost": sum(l['battery_cost'] for l in garage_data['maintenance_logs']),
         "total_lubrication_qty": sum(l['lubrication_qty'] for l in garage_data['maintenance_logs']),
@@ -323,7 +416,10 @@ def add_work_order():
     new_id = len(garage_data['maintenance_logs']) + 1
     new_log = {
         "id": new_id,
+        "wo_no": request.form.get('wo_no', f'WO-2026-00{new_id}'),
         "vehicle": request.form.get('vehicle', 'N/A'),
+        "model": request.form.get('model', 'N/A'),
+        "driver": request.form.get('driver', 'N/A'),
         "type": request.form.get('type', 'PM'),
         "start_time": start_disp,
         "finish_time": finish_disp,
@@ -347,14 +443,17 @@ def export_master_excel():
     
     logs_df = pd.DataFrame(garage_data['maintenance_logs'])
     logs_df.rename(columns={
-        'id': 'Work Order ID',
+        'id': 'ID',
+        'wo_no': 'Work Order No',
         'vehicle': 'Vehicle Plate',
+        'model': 'Vehicle Model',
+        'driver': 'Driver Name',
         'type': 'Type (PM/CM)',
-        'start_time': 'Starting Date & Hour',
-        'finish_time': 'Finished Date & Hour',
-        'effective_hours': 'Effective Work Time (Hours)',
-        'description': 'Work Executed',
-        'spares_used': 'Spares Used',
+        'start_time': 'Starting Day & Hour',
+        'finish_time': 'Finished Day & Hour',
+        'effective_hours': 'Total Effective Work Time (Hours)',
+        'description': 'Work Description',
+        'spares_used': 'Spare Part Name Used',
         'spare_cost': 'Spare Parts Cost (ETB)',
         'battery_qty': 'Battery Qty (Pcs)',
         'battery_cost': 'Battery Cost (ETB)',
@@ -365,15 +464,15 @@ def export_master_excel():
     }, inplace=True)
     
     consumables_summary = [{
-        'Category': 'Battery (ባታሪ)',
+        'Consumable Category': 'Battery',
         'Total Quantity (Pcs)': sum(l['battery_qty'] for l in garage_data['maintenance_logs']),
         'Total Cost (ETB)': sum(l['battery_cost'] for l in garage_data['maintenance_logs'])
     }, {
-        'Category': 'Lubrication (ዘይት/ቅባት)',
+        'Consumable Category': 'Lubrication',
         'Total Quantity (Liters)': sum(l['lubrication_qty'] for l in garage_data['maintenance_logs']),
         'Total Cost (ETB)': sum(l['lubrication_cost'] for l in garage_data['maintenance_logs'])
     }, {
-        'Category': 'Tire (ጎማ)',
+        'Consumable Category': 'Tire',
         'Total Quantity (Pcs)': sum(l['tire_qty'] for l in garage_data['maintenance_logs']),
         'Total Cost (ETB)': sum(l['tire_cost'] for l in garage_data['maintenance_logs'])
     }]
