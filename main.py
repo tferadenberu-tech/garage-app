@@ -118,9 +118,19 @@ HTML_TEMPLATE = """
         .stat-line { font-size: 0.92rem; margin-bottom: 10px; color: #475569; font-weight: 500; }
         .cost-line { color: #047857; font-weight: 700; font-size: 1.05rem; margin-top: 15px; background: #ecfdf5; padding: 10px 14px; border-radius: 8px; display: inline-block; border: 1px solid #d1fae5; }
         
-        /* Custom Water Blue Table Headers */
-        .table-water-blue { background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%) !important; color: white !important; }
-        .table-water-blue th { color: white !important; font-weight: 600; border-color: #0284c7; }
+        /* Fixed Water Blue Table Headers with High Contrast White Text */
+        table.table thead.table-water-blue, 
+        .table-water-blue { 
+            background: #0284c7 !important; 
+            background-color: #0284c7 !important; 
+        }
+        table.table thead.table-water-blue th, 
+        .table-water-blue th { 
+            background-color: #0284c7 !important; 
+            color: #ffffff !important; 
+            font-weight: 700 !important; 
+            border-color: #0284c7 !important; 
+        }
 
         /* Buttons & Forms Upgrade */
         .btn-primary { background-color: #2563eb; border: none; border-radius: 8px; font-weight: 600; padding: 8px 16px; box-shadow: 0 2px 5px rgba(37,99,235,0.2); }
@@ -293,7 +303,7 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
 
-                        <!-- Start Date & Time and End Date & Time (ጎን ለጎን) -->
+                        <!-- Start Date & Time and End Date & Time -->
                         <div class="col-md-3">
                             <label class="form-label small fw-bold text-primary">🗓️ Start Date & Time:</label>
                             <input type="datetime-local" name="start_time" class="form-control form-control-sm border-primary" required>
@@ -414,7 +424,7 @@ HTML_TEMPLATE = """
                                 <th>Battery Cost</th>
                                 <th>Lubrication Cost</th>
                                 <th>Tire Cost</th>
-                                <th class="text-center bg-danger text-white">Action (Delete)</th>
+                                <th class="text-center text-white">Action (Delete)</th>
                             </tr>
                         </thead>
                         <tbody>
