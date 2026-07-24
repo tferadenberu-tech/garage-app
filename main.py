@@ -15,7 +15,7 @@ garage_data = {
         {"id": 3, "part_name": "Brake Shoe Set", "spec": "Rear Axle / Heavy Duty Standard", "qty": 8, "unit_price": 4500.00}
     ],
     "technicians_list": [
-        "Mekonnen Kebede", "Abebe Kassahun", "Dawit Tadesse", "Kassahun Bekele", "Solomon Worku", "Ephrem Hailu"
+        "አቶ ምህረት", "አቶ ኢብራሂም", "መኮንን ከበደ", "አበበ ካሳሁን", "ዳዊት ታደሰ"
     ],
     "maintenance_logs": [
         {
@@ -27,8 +27,8 @@ garage_data = {
             "reading_value": 124500,
             "reading_unit": "KM",
             "next_service": "129,500 KM (+5000)",
-            "driver": "Alemayehu T.",
-            "technicians": ["Mekonnen Kebede", "Dawit Tadesse"],
+            "driver": "አለማየሁ ተ.",
+            "technicians": ["አቶ ምህረት", "አቶ ኢብራሂም"],
             "type": "PM",
             "work_status": "Completed",
             "start_time": "2026-07-20 08:00",
@@ -69,7 +69,7 @@ def calculate_next_service(val, unit):
         next_val = val_int + 5000
         return f"{next_val:,} KM (+5000)"
 
-# --- Frontend HTML Template with Fixed Assign Technicians & Delete/Reset Buttons ---
+# --- Frontend HTML Template with Technicians Manager & Checkboxes ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -129,6 +129,7 @@ HTML_TEMPLATE = """
 
             <nav class="mt-3">
                 <a href="#summary-section" class="nav-link-custom">📊 Summaries & Filter</a>
+                <a href="#technicians-section" class="nav-link-custom">👥 Manage Technicians</a>
                 <a href="#create-wo-section" class="nav-link-custom">➕ Create Work Order</a>
                 <a href="#execution-log-section" class="nav-link-custom">🛠️ Execution & Log</a>
                 <a href="#inventory-section" class="nav-link-custom">⚙️ Spare Inventory</a>
@@ -209,6 +210,58 @@ HTML_TEMPLATE = """
                 </form>
             </div>
 
+            <!-- Manage Technicians Section (Add / Edit / Delete) -->
+            <div class="summary-card mb-4" id="technicians-section">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold text-success m-0">👥 Manage Technicians (መካኒኮችን መመዝገቢያና ማስተካከያ)</h5>
+                </div>
+                
+                <!-- Add New Technician Form -->
+                <form action="/add_technician" method="POST" class="row g-2 mb-3 align-items-center">
+                    <div class="col-md-4">
+                        <input type="text" name="tech_name" class="form-control form-control-sm" placeholder="የመካኒክ ስም (Full Name)" required>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-success btn-sm fw-bold shadow-sm">➕ አዲስ መካኒክ ጨምር (Add Technician)</button>
+                    </div>
+                </form>
+
+                <!-- List of Existing Technicians with Edit & Delete Options -->
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm align-middle bg-white">
+                        <thead class="table-success text-dark">
+                            <tr>
+                                <th style="width: 10%;">#</th>
+                                <th style="width: 60%;">Technician Name</th>
+                                <th style="width: 30%;" class="text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tech in technicians_list %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td class="fw-bold">
+                                    <!-- Inline Edit Form for each technician -->
+                                    <form action="/edit_technician" method="POST" class="d-flex gap-2 align-items-center m-0">
+                                        <input type="hidden" name="old_name" value="{{ tech }}">
+                                        <input type="text" name="new_name" value="{{ tech }}" class="form-control form-control-sm fw-bold" required>
+                                        <button type="submit" class="btn btn-outline-primary btn-sm px-2 py-0">💾 Save</button>
+                                    </form>
+                                </td>
+                                <td class="text-center">
+                                    <a href="/delete_technician?name={{ tech }}" class="btn btn-outline-danger btn-sm px-2 py-0 fw-bold" onclick="return confirm('ይህንን መካኒክ መሰረዝ ይፈልጋሉ?');">🗑️ Delete</a>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">ምንም መካኒኮች አልተመዘገቡም።</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Form: Create New Work Order -->
             <div class="summary-card mb-4" id="create-wo-section">
                 <div class="form-section-title text-primary fw-bold mb-3 fs-5">
@@ -255,10 +308,10 @@ HTML_TEMPLATE = """
                         </div>
                         <div class="col-md-3">
                             <label class="form-label small fw-bold">Driver Name:</label>
-                            <input type="text" name="driver" class="form-control form-control-sm" placeholder="e.g. Abebe K.">
+                            <input type="text" name="driver" class="form-control form-control-sm" placeholder="e.g. አበበ ከ.">
                         </div>
                         
-                        <!-- Multi-Assign Technicians Section (Prominent Checkboxes) -->
+                        <!-- Multi-Assign Technicians Section (Dynamically Loaded from your saved list) -->
                         <div class="col-md-4">
                             <label class="form-label small fw-bold text-success">👥 +Assign Technicians (Select Multiple):</label>
                             <div class="technician-checkbox-box shadow-sm">
@@ -651,6 +704,43 @@ def dashboard():
         monthly=monthly,
         user=session.get('user')
     )
+
+# --- Technicians Management Routes ---
+@app.route('/add_technician', methods=['POST'])
+def add_technician():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    name = request.form.get('tech_name', '').strip()
+    if name and name not in garage_data['technicians_list']:
+        garage_data['technicians_list'].append(name)
+    return redirect(url_for('dashboard') + '#technicians-section')
+
+@app.route('/edit_technician', methods=['POST'])
+def edit_technician():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    old_name = request.form.get('old_name', '').strip()
+    new_name = request.form.get('new_name', '').strip()
+    
+    if old_name in garage_data['technicians_list'] and new_name:
+        idx = garage_data['technicians_list'].index(old_name)
+        garage_data['technicians_list'][idx] = new_name
+        
+        # Update inside existing logs as well
+        for log in garage_data['maintenance_logs']:
+            if 'technicians' in log:
+                log['technicians'] = [new_name if t == old_name else t for t in log['technicians']]
+                
+    return redirect(url_for('dashboard') + '#technicians-section')
+
+@app.route('/delete_technician')
+def delete_technician():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    name = request.args.get('name', '').strip()
+    if name in garage_data['technicians_list']:
+        garage_data['technicians_list'].remove(name)
+    return redirect(url_for('dashboard') + '#technicians-section')
 
 @app.route('/add_work_order', methods=['POST'])
 def add_work_order():
