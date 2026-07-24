@@ -9,23 +9,17 @@ app = Flask(__name__)
 garage_data = {
     "current_user": {
         "name": "System Admin",
-        "role": "Administrator",
-        "status": "Active"
+        "role": "Administrator"
     },
-    "vehicles": [
-        {"id": 1, "plate": "AA-3-12345", "model": "Sino Truck 371", "driver": "Alemayehu T."},
-        {"id": 2, "plate": "AA-3-67890", "model": "Toyota Hilux 2022", "driver": "Kassahun B."},
-        {"id": 3, "plate": "AA-3-11223", "model": "CAT Wheel Loader 950H", "driver": "Getachew M."}
-    ],
     "spare_parts": [
         {"id": 1, "part_name": "Oil Filter", "spec": "LF16015 / Heavy Duty", "qty": 20, "unit_price": 1200.00},
         {"id": 2, "part_name": "Fuel Filter", "spec": "FF5421 / High Efficiency", "qty": 15, "unit_price": 1800.00},
         {"id": 3, "part_name": "Brake Shoe Set", "spec": "Rear Axle / Heavy Duty Standard", "qty": 8, "unit_price": 4500.00}
     ],
     "technicians": [
-        {"name": "Mekonnen Kebede", "lead_jobs": 5, "total_hours": 32.5, "rank": 1, "score": "98%"},
-        {"name": "Tadesse Hailu", "lead_jobs": 4, "total_hours": 28.0, "rank": 2, "score": "92%"},
-        {"name": "Dawit Girma", "lead_jobs": 3, "total_hours": 22.5, "rank": 3, "score": "87%"}
+        {"rank": 1, "name": "Mekonnen Kebede", "lead_jobs": 5, "total_hours": 32.5, "score": "98%"},
+        {"rank": 2, "name": "Tadesse Hailu", "lead_jobs": 4, "total_hours": 28.0, "score": "92%"},
+        {"rank": 3, "name": "Dawit Girma", "lead_jobs": 3, "total_hours": 22.5, "score": "87%"}
     ],
     "maintenance_logs": [
         {
@@ -34,19 +28,15 @@ garage_data = {
             "wo_no": "WO-2026-001",
             "vehicle": "AA-3-12345",
             "model": "Sino Truck 371",
+            "km_or_hr": "124,500 km",
             "driver": "Alemayehu T.",
             "technician": "Mekonnen Kebede",
             "type": "PM",
             "work_status": "Completed",
-            "km_or_hr": "124,500 km",
             "start_time": "2026-07-20 08:00",
             "finish_time": "2026-07-20 14:30",
             "effective_hours": 6.5,
             "description": "Engine Oil & Filter Change + System Inspection",
-            "replaced_spares": [
-                {"name": "Oil Filter", "spec": "LF16015", "qty": 1, "cost": 1200.0},
-                {"name": "Fuel Filter", "spec": "FF5421", "qty": 1, "cost": 1800.0}
-            ],
             "spare_cost": 3000.00,
             "battery_qty": 0, "battery_cost": 0.0,
             "lubrication_qty": 20.0, "lubrication_cost": 4500.0,
@@ -58,16 +48,15 @@ garage_data = {
             "wo_no": "WO-2026-002",
             "vehicle": "AA-3-11223",
             "model": "CAT Wheel Loader 950H",
+            "km_or_hr": "8,450 hrs",
             "driver": "Getachew M.",
             "technician": "Tadesse Hailu",
             "type": "CM",
             "work_status": "In Progress",
-            "km_or_hr": "8,450 hrs",
             "start_time": "2026-07-22 09:00",
             "finish_time": "2026-07-23 11:00",
             "effective_hours": 26.0,
             "description": "Hydraulic Pump Repair + Battery & Rear Tires Replacement",
-            "replaced_spares": [],
             "spare_cost": 0.00,
             "battery_qty": 2, "battery_cost": 18000.0,
             "lubrication_qty": 40.0, "lubrication_cost": 9000.0,
@@ -93,128 +82,150 @@ def calculate_effective_hours(start_str, finish_str):
         except:
             return 0.0
 
-# --- Frontend HTML Template ---
+# --- Frontend HTML Template matching Exact UI Design ---
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SteelY R.M.I Garage Maintenance Dashboard</title>
+    <title>SteelY Garage Fleet Dashboard - SteelY R.M.I Garage Maintenance Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; color: #1e293b; }
-        .sidebar { min-height: 100vh; background-color: #0f172a; color: white; }
-        .header-banner { background: #ffffff; border-bottom: 2px solid #e2e8f0; padding: 20px; border-radius: 10px; }
-        .card-summary { background: #ffffff; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 2px 6px rgba(0,0,0,0.02); }
-        .btn-excel { background-color: #10b981; color: white; font-weight: bold; border: none; }
-        .btn-excel:hover { background-color: #059669; color: white; }
-        .form-card { background: #ffffff; border-top: 4px solid #2563eb; border-radius: 10px; }
-        .admin-badge { background-color: #dc2626; color: white; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #eef2f5; color: #1f2937; }
+        .sidebar { background-color: #111827; min-height: 100vh; color: #9ca3af; padding: 20px 15px; }
+        .sidebar .brand-title { color: #3b82f6; font-size: 1.5rem; font-weight: bold; margin-bottom: 5px; }
+        .admin-badge { background-color: #ef4444; color: white; font-size: 0.7rem; font-weight: bold; padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 15px; }
+        .btn-export-main { background-color: #10b981; color: white; font-weight: 600; border: none; border-radius: 6px; width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 25px; }
+        .btn-export-main:hover { background-color: #059669; color: white; }
+        .nav-link-custom { color: #d1d5db; text-decoration: none; display: block; padding: 10px 0; font-size: 0.95rem; font-weight: 500; }
+        .nav-link-custom:hover { color: #ffffff; }
+        
+        .main-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 25px; }
+        .main-title { font-size: 2.1rem; font-weight: 800; color: #111827; margin-bottom: 2px; }
+        .main-subtitle { color: #6b7280; font-size: 0.95rem; }
+        .user-box { text-align: right; }
+        .user-name { font-weight: 700; color: #1f2937; display: block; }
+        .user-role { background-color: #ef4444; color: white; font-size: 0.75rem; font-weight: bold; padding: 2px 8px; border-radius: 4px; }
+        .btn-header-export { background-color: #10b981; color: white; font-weight: 600; padding: 8px 16px; border-radius: 6px; text-decoration: none; }
+        .btn-header-export:hover { background-color: #059669; color: white; }
+
+        .summary-card { background: #ffffff; border-radius: 8px; padding: 18px; border: 1px solid #e5e7eb; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .summary-card h6 { color: #2563eb; font-weight: 700; font-size: 0.85rem; letter-spacing: 0.5px; border-bottom: 1px solid #f3f4f6; padding-bottom: 8px; margin-bottom: 12px; }
+        .stat-line { font-size: 0.9rem; margin-bottom: 6px; color: #374151; }
+        .cost-line { color: #059669; font-weight: 700; font-size: 0.95rem; margin-top: 10px; }
+        
+        .total-hours-card { background: #ffffff; border-radius: 8px; padding: 18px; border: 1px solid #e5e7eb; height: 100%; display: flex; flex-direction: column; justify-content: center; }
+        .total-hours-num { font-size: 2.2rem; font-weight: 800; color: #2563eb; }
+        .total-hours-unit { font-size: 1rem; color: #2563eb; font-weight: 600; }
+        .badge-calculated { background-color: #06b6d4; color: white; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; display: inline-block; width: fit-content; margin-top: 8px; }
+
+        .filter-card { background: #ffffff; border-radius: 8px; padding: 15px; border: 1px solid #e5e7eb; margin-bottom: 25px; }
+        .form-section-title { font-size: 1.1rem; font-weight: 700; color: #2563eb; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
     </style>
 </head>
 <body>
-<div class="container-fluid">
-    <div class="row">
-        <!-- Sidebar Navigation -->
-        <div class="col-md-2 sidebar p-3">
-            <h4 class="text-primary fw-bold">SteelY R.M.I</h4>
-            <p class="text-secondary small mb-1">Garage Maintenance System</p>
-            <div class="mb-3">
-                <span class="admin-badge">👑 ADMIN CONTROL</span>
-            </div>
-            <hr class="border-secondary">
+<div class="container-fluid p-0">
+    <div class="row g-0">
+        
+        <!-- Left Sidebar Navigation -->
+        <div class="col-md-2 sidebar">
+            <div class="brand-title">SteelY R.M.I</div>
+            <div class="admin-badge">👑 ADMIN CONTROL</div>
             
-            <div class="d-grid gap-2 mb-4">
-                <a href="/export/master_excel" class="btn btn-excel shadow-sm btn-sm">
-                    📊 Export Master Excel
-                </a>
-            </div>
+            <a href="/export/master_excel" class="btn btn-export-main shadow-sm">
+                📊 Export Master Excel
+            </a>
 
-            <ul class="nav nav-pills flex-column">
-                <li class="nav-item mb-2"><a href="#dashboard-summary" class="nav-link text-white">📊 Summaries & Filter</a></li>
-                <li class="nav-item mb-2"><a href="#new-work-order" class="nav-link text-white fw-bold">➕ Create New Work Order</a></li>
-                <li class="nav-item mb-2"><a href="#maintenance-logs" class="nav-link text-white">🛠️ Execution & Work Time Log</a></li>
-                <li class="nav-item mb-2"><a href="#consumables-summary" class="nav-link text-white">🔋 Consumables Summary</a></li>
-                <li class="nav-item mb-2"><a href="#tech-rank" class="nav-link text-white">🏆 Tech Performance Rank</a></li>
-                <li class="nav-item mb-2"><a href="#spare-parts" class="nav-link text-white">⚙️ Spare Parts Inventory</a></li>
-            </ul>
+            <nav class="mt-2">
+                <a href="#summary-section" class="nav-link-custom">📊 Summaries & Filter</a>
+                <a href="#create-wo-section" class="nav-link-custom">➕ Create New Work Order</a>
+                <a href="#execution-log-section" class="nav-link-custom">🛠️ Execution & Work Time Log</a>
+                <a href="#consumables-section" class="nav-link-custom">🔋 Consumables Summary</a>
+                <a href="#tech-rank-section" class="nav-link-custom">🏆 Tech Performance Rank</a>
+                <a href="#inventory-section" class="nav-link-custom">⚙️ Spare Parts Inventory</a>
+            </nav>
         </div>
 
-        <!-- Main Content Area -->
+        <!-- Right Main Workspace -->
         <div class="col-md-10 p-4">
             
-            <!-- Header Bar -->
-            <div class="header-banner mb-4 d-flex justify-content-between align-items-center shadow-sm">
+            <!-- Top Header Banner -->
+            <div class="main-header">
                 <div>
-                    <h2 class="fw-bold mb-1" style="color:#0f172a;">SteelY R.M.I Garage Maintenance Dashboard</h2>
-                    <span class="text-muted small">Integrated Work Time, Consumables & Fleet Maintenance Tracking</span>
+                    <h1 class="main-title">SteelY R.M.I Garage Maintenance Dashboard</h1>
+                    <div class="main-subtitle">Integrated Work Time, Consumables & Fleet Maintenance Tracking</div>
                 </div>
-                <div class="d-flex align-items-center gap-3">
-                    <div class="text-end">
-                        <span class="d-block fw-bold text-dark">{{ data.current_user.name }}</span>
-                        <span class="badge bg-danger">{{ data.current_user.role }}</span>
+                <div class="d-flex align-items-center gap-4">
+                    <div class="user-box">
+                        <span class="user-name">{{ data.current_user.name }}</span>
+                        <span class="user-role">{{ data.current_user.role }}</span>
                     </div>
-                    <a href="/export/master_excel" class="btn btn-excel btn-md shadow-sm">
-                        📥 Export Master Excel Report
+                    <a href="/export/master_excel" class="btn-header-export shadow-sm">
+                        📊 Export Master Excel
                     </a>
                 </div>
             </div>
 
-            <!-- 1. SUMMARIES SECTION -->
-            <div class="row g-3 mb-4" id="dashboard-summary">
+            <!-- Top Summary Cards -->
+            <div class="row g-3 mb-4" id="summary-section">
                 <div class="col-md-4">
-                    <div class="card card-summary p-3 h-100">
-                        <h6 class="fw-bold text-primary border-bottom pb-2">WEEKLY SUMMARY (LAST 7 DAYS)</h6>
-                        <p class="mb-1">Total Jobs Executed: <strong>{{ summary.total_jobs }}</strong></p>
-                        <p class="mb-1 text-muted small">• PM: <strong>{{ summary.pm_jobs }}</strong> | CM: <strong>{{ summary.cm_jobs }}</strong></p>
-                        <p class="mb-1 text-muted small">• Total Work Hours: <strong>{{ summary.total_work_hours }} hrs</strong></p>
-                        <h6 class="fw-bold text-success mt-2">Spare Parts Cost: {{ "{:,.2f}".format(summary.total_spare_cost) }} ETB</h6>
+                    <div class="summary-card">
+                        <h6>WEEKLY SUMMARY (LAST 7 DAYS)</h6>
+                        <div class="stat-line">Total Jobs Executed: <strong>{{ summary.total_jobs }}</strong></div>
+                        <div class="stat-line text-muted">• PM: <strong>{{ summary.pm_jobs }}</strong> | CM: <strong>{{ summary.cm_jobs }}</strong></div>
+                        <div class="stat-line text-muted">• Total Work Hours: <strong>{{ summary.total_work_hours }} hrs</strong></div>
+                        <div class="cost-line">Spare Parts Cost: {{ "{:,.2f}".format(summary.total_spare_cost) }} ETB</div>
                     </div>
                 </div>
 
                 <div class="col-md-4">
-                    <div class="card card-summary p-3 h-100">
-                        <h6 class="fw-bold text-primary border-bottom pb-2">MONTHLY SUMMARY (LAST 30 DAYS)</h6>
-                        <p class="mb-1">Total Jobs Executed: <strong>{{ summary.total_jobs }}</strong></p>
-                        <p class="mb-1 text-muted small">• PM: <strong>{{ summary.pm_jobs }}</strong> | CM: <strong>{{ summary.cm_jobs }}</strong></p>
-                        <p class="mb-1 text-muted small">• Total Work Hours: <strong>{{ summary.total_work_hours }} hrs</strong></p>
-                        <h6 class="fw-bold text-success mt-2">Spare Parts Cost: {{ "{:,.2f}".format(summary.total_spare_cost) }} ETB</h6>
+                    <div class="summary-card">
+                        <h6>MONTHLY SUMMARY (LAST 30 DAYS)</h6>
+                        <div class="stat-line">Total Jobs Executed: <strong>{{ summary.total_jobs }}</strong></div>
+                        <div class="stat-line text-muted">• PM: <strong>{{ summary.pm_jobs }}</strong> | CM: <strong>{{ summary.cm_jobs }}</strong></div>
+                        <div class="stat-line text-muted">• Total Work Hours: <strong>{{ summary.total_work_hours }} hrs</strong></div>
+                        <div class="cost-line">Spare Parts Cost: {{ "{:,.2f}".format(summary.total_spare_cost) }} ETB</div>
                     </div>
                 </div>
 
                 <div class="col-md-4">
-                    <div class="card card-summary p-3 h-100 bg-light">
-                        <h6 class="fw-bold text-dark border-bottom pb-2">⏱️ TOTAL EFFECTIVE WORK TIME</h6>
-                        <h2 class="fw-bold text-primary my-2">{{ summary.total_work_hours }} <small class="fs-6">Hours</small></h2>
-                        <span class="badge bg-info text-dark">Calculated across {{ summary.total_jobs }} Work Orders</span>
+                    <div class="total-hours-card">
+                        <div class="text-muted small fw-bold mb-1">⏱️ TOTAL EFFECTIVE WORK TIME</div>
+                        <div>
+                            <span class="total-hours-num">{{ summary.total_work_hours }}</span>
+                            <span class="total-hours-unit">Hours</span>
+                        </div>
+                        <div class="badge-calculated">Calculated across {{ summary.total_jobs }} Work Orders</div>
                     </div>
                 </div>
             </div>
 
-            <!-- Date Filter Controls -->
-            <div class="card card-summary p-3 mb-4">
+            <!-- Filter Controls -->
+            <div class="filter-card">
                 <div class="row align-items-end g-3">
                     <div class="col-md-3">
-                        <label class="form-label small fw-bold">From Date:</label>
+                        <label class="form-label small fw-bold mb-1">From Date:</label>
                         <input type="date" class="form-control form-control-sm">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label small fw-bold">To Date:</label>
+                        <label class="form-label small fw-bold mb-1">To Date:</label>
                         <input type="date" class="form-control form-control-sm">
                     </div>
                     <div class="col-md-3">
                         <button class="btn btn-primary btn-sm w-100 fw-bold">Filter Reports</button>
                     </div>
                     <div class="col-md-3">
-                        <a href="/export/master_excel" class="btn btn-excel btn-sm w-100 shadow-sm">📊 Export Filtered Excel Report</a>
+                        <a href="/export/master_excel" class="btn btn-success btn-sm w-100 fw-bold">📊 Export Filtered Excel Report</a>
                     </div>
                 </div>
             </div>
 
-            <!-- 2. CREATE NEW WORK ORDER FORM -->
-            <div class="card card-summary p-4 mb-4 form-card" id="new-work-order">
-                <h5 class="fw-bold text-primary mb-3">📝 Create New Work Order</h5>
+            <!-- Form: Create New Work Order -->
+            <div class="summary-card mb-4" id="create-wo-section">
+                <div class="form-section-title">
+                    📄 Create New Work Order
+                </div>
                 <form action="/add_work_order" method="POST">
                     <div class="row g-3">
                         <div class="col-md-2">
@@ -254,14 +265,12 @@ HTML_TEMPLATE = """
                             <label class="form-label small fw-bold">Assigned Technician:</label>
                             <input type="text" name="technician" class="form-control form-control-sm" placeholder="e.g. Mekonnen K." required>
                         </div>
-                        
-                        <!-- Requested Time Field #1: Work Start Day and Hour -->
+
+                        <!-- Requested Time Field 1 & 2 -->
                         <div class="col-md-3">
                             <label class="form-label small fw-bold text-primary">🗓️ Work Start Day & Hour:</label>
                             <input type="datetime-local" name="start_time" class="form-control form-control-sm border-primary" required>
                         </div>
-                        
-                        <!-- Requested Time Field #2: End Work Day and Hour -->
                         <div class="col-md-3">
                             <label class="form-label small fw-bold text-primary">🏁 End Work Day & Hour:</label>
                             <input type="datetime-local" name="finish_time" class="form-control form-control-sm border-primary" required>
@@ -272,35 +281,35 @@ HTML_TEMPLATE = """
                             <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. Engine Overhaul, Oil Filter & Tire Replacement" required>
                         </div>
 
-                        <!-- Requested Field #4: Consumables Inputs (Tire, Battery, Lubrication) -->
+                        <!-- Requested Feature 4: Consumables Inputs -->
                         <div class="col-md-12">
-                            <div class="p-3 border rounded bg-light mb-2">
-                                <h6 class="fw-bold text-dark border-bottom pb-2">🔋 Consumables Usage (Battery, Lubrication, Tire)</h6>
+                            <div class="p-3 border rounded bg-light">
+                                <h6 class="fw-bold text-dark mb-2">🔋 Consumables Usage (Battery, Lubrication, Tire)</h6>
                                 <div class="row g-2">
                                     <div class="col-md-2">
-                                        <label class="form-label small fw-bold">Battery Qty (Pcs):</label>
+                                        <label class="form-label small">Battery Qty (Pcs):</label>
                                         <input type="number" name="battery_qty" class="form-control form-control-sm" value="0">
                                     </div>
                                     <div class="col-md-2">
-                                        <label class="form-label small fw-bold">Battery Cost (ETB):</label>
+                                        <label class="form-label small">Battery Cost (ETB):</label>
                                         <input type="number" step="0.01" name="battery_cost" class="form-control form-control-sm" value="0.00">
                                     </div>
 
                                     <div class="col-md-2">
-                                        <label class="form-label small fw-bold">Lubrication Qty (Liters):</label>
+                                        <label class="form-label small">Lubrication Qty (Liters):</label>
                                         <input type="number" step="0.1" name="lubrication_qty" class="form-control form-control-sm" value="0.0">
                                     </div>
                                     <div class="col-md-2">
-                                        <label class="form-label small fw-bold">Lubrication Cost (ETB):</label>
+                                        <label class="form-label small">Lubrication Cost (ETB):</label>
                                         <input type="number" step="0.01" name="lubrication_cost" class="form-control form-control-sm" value="0.00">
                                     </div>
 
                                     <div class="col-md-2">
-                                        <label class="form-label small fw-bold">Tire Qty (Pcs):</label>
+                                        <label class="form-label small">Tire Qty (Pcs):</label>
                                         <input type="number" name="tire_qty" class="form-control form-control-sm" value="0">
                                     </div>
                                     <div class="col-md-2">
-                                        <label class="form-label small fw-bold">Tire Cost (ETB):</label>
+                                        <label class="form-label small">Tire Cost (ETB):</label>
                                         <input type="number" step="0.01" name="tire_cost" class="form-control form-control-sm" value="0.00">
                                     </div>
                                 </div>
@@ -314,11 +323,11 @@ HTML_TEMPLATE = """
                 </form>
             </div>
 
-            <!-- 3. MAINTENANCE EXECUTION & WORK TIME LOG TABLE -->
-            <div class="card card-summary p-4 mb-4" id="maintenance-logs">
+            <!-- Table 1: Execution & Work Time Log -->
+            <div class="summary-card mb-4" id="execution-log-section">
                 <h5 class="fw-bold text-dark mb-3">🛠️ Maintenance Execution & Work Time Log</h5>
                 <div class="table-responsive">
-                    <table class="table table-bordered align-middle table-sm">
+                    <table class="table table-bordered table-hover align-middle table-sm">
                         <thead class="table-dark">
                             <tr>
                                 <th>WO #</th>
@@ -380,8 +389,8 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- 4. CONSUMABLES SUMMARY SECTION -->
-            <div class="card card-summary p-4 mb-4" id="consumables-summary">
+            <!-- Table 2: Consumables Summary -->
+            <div class="summary-card mb-4" id="consumables-section">
                 <h5 class="fw-bold text-dark mb-3">🔋 Consumables Summary (Tire, Battery & Lubrication)</h5>
                 <div class="row g-3">
                     <div class="col-md-4">
@@ -408,8 +417,8 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- 5. TECHNICAL PERFORMANCE RANK -->
-            <div class="card card-summary p-4 mb-4" id="tech-rank">
+            <!-- Table 3: Tech Performance Rank -->
+            <div class="summary-card mb-4" id="tech-rank-section">
                 <h5 class="fw-bold text-dark mb-3">🏆 Technical Work Performance Rank</h5>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle table-sm">
@@ -437,8 +446,8 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- 6. SPARE PARTS INVENTORY -->
-            <div class="card card-summary p-4 mb-4" id="spare-parts">
+            <!-- Table 4: Spare Parts Inventory -->
+            <div class="summary-card mb-4" id="inventory-section">
                 <h5 class="fw-bold text-dark mb-3">⚙️ Spare Parts Inventory</h5>
                 <div class="table-responsive">
                     <table class="table table-hover align-middle table-sm">
@@ -473,7 +482,7 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# --- Routes ---
+# --- App Routes ---
 @app.route('/')
 def dashboard():
     total_hours = sum(l['effective_hours'] for l in garage_data['maintenance_logs'])
@@ -518,7 +527,6 @@ def add_work_order():
         "finish_time": finish_disp,
         "effective_hours": eff_hours,
         "description": request.form.get('description', ''),
-        "replaced_spares": [],
         "spare_cost": 0.0,
         "battery_qty": int(request.form.get('battery_qty', 0) or 0),
         "battery_cost": float(request.form.get('battery_cost', 0) or 0),
@@ -530,7 +538,7 @@ def add_work_order():
     garage_data['maintenance_logs'].append(new_log)
     return redirect(url_for('dashboard'))
 
-# Requested Feature #3: Master Excel Export
+# Master Excel Export Route
 @app.route('/export/master_excel')
 def export_master_excel():
     output = io.BytesIO()
