@@ -410,6 +410,7 @@ HTML_TEMPLATE = """
                     <table class="table table-bordered table-hover align-middle table-sm">
                         <thead class="table-water-blue">
                             <tr>
+                                <th>Serial No (S/N)</th>
                                 <th>WO #</th>
                                 <th>Plate No</th>
                                 <th>Current Reading</th>
@@ -429,6 +430,7 @@ HTML_TEMPLATE = """
                         <tbody>
                             {% for log in logs %}
                             <tr>
+                                <td class="fw-bold text-primary">{{ log.sn }}</td>
                                 <td class="fw-bold">{{ log.wo_no }}</td>
                                 <td><span class="badge bg-secondary">{{ log.vehicle }}</span></td>
                                 <td class="small fw-bold">{{ "{:,}".format(log.reading_value) }} {{ log.reading_unit }}</td>
@@ -464,7 +466,7 @@ HTML_TEMPLATE = """
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="14" class="text-center text-muted py-3">No maintenance logs found.</td>
+                                <td colspan="15" class="text-center text-muted py-3">No maintenance logs found.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -794,6 +796,7 @@ def export_execution_excel():
         sp_cost = sum([sp['total_cost'] for sp in l.get('replaced_spares', [])])
         
         logs_export.append({
+            'Serial Number': l['sn'],
             'Work Order No': l['wo_no'],
             'Vehicle Plate': l['vehicle'],
             'Current Reading': f"{l['reading_value']} {l['reading_unit']}",
@@ -809,8 +812,13 @@ def export_execution_excel():
             'Lubrication Cost (ETB)': l['lubrication_cost'],
             'Tire Cost (ETB)': l['tire_cost']
         })
+    
     logs_df = pd.DataFrame(logs_export)
     
+    # Sort by Serial Number and drop any potential duplicate rows to prevent overlapping/duplication
+    if not logs_df.empty:
+        logs_df = logs_df.sort_values(by='Serial Number', ascending=True).drop_duplicates(subset=['Serial Number', 'Work Order No'], keep='first')
+
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         logs_df.to_excel(writer, sheet_name='Execution & Work Time Log', index=False)
         
@@ -849,7 +857,12 @@ def export_master_excel():
             'Lubrication Cost (ETB)': l['lubrication_cost'],
             'Tire Cost (ETB)': l['tire_cost']
         })
+        
     logs_df = pd.DataFrame(logs_export)
+    
+    # Sort by Serial Number and remove duplicates for Master Excel as well
+    if not logs_df.empty:
+        logs_df = logs_df.sort_values(by='Serial Number', ascending=True).drop_duplicates(subset=['Serial Number', 'Work Order No'], keep='first')
 
     summary_data = [
         {"Report Type": "WEEKLY SUMMARY (Last 7 Days)", "Total Jobs": weekly['total_jobs'], "PM Jobs": weekly['pm_jobs'], "CM Jobs": weekly['cm_jobs'], "Total Work Hours (hrs)": weekly['total_work_hours'], "Spare Parts Total Cost (ETB)": weekly['total_spares_cost'], "Lubricants Cost (ETB)": weekly['total_lubrication_cost'], "Batteries Cost (ETB)": weekly['total_battery_cost'], "Tires Cost (ETB)": weekly['total_tire_cost'], "Total Expenditure (ETB)": weekly['total_expenditure']},
