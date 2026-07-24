@@ -1,17 +1,14 @@
 import io
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
-from flask import Flask, render_template_string, request, redirect, url_for, send_file
+from flask import Flask, render_template_string, request, redirect, url_for, send_file, session
 
 app = Flask(__name__)
+app.secret_key = "steely_garage_secret_key"  # Required for session management
 
 # --- In-Memory System Database ---
 garage_data = {
-    "current_user": {
-        "name": "System Admin",
-        "role": "Administrator"
-    },
     "spare_parts": [
         {"id": 1, "part_name": "Oil Filter", "spec": "LF16015 / Heavy Duty", "qty": 20, "unit_price": 1200.00},
         {"id": 2, "part_name": "Fuel Filter", "spec": "FF5421 / High Efficiency", "qty": 15, "unit_price": 1800.00},
@@ -83,8 +80,10 @@ HTML_TEMPLATE = """
         .sidebar { background-color: #111827; min-height: 100vh; color: #9ca3af; padding: 20px 15px; }
         .sidebar .brand-title { color: #3b82f6; font-size: 1.5rem; font-weight: bold; margin-bottom: 5px; }
         .admin-badge { background-color: #ef4444; color: white; font-size: 0.7rem; font-weight: bold; padding: 3px 8px; border-radius: 4px; display: inline-block; margin-bottom: 15px; }
-        .btn-export-main { background-color: #10b981; color: white; font-weight: 600; border: none; border-radius: 6px; width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 25px; }
+        .btn-export-main { background-color: #10b981; color: white; font-weight: 600; border: none; border-radius: 6px; width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 15px; }
         .btn-export-main:hover { background-color: #059669; color: white; }
+        .btn-logout { background-color: #dc2626; color: white; font-weight: 600; border: none; border-radius: 6px; width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 25px; }
+        .btn-logout:hover { background-color: #b91c1c; color: white; }
         .nav-link-custom { color: #d1d5db; text-decoration: none; display: block; padding: 10px 0; font-size: 0.95rem; font-weight: 500; }
         .nav-link-custom:hover { color: #ffffff; }
         
@@ -118,6 +117,9 @@ HTML_TEMPLATE = """
             <a href="/export/master_excel" class="btn btn-export-main shadow-sm">
                 📊 Export Master Excel
             </a>
+            <a href="/logout" class="btn btn-logout shadow-sm">
+                🚪 Logout System
+            </a>
 
             <nav class="mt-2">
                 <a href="#summary-section" class="nav-link-custom">📊 Summaries & Filter</a>
@@ -138,8 +140,8 @@ HTML_TEMPLATE = """
                 </div>
                 <div class="d-flex align-items-center gap-4">
                     <div class="user-box">
-                        <span class="user-name">{{ data.current_user.name }}</span>
-                        <span class="user-role">{{ data.current_user.role }}</span>
+                        <span class="user-name">{{ user.name }}</span>
+                        <span class="user-role">{{ user.role }}</span>
                     </div>
                     <a href="/export/master_excel" class="btn-header-export shadow-sm">
                         📊 Export Master Excel
@@ -152,20 +154,20 @@ HTML_TEMPLATE = """
                 <div class="col-md-4">
                     <div class="summary-card">
                         <h6>WEEKLY SUMMARY (LAST 7 DAYS)</h6>
-                        <div class="stat-line">Total Jobs Executed: <strong>{{ summary.total_jobs }}</strong></div>
-                        <div class="stat-line text-muted">• PM: <strong>{{ summary.pm_jobs }}</strong> | CM: <strong>{{ summary.cm_jobs }}</strong></div>
-                        <div class="stat-line text-muted">• Total Work Hours: <strong>{{ summary.total_work_hours }} hrs</strong></div>
-                        <div class="cost-line">Spare Parts Cost: {{ "{:,.2f}".format(summary.total_replaced_spares_cost) }} ETB</div>
+                        <div class="stat-line">Total Jobs Executed: <strong>{{ weekly.total_jobs }}</strong></div>
+                        <div class="stat-line text-muted">• PM: <strong>{{ weekly.pm_jobs }}</strong> | CM: <strong>{{ weekly.cm_jobs }}</strong></div>
+                        <div class="stat-line text-muted">• Total Work Hours: <strong>{{ weekly.total_work_hours }} hrs</strong></div>
+                        <div class="cost-line">Spare Parts Cost: {{ "{:,.2f}".format(weekly.total_spares_cost) }} ETB</div>
                     </div>
                 </div>
 
                 <div class="col-md-4">
                     <div class="summary-card">
                         <h6>MONTHLY SUMMARY (LAST 30 DAYS)</h6>
-                        <div class="stat-line">Total Jobs Executed: <strong>{{ summary.total_jobs }}</strong></div>
-                        <div class="stat-line text-muted">• PM: <strong>{{ summary.pm_jobs }}</strong> | CM: <strong>{{ summary.cm_jobs }}</strong></div>
-                        <div class="stat-line text-muted">• Total Work Hours: <strong>{{ summary.total_work_hours }} hrs</strong></div>
-                        <div class="cost-line">Spare Parts Cost: {{ "{:,.2f}".format(summary.total_replaced_spares_cost) }} ETB</div>
+                        <div class="stat-line">Total Jobs Executed: <strong>{{ monthly.total_jobs }}</strong></div>
+                        <div class="stat-line text-muted">• PM: <strong>{{ monthly.pm_jobs }}</strong> | CM: <strong>{{ monthly.cm_jobs }}</strong></div>
+                        <div class="stat-line text-muted">• Total Work Hours: <strong>{{ monthly.total_work_hours }} hrs</strong></div>
+                        <div class="cost-line">Spare Parts Cost: {{ "{:,.2f}".format(monthly.total_spares_cost) }} ETB</div>
                     </div>
                 </div>
 
@@ -173,10 +175,10 @@ HTML_TEMPLATE = """
                     <div class="total-hours-card">
                         <div class="text-muted small fw-bold mb-1">⏱️ TOTAL EFFECTIVE WORK TIME</div>
                         <div>
-                            <span class="total-hours-num">{{ summary.total_work_hours }}</span>
+                            <span class="total-hours-num">{{ monthly.total_work_hours }}</span>
                             <span class="fw-bold text-primary">Hours</span>
                         </div>
-                        <div class="badge-calculated">Calculated across {{ summary.total_jobs }} Work Orders</div>
+                        <div class="badge-calculated">Calculated across Monthly Work Orders</div>
                     </div>
                 </div>
             </div>
@@ -186,7 +188,7 @@ HTML_TEMPLATE = """
                 <div class="form-section-title text-primary fw-bold mb-3">
                     📄 Create New Work Order
                 </div>
-                <form action="/add_work_order" method="POST">
+                <form action="/add_work_order" method="POST" id="wo-form">
                     <div class="row g-3">
                         <div class="col-md-2">
                             <label class="form-label small fw-bold">Serial Number (S/N):</label>
@@ -205,7 +207,6 @@ HTML_TEMPLATE = """
                             <input type="text" name="model" class="form-control form-control-sm" placeholder="e.g. Sino Truck 371">
                         </div>
                         
-                        <!-- KM / Hour Inputs with Auto Next Service Preview -->
                         <div class="col-md-2">
                             <label class="form-label small fw-bold text-danger">Current Reading:</label>
                             <input type="number" name="reading_value" class="form-control form-control-sm border-danger" placeholder="e.g. 125000" required>
@@ -248,25 +249,28 @@ HTML_TEMPLATE = """
                             <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. Engine Maintenance and Spare Parts Replacement" required>
                         </div>
 
-                        <!-- Dynamic +Add Replaced Spare Part Section -->
+                        <!-- Dynamic +Add Replaced Spare Part Section with Auto Calculation -->
                         <div class="col-md-12">
                             <div class="p-3 border rounded bg-light border-warning">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <h6 class="fw-bold text-dark m-0">⚙️ Replaced Spare Parts (Add Multiple Rows)</h6>
+                                    <h6 class="fw-bold text-dark m-0">⚙️ Replaced Spare Parts (Auto Total Calculation)</h6>
                                     <button type="button" class="btn btn-outline-dark btn-sm fw-bold" onclick="addSpareRow()">+ Add Spare Part Row</button>
                                 </div>
                                 <div id="spare-rows-container">
-                                    <div class="row g-2 spare-row mb-2">
-                                        <div class="col-md-5">
-                                            <input type="text" name="spare_name_spec[]" class="form-control form-control-sm" placeholder="Spare Part Name & Spec (e.g. Fuel Filter LF16015)" required>
+                                    <div class="row g-2 spare-row mb-2 align-items-center">
+                                        <div class="col-md-4">
+                                            <input type="text" name="spare_name_spec[]" class="form-control form-control-sm" placeholder="Spare Part Name & Spec" required>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <input type="number" name="spare_qty[]" class="form-control form-control-sm spare-qty" placeholder="Qty" value="1" min="1" required oninput="calculateRowTotal(this)">
                                         </div>
                                         <div class="col-md-3">
-                                            <input type="number" name="spare_qty[]" class="form-control form-control-sm" placeholder="Quantity" value="1" required>
+                                            <input type="number" step="0.01" name="spare_price[]" class="form-control form-control-sm spare-price" placeholder="Unit Price (ETB)" value="0.00" required oninput="calculateRowTotal(this)">
                                         </div>
-                                        <div class="col-md-3">
-                                            <input type="number" step="0.01" name="spare_price[]" class="form-control form-control-sm" placeholder="Unit Price (ETB)" value="0.00" required>
+                                        <div class="col-md-2">
+                                            <span class="small fw-bold text-success row-total-text">0.00 ETB</span>
                                         </div>
-                                        <div class="col-md-1 d-flex align-items-center">
+                                        <div class="col-md-1">
                                             <button type="button" class="btn btn-danger btn-sm w-100" onclick="removeSpareRow(this)">X</button>
                                         </div>
                                     </div>
@@ -274,34 +278,29 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
 
-                        <!-- Consumables Inputs -->
+                        <!-- Consumables Inputs with Auto Calculation -->
                         <div class="col-md-12">
                             <div class="p-3 border rounded bg-light">
-                                <h6 class="fw-bold text-dark mb-2">🔋 Consumables Usage (Battery, Lubrication, Tire)</h6>
-                                <div class="row g-2">
+                                <h6 class="fw-bold text-dark mb-2">🔋 Consumables Usage (Auto Total Calculation)</h6>
+                                <div class="row g-2 align-items-center">
                                     <div class="col-md-2">
-                                        <label class="form-label small">Battery Qty:</label>
-                                        <input type="number" name="battery_qty" class="form-control form-control-sm" value="0">
+                                        <label class="form-label small">Battery Qty / Cost:</label>
+                                        <input type="number" name="battery_qty" id="bat_qty" class="form-control form-control-sm mb-1" value="0" placeholder="Qty" oninput="calcConsumables()">
+                                        <input type="number" step="0.01" name="battery_cost" id="bat_cost" class="form-control form-control-sm" value="0.00" placeholder="Total Cost" oninput="calcConsumables()">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small">Lubrication Qty(L) / Cost:</label>
+                                        <input type="number" step="0.1" name="lubrication_qty" id="lub_qty" class="form-control form-control-sm mb-1" value="0.0" placeholder="Qty (L)">
+                                        <input type="number" step="0.01" name="lubrication_cost" id="lub_cost" class="form-control form-control-sm" value="0.00" placeholder="Total Cost" oninput="calcConsumables()">
                                     </div>
                                     <div class="col-md-2">
-                                        <label class="form-label small">Battery Cost (ETB):</label>
-                                        <input type="number" step="0.01" name="battery_cost" class="form-control form-control-sm" value="0.00">
+                                        <label class="form-label small">Tire Qty / Cost:</label>
+                                        <input type="number" name="tire_qty" id="tire_qty" class="form-control form-control-sm mb-1" value="0" placeholder="Qty">
+                                        <input type="number" step="0.01" name="tire_cost" id="tire_cost" class="form-control form-control-sm" value="0.00" placeholder="Total Cost" oninput="calcConsumables()">
                                     </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label small">Lubrication Qty (L):</label>
-                                        <input type="number" step="0.1" name="lubrication_qty" class="form-control form-control-sm" value="0.0">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label small">Lubrication Cost (ETB):</label>
-                                        <input type="number" step="0.01" name="lubrication_cost" class="form-control form-control-sm" value="0.00">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label small">Tire Qty:</label>
-                                        <input type="number" name="tire_qty" class="form-control form-control-sm" value="0">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label small">Tire Cost (ETB):</label>
-                                        <input type="number" step="0.01" name="tire_cost" class="form-control form-control-sm" value="0.00">
+                                    <div class="col-md-3 d-flex flex-column justify-content-end">
+                                        <span class="small text-muted">Total Consumables Cost:</span>
+                                        <span class="fw-bold text-success fs-5" id="total-consumables-display">0.00 ETB</span>
                                     </div>
                                 </div>
                             </div>
@@ -335,7 +334,7 @@ HTML_TEMPLATE = """
                             </tr>
                         </thead>
                         <tbody>
-                            {% for log in data.maintenance_logs %}
+                            {% for log in logs %}
                             <tr>
                                 <td class="fw-bold">{{ log.wo_no }}</td>
                                 <td><span class="badge bg-secondary">{{ log.vehicle }}</span></td>
@@ -369,13 +368,6 @@ HTML_TEMPLATE = """
                             </tr>
                             {% endfor %}
                         </tbody>
-                        <tfoot class="table-light fw-bold">
-                            <tr>
-                                <td colspan="8" class="text-end">TOTAL EFFECTIVE WORK TIME:</td>
-                                <td class="text-center text-primary">{{ summary.total_work_hours }} hrs</td>
-                                <td colspan="2"></td>
-                            </tr>
-                        </tfoot>
                     </table>
                 </div>
             </div>
@@ -395,7 +387,7 @@ HTML_TEMPLATE = """
                             </tr>
                         </thead>
                         <tbody>
-                            {% for part in data.spare_parts %}
+                            {% for part in inventory %}
                             <tr>
                                 <td>{{ part.id }}</td>
                                 <td class="fw-bold">{{ part.part_name }}</td>
@@ -417,18 +409,21 @@ HTML_TEMPLATE = """
     function addSpareRow() {
         const container = document.getElementById('spare-rows-container');
         const newRow = document.createElement('div');
-        newRow.className = 'row g-2 spare-row mb-2';
+        newRow.className = 'row g-2 spare-row mb-2 align-items-center';
         newRow.innerHTML = `
-            <div class="col-md-5">
+            <div class="col-md-4">
                 <input type="text" name="spare_name_spec[]" class="form-control form-control-sm" placeholder="Spare Part Name & Spec" required>
             </div>
-            <div class="col-md-3">
-                <input type="number" name="spare_qty[]" class="form-control form-control-sm" placeholder="Quantity" value="1" required>
+            <div class="col-md-2">
+                <input type="number" name="spare_qty[]" class="form-control form-control-sm spare-qty" placeholder="Qty" value="1" min="1" required oninput="calculateRowTotal(this)">
             </div>
             <div class="col-md-3">
-                <input type="number" step="0.01" name="spare_price[]" class="form-control form-control-sm" placeholder="Unit Price (ETB)" value="0.00" required>
+                <input type="number" step="0.01" name="spare_price[]" class="form-control form-control-sm spare-price" placeholder="Unit Price (ETB)" value="0.00" required oninput="calculateRowTotal(this)">
             </div>
-            <div class="col-md-1 d-flex align-items-center">
+            <div class="col-md-2">
+                <span class="small fw-bold text-success row-total-text">0.00 ETB</span>
+            </div>
+            <div class="col-md-1">
                 <button type="button" class="btn btn-danger btn-sm w-100" onclick="removeSpareRow(this)">X</button>
             </div>
         `;
@@ -444,32 +439,143 @@ HTML_TEMPLATE = """
             alert("At least one spare part row is required!");
         }
     }
+
+    function calculateRowTotal(element) {
+        const row = element.closest('.spare-row');
+        const qty = parseFloat(row.querySelector('.spare-qty').value) || 0;
+        const price = parseFloat(row.querySelector('.spare-price').value) || 0;
+        const total = qty * price;
+        row.querySelector('.row-total-text').innerText = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " ETB";
+    }
+
+    function calcConsumables() {
+        const bat = parseFloat(document.getElementById('bat_cost').value) || 0;
+        const lub = parseFloat(document.getElementById('lub_cost').value) || 0;
+        const tire = parseFloat(document.getElementById('tire_cost').value) || 0;
+        const total = bat + lub + tire;
+        document.getElementById('total-consumables-display').innerText = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " ETB";
+    }
 </script>
 </body>
 </html>
 """
 
+LOGIN_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - SteelY R.M.I Garage</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-dark d-flex align-items-center justify-content-center vh-100">
+    <div class="card p-4 shadow" style="width: 350px;">
+        <h3 class="text-center mb-3 text-primary">SteelY R.M.I</h3>
+        <p class="text-center text-muted small">Garage Maintenance System Login</p>
+        {% if error %}
+            <div class="alert alert-danger py-1 small text-center">{{ error }}</div>
+        {% endif %}
+        <form method="POST">
+            <div class="mb-3">
+                <label class="form-label small fw-bold">Username:</label>
+                <input type="text" name="username" class="form-control" required placeholder="admin">
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-bold">Password:</label>
+                <input type="password" name="password" class="form-control" required placeholder="password">
+            </div>
+            <button type="submit" class="btn btn-primary w-100 fw-bold">Login</button>
+        </form>
+    </div>
+</body>
+</html>
+"""
+
+# --- Helper Summaries Calculator ---
+def get_summaries():
+    logs = garage_data['maintenance_logs']
+    now = datetime.now()
+    
+    # Weekly (last 7 days)
+    week_ago = now - timedelta(days=7)
+    weekly_logs = []
+    for l in logs:
+        try:
+            dt = datetime.strptime(l['start_time'], "%Y-%m-%d %H:%M")
+            if dt >= week_ago:
+                weekly_logs.append(l)
+        except:
+            weekly_logs.append(l) # fallback if date format differs
+            
+    weekly_summary = {
+        "total_jobs": len(weekly_logs),
+        "pm_jobs": sum(1 for l in weekly_logs if l['type'] == 'PM'),
+        "cm_jobs": sum(1 for l in weekly_logs if l['type'] == 'CM'),
+        "total_work_hours": round(sum(l['effective_hours'] for l in weekly_logs), 2),
+        "total_spares_cost": sum(sum(sp['total_cost'] for sp in l.get('replaced_spares', [])) for l in weekly_logs)
+    }
+
+    # Monthly (last 30 days)
+    month_ago = now - timedelta(days=30)
+    monthly_logs = []
+    for l in logs:
+        try:
+            dt = datetime.strptime(l['start_time'], "%Y-%m-%d %H:%M")
+            if dt >= month_ago:
+                monthly_logs.append(l)
+        except:
+            monthly_logs.append(l)
+
+    monthly_summary = {
+        "total_jobs": len(monthly_logs),
+        "pm_jobs": sum(1 for l in monthly_logs if l['type'] == 'PM'),
+        "cm_jobs": sum(1 for l in monthly_logs if l['type'] == 'CM'),
+        "total_work_hours": round(sum(l['effective_hours'] for l in monthly_logs), 2),
+        "total_spares_cost": sum(sum(sp['total_cost'] for sp in l.get('replaced_spares', [])) for l in monthly_logs)
+    }
+
+    return weekly_summary, monthly_summary
+
 # --- App Routes ---
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        if username == 'admin' and password == 'admin123':
+            session['logged_in'] = True
+            session['user'] = {"name": "System Admin", "role": "Administrator"}
+            return redirect(url_for('dashboard'))
+        else:
+            error = "Invalid Username or Password (use admin / admin123)"
+    return render_template_string(LOGIN_TEMPLATE, error=error)
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
 @app.route('/')
 def dashboard():
-    total_hours = sum(l['effective_hours'] for l in garage_data['maintenance_logs'])
-    
-    total_spares_cost = 0.0
-    for l in garage_data['maintenance_logs']:
-        for sp in l.get('replaced_spares', []):
-            total_spares_cost += sp.get('total_cost', 0.0)
-
-    summary = {
-        "total_jobs": len(garage_data['maintenance_logs']),
-        "pm_jobs": sum(1 for l in garage_data['maintenance_logs'] if l['type'] == 'PM'),
-        "cm_jobs": sum(1 for l in garage_data['maintenance_logs'] if l['type'] == 'CM'),
-        "total_work_hours": round(total_hours, 2),
-        "total_replaced_spares_cost": total_spares_cost
-    }
-    return render_template_string(HTML_TEMPLATE, data=garage_data, summary=summary)
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+        
+    weekly, monthly = get_summaries()
+    return render_template_string(
+        HTML_TEMPLATE, 
+        logs=garage_data['maintenance_logs'], 
+        inventory=garage_data['spare_parts'],
+        weekly=weekly,
+        monthly=monthly,
+        user=session.get('user')
+    )
 
 @app.route('/add_work_order', methods=['POST'])
 def add_work_order():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
     start_raw = request.form.get('start_time', '')
     finish_raw = request.form.get('finish_time', '')
     
@@ -478,7 +584,6 @@ def add_work_order():
     
     eff_hours = calculate_effective_hours(start_raw, finish_raw)
     
-    # Read KM / Hour Inputs & Calculate Next Service
     try:
         r_val = int(request.form.get('reading_value', 0))
     except:
@@ -487,7 +592,6 @@ def add_work_order():
     r_unit = request.form.get('reading_unit', 'KM')
     next_serv = calculate_next_service(r_val, r_unit)
     
-    # Process Multiple Replaced Spare Parts Lists
     spare_names = request.form.getlist('spare_name_spec[]')
     spare_qtys = request.form.getlist('spare_qty[]')
     spare_prices = request.form.getlist('spare_price[]')
@@ -541,11 +645,16 @@ def add_work_order():
     garage_data['maintenance_logs'].append(new_log)
     return redirect(url_for('dashboard'))
 
-# Master Excel Export
+# Master Excel Export including Weekly and Monthly Summaries
 @app.route('/export/master_excel')
 def export_master_excel():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+
     output = io.BytesIO()
+    weekly, monthly = get_summaries()
     
+    # 1. Logs Dataframe
     logs_export = []
     for l in garage_data['maintenance_logs']:
         sp_text = ", ".join([f"{sp['part_name']} ({sp['qty']} pcs)" for sp in l.get('replaced_spares', [])])
@@ -569,8 +678,16 @@ def export_master_excel():
             'Consumables Total Cost (ETB)': l['battery_cost'] + l['lubrication_cost'] + l['tire_cost']
         })
     logs_df = pd.DataFrame(logs_export)
+
+    # 2. Summary Dataframe
+    summary_data = [
+        {"Report Type": "WEEKLY SUMMARY (Last 7 Days)", "Total Jobs": weekly['total_jobs'], "PM Jobs": weekly['pm_jobs'], "CM Jobs": weekly['cm_jobs'], "Total Work Hours (hrs)": weekly['total_work_hours'], "Spare Parts Total Cost (ETB)": weekly['total_spares_cost']},
+        {"Report Type": "MONTHLY SUMMARY (Last 30 Days)", "Total Jobs": monthly['total_jobs'], "PM Jobs": monthly['pm_jobs'], "CM Jobs": monthly['cm_jobs'], "Total Work Hours (hrs)": monthly['total_work_hours'], "Spare Parts Total Cost (ETB)": monthly['total_spares_cost']}
+    ]
+    summary_df = pd.DataFrame(summary_data)
     
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        summary_df.to_excel(writer, sheet_name='Summaries Report', index=False)
         logs_df.to_excel(writer, sheet_name='Master Maintenance Log', index=False)
         
     output.seek(0)
