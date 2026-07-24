@@ -7,6 +7,7 @@ app = Flask(__name__)
 
 # --- Core Data Structure ---
 garage_data = {
+    "current_user": {"name": "Ato Mihret (Admin)", "role": "System Administrator", "status": "Active"},
     "vehicles": [
         {"id": 1, "plate": "AA-3-12345", "model": "Sino Truck 371", "driver": "Alemayehu T.", "status": "In Service"},
         {"id": 2, "plate": "AA-3-67890", "model": "Toyota Hilux 2022", "driver": "Kassahun B.", "status": "Ready"},
@@ -105,6 +106,7 @@ HTML_TEMPLATE = """
         .btn-excel { background-color: #10b981; color: white; font-weight: bold; border: none; }
         .btn-excel:hover { background-color: #059669; color: white; }
         .form-card { background: #ffffff; border-top: 4px solid #2563eb; border-radius: 10px; }
+        .admin-badge { background-color: #dc2626; color: white; font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -113,16 +115,20 @@ HTML_TEMPLATE = """
         <!-- Sidebar Navigation -->
         <div class="col-md-2 sidebar p-3">
             <h4 class="text-primary fw-bold">SteelY R.M.I</h4>
-            <p class="text-secondary small">Garage Maintenance System</p>
+            <p class="text-secondary small mb-1">Garage Maintenance System</p>
+            <div class="mb-3">
+                <span class="admin-badge">👑 ADMIN CONTROL</span>
+            </div>
             <hr class="border-secondary">
             
             <div class="d-grid gap-2 mb-4">
                 <a href="/export/master_excel" class="btn btn-excel shadow-sm btn-sm">
-                    📊 Export Master Excel (All Data)
+                    📊 Export Master Excel
                 </a>
             </div>
 
             <ul class="nav nav-pills flex-column">
+                <li class="nav-item mb-2"><a href="#admin-panel" class="nav-link text-white fw-bold">👤 Admin Profile</a></li>
                 <li class="nav-item mb-2"><a href="#dashboard-summary" class="nav-link text-white">📊 Summaries & Filter</a></li>
                 <li class="nav-item mb-2"><a href="#new-work-order" class="nav-link text-white fw-bold">➕ Create New Work Order</a></li>
                 <li class="nav-item mb-2"><a href="#maintenance-logs" class="nav-link text-white">🛠️ Execution & Work Time Log</a></li>
@@ -138,12 +144,16 @@ HTML_TEMPLATE = """
             <!-- Header Bar -->
             <div class="header-banner mb-4 d-flex justify-content-between align-items-center shadow-sm">
                 <div>
-                    <h2 class="fw-bold mb-1" style="color:#0f172a;">SteelY R.M.I Garage Maintenance Dashboard</h2>
-                    <span class="text-muted small">Integrated Maintenance, Work Hours, Consumables & Technician Ranking System</span>
+                    <h2 class="fw-bold mb-1" style="color:#0f172a;">SteelY R.M.I Garage Maintenance Dash Board</h2>
+                    <span class="text-muted small">Integrated Maintenance, KM/Hour Tracking, Work Hours & Admin Management Panel</span>
                 </div>
-                <div>
-                    <a href="/export/master_excel" class="btn btn-excel btn-lg shadow-sm">
-                        📥 Export Complete Excel Report
+                <div class="d-flex align-items-center gap-3">
+                    <div class="text-end" id="admin-panel">
+                        <span class="d-block fw-bold text-dark">{{ data.current_user.name }}</span>
+                        <span class="badge bg-danger">{{ data.current_user.role }}</span>
+                    </div>
+                    <a href="/export/master_excel" class="btn btn-excel btn-md shadow-sm">
+                        📥 Export Complete Excel
                     </a>
                 </div>
             </div>
@@ -199,9 +209,9 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- 2. CREATE NEW WORK ORDER FORM -->
+            <!-- 2. CREATE NEW WORK ORDER FORM (INCLUDES KM/HOUR & ADMIN ROLE ASSIGNMENT) -->
             <div class="card card-summary p-4 mb-4 form-card" id="new-work-order">
-                <h5 class="fw-bold text-primary mb-3">📝 Create New Work Order</h5>
+                <h5 class="fw-bold text-primary mb-3">📝 Create New Work Order (Admin Form)</h5>
                 <form action="/add_work_order" method="POST">
                     <div class="row g-3">
                         <div class="col-md-2">
@@ -216,10 +226,13 @@ HTML_TEMPLATE = """
                             <label class="form-label small fw-bold">Vehicle Model:</label>
                             <input type="text" name="model" class="form-control form-control-sm" placeholder="e.g. Sino Truck">
                         </div>
+                        
+                        <!-- 🚘 KM / HOUR FIELD INCLUDED BELOW -->
                         <div class="col-md-2">
-                            <label class="form-label small fw-bold">KM / Hour Reading:</label>
-                            <input type="text" name="km_or_hr" class="form-control form-control-sm" placeholder="e.g. 150,000 km or 4,200 hrs" required>
+                            <label class="form-label small fw-bold text-danger">KM / Hour Reading:</label>
+                            <input type="text" name="km_or_hr" class="form-control form-control-sm border-danger" placeholder="e.g. 150,000 km or 4,200 hrs" required>
                         </div>
+
                         <div class="col-md-2">
                             <label class="form-label small fw-bold">Work Status:</label>
                             <select name="work_status" class="form-select form-select-sm" required>
@@ -313,13 +326,13 @@ HTML_TEMPLATE = """
                         </div>
 
                         <div class="col-md-12 text-end mt-3">
-                            <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold">💾 Save Work Order & Update Performance</button>
+                            <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold">💾 Save Work Order & Update System</button>
                         </div>
                     </div>
                 </form>
             </div>
 
-            <!-- 3. WORK TIME & MAINTENANCE EXECUTION LOG TABLE -->
+            <!-- 3. WORK TIME & MAINTENANCE EXECUTION LOG TABLE (KM/HOUR INCLUDED) -->
             <div class="card card-summary p-4 mb-4" id="maintenance-logs">
                 <h5 class="fw-bold text-dark mb-3">🛠️ Maintenance Execution & Work Time Log</h5>
                 <div class="table-responsive">
@@ -328,7 +341,7 @@ HTML_TEMPLATE = """
                             <tr>
                                 <th>WO #</th>
                                 <th>Plate No</th>
-                                <th>KM / Hour Reading</th>
+                                <th class="text-warning">KM / Hour Reading</th>
                                 <th>Status</th>
                                 <th>Type</th>
                                 <th>Technician</th>
@@ -344,7 +357,7 @@ HTML_TEMPLATE = """
                             <tr>
                                 <td class="fw-bold">{{ log.wo_no }}</td>
                                 <td><span class="badge bg-secondary">{{ log.vehicle }}</span></td>
-                                <td class="fw-bold text-primary small">{{ log.km_or_hr }}</td>
+                                <td class="fw-bold text-danger small bg-light">{{ log.km_or_hr }}</td>
                                 <td>
                                     {% if log.work_status == 'Completed' %}
                                         <span class="badge bg-success">Completed</span>
@@ -538,7 +551,6 @@ def add_work_order():
     
     eff_hours = calculate_effective_hours(start_raw, finish_raw)
     
-    # Process dynamic replaced spare parts
     spare_names = request.form.getlist('spare_name[]')
     spare_specs = request.form.getlist('spare_spec[]')
     spare_qtys = request.form.getlist('spare_qty[]')
@@ -589,7 +601,6 @@ def add_work_order():
 def export_master_excel():
     output = io.BytesIO()
     
-    # 1. Maintenance & Work Hours Sheet
     logs_export = []
     for l in garage_data['maintenance_logs']:
         sp_summary = ", ".join([f"{sp['name']} ({sp['spec']}) x{sp['qty']}" for sp in l['replaced_spares']])
@@ -617,7 +628,6 @@ def export_master_excel():
         })
     logs_df = pd.DataFrame(logs_export)
     
-    # 2. Weekly & Monthly Summary Cards Sheet
     total_hours = sum(l['effective_hours'] for l in garage_data['maintenance_logs'])
     total_spares = sum(l['spare_cost'] for l in garage_data['maintenance_logs'])
     summary_data = [
@@ -626,10 +636,8 @@ def export_master_excel():
     ]
     summary_df = pd.DataFrame(summary_data)
     
-    # 3. Technician Performance Rank Sheet
     tech_df = pd.DataFrame(garage_data['technicians'])
     
-    # 4. Consumables Summary Sheet
     consumables_summary = [{
         'Consumable Category': 'Battery',
         'Total Quantity (Pcs)': sum(l['battery_qty'] for l in garage_data['maintenance_logs']),
@@ -645,7 +653,6 @@ def export_master_excel():
     }]
     consumables_df = pd.DataFrame(consumables_summary)
     
-    # 5. Spare Parts Inventory Sheet
     spares_df = pd.DataFrame(garage_data['spare_parts'])
     
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
