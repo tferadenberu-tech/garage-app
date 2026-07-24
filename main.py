@@ -169,36 +169,47 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- Top Summary Cards -->
+            <!-- Top Summary Cards (Weekly & Monthly with Consumables Included) -->
             <div class="row g-3 mb-4" id="summary-section">
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <div class="summary-card">
                         <h6>WEEKLY SUMMARY (LAST 7 DAYS)</h6>
                         <div class="stat-line">Total Jobs Executed: <strong>{{ weekly.total_jobs }}</strong></div>
-                        <div class="stat-line text-muted">• PM: <strong>{{ weekly.pm_jobs }}</strong> | CM: <strong>{{ weekly.cm_jobs }}</strong></div>
-                        <div class="stat-line text-muted">• Total Work Hours: <strong>{{ weekly.total_work_hours }} hrs</strong></div>
-                        <div class="cost-line">Spare Parts Cost: {{ "{:,.2f}".format(weekly.total_spares_cost) }} ETB</div>
+                        <div class="p-2 bg-light rounded mb-2 border">
+                            <div class="stat-line text-muted mb-1">• Preventive Maintenance (PM): <strong>{{ weekly.pm_jobs }}</strong></div>
+                            <div class="stat-line text-muted mb-1">• Corrective Maintenance (CM): <strong>{{ weekly.cm_jobs }}</strong></div>
+                            <div class="stat-line text-muted mb-0">• Inspection & Checkup: <strong>0</strong></div>
+                        </div>
+                        <div class="stat-line text-primary fw-bold">Total Effective Work Time: <strong>{{ weekly.total_work_hours }} hrs</strong></div>
+                        <hr class="my-2">
+                        <div class="stat-line">Spare Parts Quantity: <strong>{{ weekly.total_spare_qty }} Pcs</strong></div>
+                        <div class="stat-line">Spare Parts Cost: <strong>ETB {{ "{:,.2f}".format(weekly.total_spares_cost) }}</strong></div>
+                        <div class="stat-line">Lubricants Volume: <strong>{{ weekly.total_lubrication_qty }} Liters</strong></div>
+                        <div class="stat-line">Lubricants Cost: <strong>ETB {{ "{:,.2f}".format(weekly.total_lubrication_cost) }}</strong></div>
+                        <div class="stat-line">Batteries Cost: <strong>ETB {{ "{:,.2f}".format(weekly.total_battery_cost) }}</strong></div>
+                        <div class="stat-line">Tires Cost: <strong>ETB {{ "{:,.2f}".format(weekly.total_tire_cost) }}</strong></div>
+                        <div class="cost-line w-100 text-center">Total Expenditure: ETB {{ "{:,.2f}".format(weekly.total_expenditure) }}</div>
                     </div>
                 </div>
 
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <div class="summary-card">
                         <h6>MONTHLY SUMMARY (LAST 30 DAYS)</h6>
                         <div class="stat-line">Total Jobs Executed: <strong>{{ monthly.total_jobs }}</strong></div>
-                        <div class="stat-line text-muted">• PM: <strong>{{ monthly.pm_jobs }}</strong> | CM: <strong>{{ monthly.cm_jobs }}</strong></div>
-                        <div class="stat-line text-muted">• Total Work Hours: <strong>{{ monthly.total_work_hours }} hrs</strong></div>
-                        <div class="cost-line">Spare Parts Cost: {{ "{:,.2f}".format(monthly.total_spares_cost) }} ETB</div>
-                    </div>
-                </div>
-
-                <div class="col-md-4">
-                    <div class="total-hours-card">
-                        <div class="text-muted small fw-bold mb-1" style="letter-spacing: 0.5px;">⏱️ TOTAL EFFECTIVE WORK TIME</div>
-                        <div>
-                            <span class="total-hours-num">{{ monthly.total_work_hours }}</span>
-                            <span class="fw-bold text-primary">Hours</span>
+                        <div class="p-2 bg-light rounded mb-2 border">
+                            <div class="stat-line text-muted mb-1">• Preventive Maintenance (PM): <strong>{{ monthly.pm_jobs }}</strong></div>
+                            <div class="stat-line text-muted mb-1">• Corrective Maintenance (CM): <strong>{{ monthly.cm_jobs }}</strong></div>
+                            <div class="stat-line text-muted mb-0">• Inspection & Checkup: <strong>0</strong></div>
                         </div>
-                        <div class="badge-calculated">Calculated across Monthly Work Orders</div>
+                        <div class="stat-line text-primary fw-bold">Total Effective Work Time: <strong>{{ monthly.total_work_hours }} hrs</strong></div>
+                        <hr class="my-2">
+                        <div class="stat-line">Spare Parts Quantity: <strong>{{ monthly.total_spare_qty }} Pcs</strong></div>
+                        <div class="stat-line">Spare Parts Cost: <strong>ETB {{ "{:,.2f}".format(monthly.total_spares_cost) }}</strong></div>
+                        <div class="stat-line">Lubricants Volume: <strong>{{ monthly.total_lubrication_qty }} Liters</strong></div>
+                        <div class="stat-line">Lubricants Cost: <strong>ETB {{ "{:,.2f}".format(monthly.total_lubrication_cost) }}</strong></div>
+                        <div class="stat-line">Batteries Cost: <strong>ETB {{ "{:,.2f}".format(monthly.total_battery_cost) }}</strong></div>
+                        <div class="stat-line">Tires Cost: <strong>ETB {{ "{:,.2f}".format(monthly.total_tire_cost) }}</strong></div>
+                        <div class="cost-line w-100 text-center">Total Expenditure: ETB {{ "{:,.2f}".format(monthly.total_expenditure) }}</div>
                     </div>
                 </div>
             </div>
@@ -282,7 +293,7 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
 
-                        <!-- Start Date & Time and End Date & Time (ጎን ለጎን ተደርገዋል) -->
+                        <!-- Start Date & Time and End Date & Time (ጎን ለጎን) -->
                         <div class="col-md-3">
                             <label class="form-label small fw-bold text-primary">🗓️ Start Date & Time:</label>
                             <input type="datetime-local" name="start_time" class="form-control form-control-sm border-primary" required>
@@ -327,7 +338,7 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
 
-                        <!-- Separate Consumables Inputs -->
+                        <!-- Separate Consumables Inputs (ባሉበት እንዲቀጥሉ የተደረገ) -->
                         <div class="col-md-12">
                             <div class="p-3 border rounded bg-light shadow-sm">
                                 <h6 class="fw-bold text-dark mb-3">🔋 Separate Consumables Tracking (Battery, Lubrication, Tire)</h6>
@@ -563,44 +574,51 @@ LOGIN_TEMPLATE = """
 </html>
 """
 
-def get_summaries(logs_list):
+def compute_period_summary(logs_list, days):
     now = datetime.now()
-    week_ago = now - timedelta(days=7)
-    weekly_logs = []
+    cutoff = now - timedelta(days=days)
+    period_logs = []
     for l in logs_list:
         try:
             dt = datetime.strptime(l['start_time'], "%Y-%m-%d %H:%M")
-            if dt >= week_ago:
-                weekly_logs.append(l)
+            if dt >= cutoff:
+                period_logs.append(l)
         except:
-            weekly_logs.append(l)
+            period_logs.append(l)
             
-    weekly_summary = {
-        "total_jobs": len(weekly_logs),
-        "pm_jobs": sum(1 for l in weekly_logs if l['type'] == 'PM'),
-        "cm_jobs": sum(1 for l in weekly_logs if l['type'] == 'CM'),
-        "total_work_hours": round(sum(l['effective_hours'] for l in weekly_logs), 2),
-        "total_spares_cost": sum(sum(sp['total_cost'] for sp in l.get('replaced_spares', [])) for l in weekly_logs)
+    total_jobs = len(period_logs)
+    pm_jobs = sum(1 for l in period_logs if l.get('type') == 'PM')
+    cm_jobs = sum(1 for l in period_logs if l.get('type') == 'CM')
+    total_work_hours = round(sum(l.get('effective_hours', 0) for l in period_logs), 2)
+    
+    total_spare_qty = sum(sum(sp.get('qty', 0) for sp in l.get('replaced_spares', [])) for l in period_logs)
+    total_spares_cost = sum(sum(sp.get('total_cost', 0) for sp in l.get('replaced_spares', [])) for l in period_logs)
+    
+    total_lubrication_qty = sum(l.get('lubrication_qty', 0) for l in period_logs)
+    total_lubrication_cost = sum(l.get('lubrication_cost', 0) for l in period_logs)
+    
+    total_battery_cost = sum(l.get('battery_cost', 0) for l in period_logs)
+    total_tire_cost = sum(l.get('tire_cost', 0) for l in period_logs)
+    
+    total_expenditure = total_spares_cost + total_lubrication_cost + total_battery_cost + total_tire_cost
+    
+    return {
+        "total_jobs": total_jobs,
+        "pm_jobs": pm_jobs,
+        "cm_jobs": cm_jobs,
+        "total_work_hours": total_work_hours,
+        "total_spare_qty": total_spare_qty,
+        "total_spares_cost": total_spares_cost,
+        "total_lubrication_qty": total_lubrication_qty,
+        "total_lubrication_cost": total_lubrication_cost,
+        "total_battery_cost": total_battery_cost,
+        "total_tire_cost": total_tire_cost,
+        "total_expenditure": total_expenditure
     }
 
-    month_ago = now - timedelta(days=30)
-    monthly_logs = []
-    for l in logs_list:
-        try:
-            dt = datetime.strptime(l['start_time'], "%Y-%m-%d %H:%M")
-            if dt >= month_ago:
-                monthly_logs.append(l)
-        except:
-            monthly_logs.append(l)
-
-    monthly_summary = {
-        "total_jobs": len(monthly_logs),
-        "pm_jobs": sum(1 for l in monthly_logs if l['type'] == 'PM'),
-        "cm_jobs": sum(1 for l in monthly_logs if l['type'] == 'CM'),
-        "total_work_hours": round(sum(l['effective_hours'] for l in monthly_logs), 2),
-        "total_spares_cost": sum(sum(sp['total_cost'] for sp in l.get('replaced_spares', [])) for l in monthly_logs)
-    }
-
+def get_summaries(logs_list):
+    weekly_summary = compute_period_summary(logs_list, 7)
+    monthly_summary = compute_period_summary(logs_list, 30)
     return weekly_summary, monthly_summary
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -784,8 +802,8 @@ def export_master_excel():
     logs_df = pd.DataFrame(logs_export)
 
     summary_data = [
-        {"Report Type": "WEEKLY SUMMARY (Last 7 Days)", "Total Jobs": weekly['total_jobs'], "PM Jobs": weekly['pm_jobs'], "CM Jobs": weekly['cm_jobs'], "Total Work Hours (hrs)": weekly['total_work_hours'], "Spare Parts Total Cost (ETB)": weekly['total_spares_cost']},
-        {"Report Type": "MONTHLY SUMMARY (Last 30 Days)", "Total Jobs": monthly['total_jobs'], "PM Jobs": monthly['pm_jobs'], "CM Jobs": monthly['cm_jobs'], "Total Work Hours (hrs)": monthly['total_work_hours'], "Spare Parts Total Cost (ETB)": monthly['total_spares_cost']}
+        {"Report Type": "WEEKLY SUMMARY (Last 7 Days)", "Total Jobs": weekly['total_jobs'], "PM Jobs": weekly['pm_jobs'], "CM Jobs": weekly['cm_jobs'], "Total Work Hours (hrs)": weekly['total_work_hours'], "Spare Parts Total Cost (ETB)": weekly['total_spares_cost'], "Lubricants Cost (ETB)": weekly['total_lubrication_cost'], "Batteries Cost (ETB)": weekly['total_battery_cost'], "Tires Cost (ETB)": weekly['total_tire_cost'], "Total Expenditure (ETB)": weekly['total_expenditure']},
+        {"Report Type": "MONTHLY SUMMARY (Last 30 Days)", "Total Jobs": monthly['total_jobs'], "PM Jobs": monthly['pm_jobs'], "CM Jobs": monthly['cm_jobs'], "Total Work Hours (hrs)": monthly['total_work_hours'], "Spare Parts Total Cost (ETB)": monthly['total_spares_cost'], "Lubricants Cost (ETB)": monthly['total_lubrication_cost'], "Batteries Cost (ETB)": monthly['total_battery_cost'], "Tires Cost (ETB)": monthly['total_tire_cost'], "Total Expenditure (ETB)": monthly['total_expenditure']}
     ]
     summary_df = pd.DataFrame(summary_data)
     
