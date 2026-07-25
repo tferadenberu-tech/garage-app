@@ -40,13 +40,13 @@ DASHBOARD_HTML = """
     <div class="container">
         <h2 class="mb-4 text-primary">SteelY R.M.I Garage Maintnace dash Bord</h2>
         
-        <!-- Top Actions -->
+        <!-- General Action Buttons -->
         <div class="mb-4 d-flex flex-wrap gap-2">
             <a href="/export/excel" class="btn btn-success">Export All Records to Excel</a>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMaintenanceModal">+ Add Maintenance Record</button>
         </div>
 
-        <!-- Store Spare Inventory Section -->
+        <!-- 1 & 2. Store Spare Inventory Section with Add Button -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Store Spare Inventory</h4>
@@ -72,13 +72,17 @@ DASHBOARD_HTML = """
                             <td class="fw-bold {% if item.quantity < 5 %}text-danger{% else %}text-success{% endif %}">{{ item.quantity }}</td>
                             <td>{{ item.location }}</td>
                         </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">No spare parts found in store. Please add new spares.</td>
+                        </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
         </div>
 
-        <!-- Weekly Summary Section (Last 7 Days) with Dedicated Save Button -->
+        <!-- Weekly Summary Section (Last 7 Days) with Dedicated Save Report Excel Button -->
         <div class="card shadow-sm mb-4 border-warning">
             <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Weekly Summary (Last 7 Days)</h4>
@@ -118,7 +122,7 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
-        <!-- Monthly Summary Section (Last 30 Days) with Dedicated Save Button -->
+        <!-- Monthly Summary Section (Last 30 Days) with Dedicated Save Report Excel Button -->
         <div class="card shadow-sm mb-4 border-info">
             <div class="card-header bg-info text-dark d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Monthly Summary (Last 30 Days)</h4>
