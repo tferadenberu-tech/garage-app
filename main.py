@@ -1,6 +1,5 @@
 import io
 import pandas as pd
-from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, redirect, url_for, send_file
 from flask_sqlalchemy import SQLAlchemy
 
@@ -9,6 +8,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
+# Database Models
 class MaintenanceRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vehicle_model = db.Column(db.String(100), nullable=False)
@@ -20,11 +20,10 @@ class MaintenanceRecord(db.Model):
 
 class SpareInventory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    spare_part_name = db.Column(db.String(100), nullable=False)
-    specification = db.Column(db.String(100), nullable=False)
-    used_for = db.Column(db.String(100), nullable=False)
-    stock_qty = db.Column(db.Integer, nullable=False)
-    unit_price = db.Column(db.Float, nullable=False)
+    part_name = db.Column(db.String(100), nullable=False)
+    spec = db.Column(db.String(100), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+    location = db.Column(db.String(100), nullable=False)
 
 with app.app_context():
     db.create_all()
@@ -41,41 +40,36 @@ DASHBOARD_HTML = """
     <div class="container">
         <h2 class="mb-4 text-primary">SteelY R.M.I Garage Maintnace dash Bord</h2>
         
-        <!-- General Action Buttons -->
-        <div class="mb-4 d-flex flex-wrap gap-2">
-            <a href="/export/excel" class="btn btn-success">Export All Records to Excel</a>
+        <div class="mb-4 d-flex gap-2">
+            <a href="/export/excel" class="btn btn-success">Export Report to Excel</a>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMaintenanceModal">+ Add Maintenance Record</button>
         </div>
 
-        <!-- Store Spare Parts Inventory Overview with + Add Inventory Button -->
+        <!-- Store Spare Inventory Section -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                <h4 class="mb-0">Store Spare Parts Inventory Overview</h4>
-                <button class="btn btn-light btn-sm text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#addInventoryModal">+ Add Inventory</button>
+                <h4 class="mb-0">Store Spare Inventory</h4>
+                <button class="btn btn-light btn-sm text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Add Store Spare Inventory</button>
             </div>
             <div class="card-body">
                 <table class="table table-bordered table-hover align-middle">
-                    <thead class="table-primary text-white">
+                    <thead class="table-secondary">
                         <tr>
-                            <th>Spare Part Name</th>
-                            <th>Specification</th>
-                            <th>Used For / Application</th>
-                            <th>Stock Qty</th>
-                            <th>Unit Price (ETB)</th>
+                            <th>ID</th>
+                            <th>Part Name</th>
+                            <th>Specification (Spec)</th>
+                            <th>Available Quantity</th>
+                            <th>Location</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for item in inventory_items %}
                         <tr>
-                            <td>{{ item.spare_part_name }}</td>
-                            <td>{{ item.specification }}</td>
-                            <td>{{ item.used_for }}</td>
-                            <td class="fw-bold {% if item.stock_qty < 5 %}text-danger{% else %}text-success{% endif %}">{{ item.stock_qty }} Pcs</td>
-                            <td>{{ "{:,.2f}".format(item.unit_price) }}</td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="5" class="text-center text-muted">No inventory records found. Click '+ Add Inventory' to add.</td>
+                            <td>{{ item.id }}</td>
+                            <td>{{ item.part_name }}</td>
+                            <td>{{ item.spec }}</td>
+                            <td class="fw-bold {% if item.quantity < 5 %}text-danger{% else %}text-success{% endif %}">{{ item.quantity }}</td>
+                            <td>{{ item.location }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -83,90 +77,10 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
-        <!-- Weekly Summary (Last 7 Days) with Dedicated Save Report Excel Button -->
-        <div class="card shadow-sm mb-4 border-warning">
-            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
-                <h4 class="mb-0">Weekly Summary (Last 7 Days)</h4>
-                <a href="/export/weekly" class="btn btn-dark btn-sm fw-bold text-white">Save Report Excel</a>
-            </div>
-            <div class="card-body">
-                <table class="table table-bordered table-hover align-middle">
-                    <thead class="table-secondary">
-                        <tr>
-                            <th>ID</th>
-                            <th>Vehicle Model</th>
-                            <th>Spare Part Name</th>
-                            <th>Specification</th>
-                            <th>Qty Used</th>
-                            <th>Operational Interval</th>
-                            <th>Date</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for r in weekly_records %}
-                        <tr>
-                            <td>{{ r.id }}</td>
-                            <td>{{ r.vehicle_model }}</td>
-                            <td>{{ r.spare_part_name }}</td>
-                            <td>{{ r.spec }}</td>
-                            <td>{{ r.quantity_used }}</td>
-                            <td>{{ r.operational_interval }}</td>
-                            <td>{{ r.date }}</td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="7" class="text-center text-muted">No maintenance records found for the last 7 days.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Monthly Summary (Last 30 Days) with Dedicated Save Report Excel Button -->
-        <div class="card shadow-sm mb-4 border-info">
-            <div class="card-header bg-info text-dark d-flex justify-content-between align-items-center">
-                <h4 class="mb-0">Monthly Summary (Last 30 Days)</h4>
-                <a href="/export/monthly" class="btn btn-dark btn-sm fw-bold text-white">Save Report Excel</a>
-            </div>
-            <div class="card-body">
-                <table class="table table-bordered table-hover align-middle">
-                    <thead class="table-secondary">
-                        <tr>
-                            <th>ID</th>
-                            <th>Vehicle Model</th>
-                            <th>Spare Part Name</th>
-                            <th>Specification</th>
-                            <th>Qty Used</th>
-                            <th>Operational Interval</th>
-                            <th>Date</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for r in monthly_records %}
-                        <tr>
-                            <td>{{ r.id }}</td>
-                            <td>{{ r.vehicle_model }}</td>
-                            <td>{{ r.spare_part_name }}</td>
-                            <td>{{ r.spec }}</td>
-                            <td>{{ r.quantity_used }}</td>
-                            <td>{{ r.operational_interval }}</td>
-                            <td>{{ r.date }}</td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="7" class="text-center text-muted">No maintenance records found for the last 30 days.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- All Maintenance Records Section -->
+        <!-- Maintenance Records Section -->
         <div class="card shadow-sm">
             <div class="card-header bg-primary text-white">
-                <h4 class="mb-0">All Maintenance Records</h4>
+                <h4 class="mb-0">Maintenance Records</h4>
             </div>
             <div class="card-body">
                 <table class="table table-bordered table-hover align-middle">
@@ -175,7 +89,7 @@ DASHBOARD_HTML = """
                             <th>ID</th>
                             <th>Vehicle Model</th>
                             <th>Spare Part Name</th>
-                            <th>Specification</th>
+                            <th>Specification (Spec)</th>
                             <th>Qty Used</th>
                             <th>Operational Interval</th>
                             <th>Date</th>
@@ -199,39 +113,35 @@ DASHBOARD_HTML = """
         </div>
     </div>
 
-    <!-- Modal for Adding Inventory (+ Add Inventory) -->
-    <div class="modal fade" id="addInventoryModal" tabindex="-1">
+    <!-- Modal for Adding Spare Inventory -->
+    <div class="modal fade" id="addSpareModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
-                <form method="POST" action="/add_inventory">
-                    <div class="modal-header bg-dark text-white">
-                        <h5 class="modal-title">Add Store Spare Part Inventory</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                <form method="POST" action="/add_spare">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Add Store Spare Inventory</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
                         <div class="mb-3">
-                            <label class="form-label">Spare Part Name</label>
-                            <input type="text" class="form-control" name="spare_part_name" required placeholder="e.g. Oil Filter">
+                            <label class="form-label">Part Name</label>
+                            <input type="text" class="form-control" name="part_name" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Specification</label>
-                            <input type="text" class="form-control" name="specification" required placeholder="e.g. LF16015 / Heavy Duty">
+                            <label class="form-label">Specification (Spec)</label>
+                            <input type="text" class="form-control" name="spec" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Used For / Application</label>
-                            <input type="text" class="form-control" name="used_for" required placeholder="e.g. Sino Truck 371 Engine">
+                            <label class="form-label">Quantity</label>
+                            <input type="number" class="form-control" name="quantity" required min="1">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Stock Qty (Pcs)</label>
-                            <input type="number" class="form-control" name="stock_qty" required min="1" placeholder="e.g. 20">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Unit Price (ETB)</label>
-                            <input type="number" step="0.01" class="form-control" name="unit_price" required placeholder="e.g. 1200.00">
+                            <label class="form-label">Location</label>
+                            <input type="text" class="form-control" name="location" required>
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="submit" class="btn btn-dark">Save Inventory</button>
+                        <button type="submit" class="btn btn-primary">Save Spare</button>
                     </div>
                 </form>
             </div>
@@ -243,9 +153,9 @@ DASHBOARD_HTML = """
         <div class="modal-dialog">
             <div class="modal-content">
                 <form method="POST" action="/add_maintenance">
-                    <div class="modal-header bg-primary text-white">
+                    <div class="modal-header">
                         <h5 class="modal-title">Add Maintenance Record</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
                         <div class="mb-3">
@@ -253,10 +163,10 @@ DASHBOARD_HTML = """
                             <input type="text" class="form-control" name="vehicle_model" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Select Spare Part (from Inventory)</label>
+                            <label class="form-label">Select Spare Part (from Store)</label>
                             <select class="form-select" name="spare_id" required>
                                 {% for item in inventory_items %}
-                                <option value="{{ item.id }}">{{ item.spare_part_name }} (Spec: {{ item.specification }}) - Stock: {{ item.stock_qty }}</option>
+                                <option value="{{ item.id }}">{{ item.part_name }} (Spec: {{ item.spec }}) - Available: {{ item.quantity }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -274,7 +184,7 @@ DASHBOARD_HTML = """
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="submit" class="btn btn-primary">Save Record & Deduct Stock</button>
+                        <button type="submit" class="btn btn-primary">Save Record & Deduct Spare</button>
                     </div>
                 </form>
             </div>
@@ -290,37 +200,17 @@ DASHBOARD_HTML = """
 def index():
     records = MaintenanceRecord.query.all()
     inventory_items = SpareInventory.query.all()
-    
-    weekly_cutoff = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-    monthly_cutoff = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
-    
-    weekly_records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= weekly_cutoff).all()
-    monthly_records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= monthly_cutoff).all()
-    
-    return render_template_string(
-        DASHBOARD_HTML, 
-        records=records, 
-        inventory_items=inventory_items,
-        weekly_records=weekly_records,
-        monthly_records=monthly_records
-    )
+    return render_template_string(DASHBOARD_HTML, records=records, inventory_items=inventory_items)
 
-@app.route('/add_inventory', methods=['POST'])
-def add_inventory():
-    spare_part_name = request.form.get('spare_part_name')
-    specification = request.form.get('specification')
-    used_for = request.form.get('used_for')
-    stock_qty = int(request.form.get('stock_qty'))
-    unit_price = float(request.form.get('unit_price'))
+@app.route('/add_spare', methods=['POST'])
+def add_spare():
+    part_name = request.form.get('part_name')
+    spec = request.form.get('spec')
+    quantity = int(request.form.get('quantity'))
+    location = request.form.get('location')
     
-    new_item = SpareInventory(
-        spare_part_name=spare_part_name,
-        specification=specification,
-        used_for=used_for,
-        stock_qty=stock_qty,
-        unit_price=unit_price
-    )
-    db.session.add(new_item)
+    new_spare = SpareInventory(part_name=part_name, spec=spec, quantity=quantity, location=location)
+    db.session.add(new_spare)
     db.session.commit()
     return redirect(url_for('index'))
 
@@ -334,13 +224,13 @@ def add_maintenance():
     
     spare_item = SpareInventory.query.get(spare_id)
     if spare_item:
-        if spare_item.stock_qty >= quantity_used:
-            spare_item.stock_qty -= quantity_used
+        if spare_item.quantity >= quantity_used:
+            spare_item.quantity -= quantity_used  # ከስቶር ላይ መቀነስ
             
             new_record = MaintenanceRecord(
                 vehicle_model=vehicle_model,
-                spare_part_name=spare_item.spare_part_name,
-                spec=spare_item.specification,
+                spare_part_name=spare_item.part_name,
+                spec=spare_item.spec,
                 quantity_used=quantity_used,
                 operational_interval=operational_interval,
                 date=date
@@ -348,35 +238,21 @@ def add_maintenance():
             db.session.add(new_record)
             db.session.commit()
         else:
-            return "Error: Not enough quantity in stock for this spare part!", 400
+            return "Error: Not enough quantity in store for this spare part!", 400
             
     return redirect(url_for('index'))
 
 @app.route('/export/excel')
 def export_excel():
-    return generate_report_excel(MaintenanceRecord.query.all(), 'SteelY_RMI_Garage_Report_All.xlsx')
-
-@app.route('/export/weekly')
-def export_weekly():
-    cutoff = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-    records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= cutoff).all()
-    return generate_report_excel(records, 'SteelY_RMI_Garage_Weekly_Report.xlsx')
-
-@app.route('/export/monthly')
-def export_monthly():
-    cutoff = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
-    records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= cutoff).all()
-    return generate_report_excel(records, 'SteelY_RMI_Garage_Monthly_Report.xlsx')
-
-def generate_report_excel(records, filename):
     try:
+        records = MaintenanceRecord.query.all()
         data = []
         for r in records:
             data.append({
                 'ID': r.id,
                 'Vehicle Model': r.vehicle_model,
                 'Spare Part Name': r.spare_part_name,
-                'Specification': r.spec,
+                'Specification (Spec)': r.spec,
                 'Quantity Used': r.quantity_used,
                 'Operational Interval': r.operational_interval,
                 'Date': r.date
@@ -392,7 +268,7 @@ def generate_report_excel(records, filename):
             output,
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             as_attachment=True,
-            download_name=filename
+            download_name='SteelY_RMI_Garage_Report.xlsx'
         )
     except Exception as e:
         return f"Error generating Excel file: {str(e)}", 500
