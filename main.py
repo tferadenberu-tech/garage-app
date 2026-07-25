@@ -10,9 +10,9 @@ app.secret_key = "steely_garage_secret_key"
 # --- In-Memory System Database ---
 garage_data = {
     "spare_parts": [
-        {"id": 1, "part_name": "Oil Filter", "spec": "LF16015 / Heavy Duty", "for_vehicle": "Sino Truck 371", "qty": 20, "unit_price": 1200.00},
-        {"id": 2, "part_name": "Fuel Filter", "spec": "FF5421 / High Efficiency", "for_vehicle": "Isuzu NPR", "qty": 15, "unit_price": 1800.00},
-        {"id": 3, "part_name": "Brake Shoe Set", "spec": "Rear Axle / Heavy Duty Standard", "for_vehicle": "FSR", "qty": 8, "unit_price": 4500.00}
+        {"id": 1, "part_name": "Oil Filter", "spec": "LF16015 / Heavy Duty", "used_for": "Sino Truck 371 Engine", "qty": 20, "unit_price": 1200.00},
+        {"id": 2, "part_name": "Fuel Filter", "spec": "FF5421 / High Efficiency", "used_for": "Isuzu NPR Fuel System", "qty": 15, "unit_price": 1800.00},
+        {"id": 3, "part_name": "Brake Shoe Set", "spec": "Rear Axle / Heavy Duty Standard", "used_for": "FSR Braking System", "qty": 8, "unit_price": 4500.00}
     ],
     "maintenance_logs": [
         {
@@ -151,7 +151,7 @@ HTML_TEMPLATE = """
                 <a href="#summary-section" class="nav-link-custom">📊 Summaries & Filter</a>
                 <a href="#create-wo-section" class="nav-link-custom">➕ Create Work Order</a>
                 <a href="#execution-log-section" class="nav-link-custom">🛠️ Execution & Log</a>
-                <a href="#" class="nav-link-custom" data-bs-toggle="modal" data-bs-target="#inventoryModal">⚙️ Spare Inventory</a>
+                <a href="#" class="nav-link-custom" data-bs-toggle="modal" data-bs-target="#inventoryModal">⚙️ Store Spare Inventory</a>
             </nav>
         </div>
 
@@ -169,7 +169,7 @@ HTML_TEMPLATE = """
                         <span class="user-name">{{ user.name }}</span>
                         <span class="user-role">{{ user.role }}</span>
                     </div>
-                    <button type="button" class="btn btn-primary btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#inventoryModal">⚙️ View Spare Inventory</button>
+                    <button type="button" class="btn btn-primary btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#inventoryModal">⚙️ Store Spare Inventory</button>
                     <a href="/export/master_excel" class="btn-header-export shadow-sm">📊 Export Excel</a>
                     <a href="/logout" class="btn-header-logout shadow-sm">🚪 Logout</a>
                 </div>
@@ -479,45 +479,80 @@ HTML_TEMPLATE = """
     </div>
 </div>
 
-<!-- Spare Parts Inventory Modal Dialog (Auto-Opened on Load / Front Dialog Box) -->
+<!-- Spare Parts Inventory Modal Dialog (Auto-Opened on Load with Dynamic Add Row & Specification/Used For) -->
 <div class="modal fade" id="inventoryModal" tabindex="-1" aria-labelledby="inventoryModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
-    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content shadow-lg border-0">
             <div class="modal-header table-water-blue text-white">
-                <h5 class="modal-title fw-bold" id="inventoryModalLabel">⚙️ Spare Parts Inventory (ቁጥጥር እና ዝርዝር)</h5>
+                <h5 class="modal-title fw-bold" id="inventoryModalLabel">⚙️ Store Spare Parts Inventory (መጋዘን እስፔር ክምችት)</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body bg-light p-4">
-                <p class="text-muted small mb-3">በጋራዥ ክምችት ውስጥ የሚገኙ የእስፔር ፓርቶች ስም እና የቁጥር መጠን (Quantity) ብቻ ከዚህ በታች ይታያሉ፦</p>
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle table-sm bg-white border shadow-sm rounded">
-                        <thead class="table-water-blue">
-                            <tr>
-                                <th class="py-2">#</th>
-                                <th class="py-2">Spare Part Name</th>
-                                <th class="py-2 text-center">Stock Quantity (Qty)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for part in inventory %}
-                            <tr>
-                                <td class="py-2">{{ part.id }}</td>
-                                <td class="py-2 fw-bold text-dark">{{ part.part_name }}</td>
-                                <td class="py-2 text-center">
-                                    <span class="badge bg-primary fs-6 px-3 py-1">{{ part.qty }} Pcs</span>
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="3" class="text-center text-muted py-3">No spare parts found in inventory.</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="modal-footer bg-white">
-                <button type="button" class="btn btn-secondary btn-sm px-4 fw-bold" data-bs-dismiss="modal">ዝጋ (Close)</button>
+                <form action="/save_store_inventory" method="POST" id="store-inventory-form">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <p class="text-muted small m-0">በድርጅቱ እስቶር ውስጥ ያሉትን መለዋወጫዎች ይመዝግቡ፣ ያስተካክሉ ወይም አዲስ ረድፍ ይጨምሩ፦</p>
+                        <button type="button" class="btn btn-outline-primary btn-sm fw-bold" onclick="addStoreInventoryRow()">+ Add Row</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-bordered align-middle table-sm bg-white shadow-sm rounded">
+                            <thead class="table-water-blue">
+                                <tr>
+                                    <th style="width: 5%;">#</th>
+                                    <th style="width: 25%;">Spare Part Name</th>
+                                    <th style="width: 25%;">Specification</th>
+                                    <th style="width: 25%;">Used For</th>
+                                    <th style="width: 15%;" class="text-center">Quantity (Qty)</th>
+                                    <th style="width: 5%;" class="text-center text-white">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="store-inventory-rows-container">
+                                {% for part in inventory %}
+                                <tr class="store-row">
+                                    <td class="py-2 fw-bold text-muted">{{ loop.index }}</td>
+                                    <td class="py-2">
+                                        <input type="text" name="store_part_name[]" class="form-control form-control-sm" value="{{ part.part_name }}" required>
+                                    </td>
+                                    <td class="py-2">
+                                        <input type="text" name="store_spec[]" class="form-control form-control-sm" value="{{ part.spec }}" required>
+                                    </td>
+                                    <td class="py-2">
+                                        <input type="text" name="store_used_for[]" class="form-control form-control-sm" value="{{ part.used_for }}" required>
+                                    </td>
+                                    <td class="py-2 text-center">
+                                        <input type="number" name="store_qty[]" class="form-control form-control-sm text-center fw-bold" value="{{ part.qty }}" min="0" required>
+                                    </td>
+                                    <td class="py-2 text-center">
+                                        <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2 fw-bold" onclick="removeStoreRow(this)">✕</button>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr class="store-row">
+                                    <td class="py-2 fw-bold text-muted">1</td>
+                                    <td class="py-2">
+                                        <input type="text" name="store_part_name[]" class="form-control form-control-sm" placeholder="Part Name" required>
+                                    </td>
+                                    <td class="py-2">
+                                        <input type="text" name="store_spec[]" class="form-control form-control-sm" placeholder="Specification" required>
+                                    </td>
+                                    <td class="py-2">
+                                        <input type="text" name="store_used_for[]" class="form-control form-control-sm" placeholder="Used For" required>
+                                    </td>
+                                    <td class="py-2 text-center">
+                                        <input type="number" name="store_qty[]" class="form-control form-control-sm text-center fw-bold" value="1" min="0" required>
+                                    </td>
+                                    <td class="py-2 text-center">
+                                        <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2 fw-bold" onclick="removeStoreRow(this)">✕</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-end mt-3">
+                        <button type="submit" class="btn btn-success btn-sm px-4 fw-bold shadow-sm">💾 Save Store Inventory</button>
+                        <button type="button" class="btn btn-secondary btn-sm px-4 fw-bold ms-2" data-bs-dismiss="modal">ዝጋ (Close)</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -574,6 +609,43 @@ HTML_TEMPLATE = """
         const price = parseFloat(row.querySelector('.spare-price').value) || 0;
         const total = qty * price;
         row.querySelector('.row-total-text').innerText = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " ETB";
+    }
+
+    // Store Inventory Dynamic Row Functions
+    function addStoreInventoryRow() {
+        const container = document.getElementById('store-inventory-rows-container');
+        const rowCount = container.children.length + 1;
+        const newRow = document.createElement('tr');
+        newRow.className = 'store-row';
+        newRow.innerHTML = `
+            <td class="py-2 fw-bold text-muted">${rowCount}</td>
+            <td class="py-2">
+                <input type="text" name="store_part_name[]" class="form-control form-control-sm" placeholder="Part Name" required>
+            </td>
+            <td class="py-2">
+                <input type="text" name="store_spec[]" class="form-control form-control-sm" placeholder="Specification" required>
+            </td>
+            <td class="py-2">
+                <input type="text" name="store_used_for[]" class="form-control form-control-sm" placeholder="Used For" required>
+            </td>
+            <td class="py-2 text-center">
+                <input type="number" name="store_qty[]" class="form-control form-control-sm text-center fw-bold" value="1" min="0" required>
+            </td>
+            <td class="py-2 text-center">
+                <button type="button" class="btn btn-outline-danger btn-sm py-0 px-2 fw-bold" onclick="removeStoreRow(this)">✕</button>
+            </td>
+        `;
+        container.appendChild(newRow);
+    }
+
+    function removeStoreRow(button) {
+        const row = button.closest('.store-row');
+        const container = document.getElementById('store-inventory-rows-container');
+        if (container.children.length > 1) {
+            row.remove();
+        } else {
+            alert("At least one store inventory row is required!");
+        }
     }
 </script>
 </body>
@@ -712,6 +784,39 @@ def dashboard():
         user=session.get('user')
     )
 
+@app.route('/save_store_inventory', methods=['POST'])
+def save_store_inventory():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+        
+    names = request.form.getlist('store_part_name[]')
+    specs = request.form.getlist('store_spec[]')
+    used_fors = request.form.getlist('store_used_for[]')
+    qtys = request.form.getlist('store_qty[]')
+    
+    updated_inventory = []
+    for i in range(len(names)):
+        p_name = names[i].strip()
+        if p_name:
+            try:
+                p_qty = int(qtys[i])
+            except:
+                p_qty = 0
+            p_spec = specs[i].strip() if i < len(specs) else ""
+            p_used = used_fors[i].strip() if i < len(used_fors) else ""
+            
+            updated_inventory.append({
+                "id": i + 1,
+                "part_name": p_name,
+                "spec": p_spec,
+                "used_for": p_used,
+                "qty": p_qty,
+                "unit_price": 0.00
+            })
+            
+    garage_data['spare_parts'] = updated_inventory
+    return redirect(url_for('dashboard'))
+
 @app.route('/add_work_order', methods=['POST'])
 def add_work_order():
     if not session.get('logged_in'):
@@ -785,7 +890,7 @@ def add_work_order():
         "battery_cost": float(request.form.get('battery_cost', 0) or 0),
         "lubrication_qty": float(request.form.get('lubrication_qty', 0) or 0),
         "lubrication_cost": float(request.form.get('lubrication_cost', 0) or 0),
-        "tire_qty": int(request.form.get('tire_csv', 0) or 0),
+        "tire_qty": int(request.form.get('tire_qty', 0) or 0),
         "tire_cost": float(request.form.get('tire_cost', 0) or 0)
     }
     garage_data['maintenance_logs'].append(new_log)
