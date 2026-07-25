@@ -46,7 +46,7 @@ DASHBOARD_HTML = """
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMaintenanceModal">+ Add Maintenance Record</button>
         </div>
 
-        <!-- 2. Store Spare Inventory + Add Button Section -->
+        <!-- Store Spare Inventory Section with Add Button -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Store Spare Inventory</h4>
@@ -74,7 +74,7 @@ DASHBOARD_HTML = """
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="5" class="text-center text-muted">No spare parts found in store. Please click '+ Add Store Spare Inventory' to add.</td>
+                            <td colspan="5" class="text-center text-muted">No spare parts found in store. Please use the button above to add spares.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -82,7 +82,7 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
-        <!-- 1. Weekly Summary (Last 7 Days) with Dedicated Save Report Excel Button -->
+        <!-- Weekly Summary (Last 7 Days) with Dedicated Save Report Excel Button -->
         <div class="card shadow-sm mb-4 border-warning">
             <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Weekly Summary (Last 7 Days)</h4>
@@ -122,7 +122,7 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
-        <!-- 1. Monthly Summary (Last 30 Days) with Dedicated Save Report Excel Button -->
+        <!-- Monthly Summary (Last 30 Days) with Dedicated Save Report Excel Button -->
         <div class="card shadow-sm mb-4 border-info">
             <div class="card-header bg-info text-dark d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Monthly Summary (Last 30 Days)</h4>
