@@ -1,5 +1,6 @@
 import io
 import pandas as pd
+from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, redirect, url_for, send_file
 from flask_sqlalchemy import SQLAlchemy
 
@@ -8,7 +9,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Database Models
 class MaintenanceRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vehicle_model = db.Column(db.String(100), nullable=False)
@@ -40,8 +40,11 @@ DASHBOARD_HTML = """
     <div class="container">
         <h2 class="mb-4 text-primary">SteelY R.M.I Garage Maintnace dash Bord</h2>
         
-        <div class="mb-4 d-flex gap-2">
-            <a href="/export/excel" class="btn btn-success">Export Report to Excel</a>
+        <!-- Excel Export Buttons & Add Maintenance Button -->
+        <div class="mb-4 d-flex flex-wrap gap-2">
+            <a href="/export/excel" class="btn btn-success">Export All to Excel</a>
+            <a href="/export/weekly" class="btn btn-warning text-dark fw-bold">Export Weekly (Last 7 Days)</a>
+            <a href="/export/monthly" class="btn btn-info text-dark fw-bold">Export Monthly (Last 30 Days)</a>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMaintenanceModal">+ Add Maintenance Record</button>
         </div>
 
@@ -244,8 +247,22 @@ def add_maintenance():
 
 @app.route('/export/excel')
 def export_excel():
+    return generate_report_excel(MaintenanceRecord.query.all(), 'SteelY_RMI_Garage_Report_All.xlsx')
+
+@app.route('/export/weekly')
+def export_weekly():
+    cutoff = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+    records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= cutoff).all()
+    return generate_report_excel(records, 'SteelY_RMI_Garage_Weekly_Report.xlsx')
+
+@app.route('/export/monthly')
+def export_monthly():
+    cutoff = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+    records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= cutoff).all()
+    return generate_report_excel(records, 'SteelY_RMI_Garage_Monthly_Report.xlsx')
+
+def generate_report_excel(records, filename):
     try:
-        records = MaintenanceRecord.query.all()
         data = []
         for r in records:
             data.append({
@@ -268,7 +285,7 @@ def export_excel():
             output,
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             as_attachment=True,
-            download_name='SteelY_RMI_Garage_Report.xlsx'
+            download_name=filename
         )
     except Exception as e:
         return f"Error generating Excel file: {str(e)}", 500
