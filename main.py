@@ -87,7 +87,7 @@ DASHBOARD_HTML = """
         <div class="card shadow-sm mb-4 border-warning">
             <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Weekly Summary (Last 7 Days)</h4>
-                <a href="/export/weekly" class="btn dark btn-dark btn-sm fw-bold text-white">Save Report Excel</a>
+                <a href="/export/weekly" class="btn btn-dark btn-sm fw-bold text-white">Save Report Excel</a>
             </div>
             <div class="card-body">
                 <table class="table table-bordered table-hover align-middle">
@@ -211,7 +211,7 @@ DASHBOARD_HTML = """
                     <div class="modal-body">
                         <div class="mb-3">
                             <label class="form-label">Spare Part Name</label>
-                            <input type="text" class="form-control" name="spare_part_name" required placeholder=" e.g. Oil Filter">
+                            <input type="text" class="form-control" name="spare_part_name" required placeholder="e.g. Oil Filter">
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Specification</label>
