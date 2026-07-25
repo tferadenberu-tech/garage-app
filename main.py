@@ -1,8 +1,6 @@
-# Let's write a python script to test the updated Flask code structure with inventory deduction logic, 
-# ensuring all user requirements are met (SteelY R.M.I Garage Maintnace dash Bord, spare inventory deduction, spec fields, no labor cost).
-
-code_content = '''import io
+import io
 import pandas as pd
+from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, redirect, url_for, send_file
 from flask_sqlalchemy import SQLAlchemy
 
@@ -11,7 +9,6 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Database Models
 class MaintenanceRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vehicle_model = db.Column(db.String(100), nullable=False)
@@ -43,12 +40,13 @@ DASHBOARD_HTML = """
     <div class="container">
         <h2 class="mb-4 text-primary">SteelY R.M.I Garage Maintnace dash Bord</h2>
         
-        <div class="mb-4 d-flex gap-2">
-            <a href="/export/excel" class="btn btn-success">Export Report to Excel</a>
+        <!-- General Action Buttons -->
+        <div class="mb-4 d-flex flex-wrap gap-2">
+            <a href="/export/excel" class="btn btn-success">Export All Records to Excel</a>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMaintenanceModal">+ Add Maintenance Record</button>
         </div>
 
-        <!-- Store Spare Inventory Section -->
+        <!-- Store Spare Inventory Section with Add Button -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                 <h4 class="mb-0">Store Spare Inventory</h4>
@@ -74,16 +72,100 @@ DASHBOARD_HTML = """
                             <td class="fw-bold {% if item.quantity < 5 %}text-danger{% else %}text-success{% endif %}">{{ item.quantity }}</td>
                             <td>{{ item.location }}</td>
                         </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">No spare parts found in store. Please use the button above to add spares.</td>
+                        </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
         </div>
 
-        <!-- Maintenance Records Section -->
+        <!-- Weekly Summary (Last 7 Days) with Dedicated Save Report Excel Button -->
+        <div class="card shadow-sm mb-4 border-warning">
+            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">Weekly Summary (Last 7 Days)</h4>
+                <a href="/export/weekly" class="btn btn-dark btn-sm fw-bold">Save Report Excel</a>
+            </div>
+            <div class="card-body">
+                <table class="table table-bordered table-hover align-middle">
+                    <thead class="table-secondary">
+                        <tr>
+                            <th>ID</th>
+                            <th>Vehicle Model</th>
+                            <th>Spare Part Name</th>
+                            <th>Specification (Spec)</th>
+                            <th>Qty Used</th>
+                            <th>Operational Interval</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in weekly_records %}
+                        <tr>
+                            <td>{{ r.id }}</td>
+                            <td>{{ r.vehicle_model }}</td>
+                            <td>{{ r.spare_part_name }}</td>
+                            <td>{{ r.spec }}</td>
+                            <td>{{ r.quantity_used }}</td>
+                            <td>{{ r.operational_interval }}</td>
+                            <td>{{ r.date }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted">No maintenance records found for the last 7 days.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Monthly Summary (Last 30 Days) with Dedicated Save Report Excel Button -->
+        <div class="card shadow-sm mb-4 border-info">
+            <div class="card-header bg-info text-dark d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">Monthly Summary (Last 30 Days)</h4>
+                <a href="/export/monthly" class="btn btn-dark btn-sm fw-bold">Save Report Excel</a>
+            </div>
+            <div class="card-body">
+                <table class="table table-bordered table-hover align-middle">
+                    <thead class="table-secondary">
+                        <tr>
+                            <th>ID</th>
+                            <th>Vehicle Model</th>
+                            <th>Spare Part Name</th>
+                            <th>Specification (Spec)</th>
+                            <th>Qty Used</th>
+                            <th>Operational Interval</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in monthly_records %}
+                        <tr>
+                            <td>{{ r.id }}</td>
+                            <td>{{ r.vehicle_model }}</td>
+                            <td>{{ r.spare_part_name }}</td>
+                            <td>{{ r.spec }}</td>
+                            <td>{{ r.quantity_used }}</td>
+                            <td>{{ r.operational_interval }}</td>
+                            <td>{{ r.date }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted">No maintenance records found for the last 30 days.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- All Maintenance Records Section -->
         <div class="card shadow-sm">
             <div class="card-header bg-primary text-white">
-                <h4 class="mb-0">Maintenance Records</h4>
+                <h4 class="mb-0">All Maintenance Records</h4>
             </div>
             <div class="card-body">
                 <table class="table table-bordered table-hover align-middle">
@@ -203,7 +285,20 @@ DASHBOARD_HTML = """
 def index():
     records = MaintenanceRecord.query.all()
     inventory_items = SpareInventory.query.all()
-    return render_template_string(DASHBOARD_HTML, records=records, inventory_items=inventory_items)
+    
+    weekly_cutoff = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+    monthly_cutoff = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+    
+    weekly_records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= weekly_cutoff).all()
+    monthly_records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= monthly_cutoff).all()
+    
+    return render_template_string(
+        DASHBOARD_HTML, 
+        records=records, 
+        inventory_items=inventory_items,
+        weekly_records=weekly_records,
+        monthly_records=monthly_records
+    )
 
 @app.route('/add_spare', methods=['POST'])
 def add_spare():
@@ -247,8 +342,22 @@ def add_maintenance():
 
 @app.route('/export/excel')
 def export_excel():
+    return generate_report_excel(MaintenanceRecord.query.all(), 'SteelY_RMI_Garage_Report_All.xlsx')
+
+@app.route('/export/weekly')
+def export_weekly():
+    cutoff = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+    records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= cutoff).all()
+    return generate_report_excel(records, 'SteelY_RMI_Garage_Weekly_Report.xlsx')
+
+@app.route('/export/monthly')
+def export_monthly():
+    cutoff = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+    records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= cutoff).all()
+    return generate_report_excel(records, 'SteelY_RMI_Garage_Monthly_Report.xlsx')
+
+def generate_report_excel(records, filename):
     try:
-        records = MaintenanceRecord.query.all()
         data = []
         for r in records:
             data.append({
@@ -271,12 +380,10 @@ def export_excel():
             output,
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             as_attachment=True,
-            download_name='SteelY_RMI_Garage_Report.xlsx'
+            download_name=filename
         )
     except Exception as e:
         return f"Error generating Excel file: {str(e)}", 500
 
 if __name__ == '__main__':
     app.run(debug=True)
-'''
-print("Successfully validated code architecture.")
