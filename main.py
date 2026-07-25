@@ -40,11 +40,9 @@ DASHBOARD_HTML = """
     <div class="container">
         <h2 class="mb-4 text-primary">SteelY R.M.I Garage Maintnace dash Bord</h2>
         
-        <!-- Excel Export Buttons & Add Maintenance Button -->
+        <!-- Top Actions -->
         <div class="mb-4 d-flex flex-wrap gap-2">
-            <a href="/export/excel" class="btn btn-success">Export All to Excel</a>
-            <a href="/export/weekly" class="btn btn-warning text-dark fw-bold">Export Weekly (Last 7 Days)</a>
-            <a href="/export/monthly" class="btn btn-info text-dark fw-bold">Export Monthly (Last 30 Days)</a>
+            <a href="/export/excel" class="btn btn-success">Export All Records to Excel</a>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMaintenanceModal">+ Add Maintenance Record</button>
         </div>
 
@@ -80,10 +78,90 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
-        <!-- Maintenance Records Section -->
+        <!-- Weekly Summary Section (Last 7 Days) with Dedicated Save Button -->
+        <div class="card shadow-sm mb-4 border-warning">
+            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">Weekly Summary (Last 7 Days)</h4>
+                <a href="/export/weekly" class="btn btn-dark btn-sm fw-bold">Save Weekly Report Excel</a>
+            </div>
+            <div class="card-body">
+                <table class="table table-bordered table-hover align-middle">
+                    <thead class="table-secondary">
+                        <tr>
+                            <th>ID</th>
+                            <th>Vehicle Model</th>
+                            <th>Spare Part Name</th>
+                            <th>Specification (Spec)</th>
+                            <th>Qty Used</th>
+                            <th>Operational Interval</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in weekly_records %}
+                        <tr>
+                            <td>{{ r.id }}</td>
+                            <td>{{ r.vehicle_model }}</td>
+                            <td>{{ r.spare_part_name }}</td>
+                            <td>{{ r.spec }}</td>
+                            <td>{{ r.quantity_used }}</td>
+                            <td>{{ r.operational_interval }}</td>
+                            <td>{{ r.date }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted">No maintenance records found for the last 7 days.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Monthly Summary Section (Last 30 Days) with Dedicated Save Button -->
+        <div class="card shadow-sm mb-4 border-info">
+            <div class="card-header bg-info text-dark d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">Monthly Summary (Last 30 Days)</h4>
+                <a href="/export/monthly" class="btn btn-dark btn-sm fw-bold">Save Monthly Report Excel</a>
+            </div>
+            <div class="card-body">
+                <table class="table table-bordered table-hover align-middle">
+                    <thead class="table-secondary">
+                        <tr>
+                            <th>ID</th>
+                            <th>Vehicle Model</th>
+                            <th>Spare Part Name</th>
+                            <th>Specification (Spec)</th>
+                            <th>Qty Used</th>
+                            <th>Operational Interval</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in monthly_records %}
+                        <tr>
+                            <td>{{ r.id }}</td>
+                            <td>{{ r.vehicle_model }}</td>
+                            <td>{{ r.spare_part_name }}</td>
+                            <td>{{ r.spec }}</td>
+                            <td>{{ r.quantity_used }}</td>
+                            <td>{{ r.operational_interval }}</td>
+                            <td>{{ r.date }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted">No maintenance records found for the last 30 days.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- All Maintenance Records Section -->
         <div class="card shadow-sm">
             <div class="card-header bg-primary text-white">
-                <h4 class="mb-0">Maintenance Records</h4>
+                <h4 class="mb-0">All Maintenance Records</h4>
             </div>
             <div class="card-body">
                 <table class="table table-bordered table-hover align-middle">
@@ -203,7 +281,20 @@ DASHBOARD_HTML = """
 def index():
     records = MaintenanceRecord.query.all()
     inventory_items = SpareInventory.query.all()
-    return render_template_string(DASHBOARD_HTML, records=records, inventory_items=inventory_items)
+    
+    weekly_cutoff = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+    monthly_cutoff = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+    
+    weekly_records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= weekly_cutoff).all()
+    monthly_records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= monthly_cutoff).all()
+    
+    return render_template_string(
+        DASHBOARD_HTML, 
+        records=records, 
+        inventory_items=inventory_items,
+        weekly_records=weekly_records,
+        monthly_records=monthly_records
+    )
 
 @app.route('/add_spare', methods=['POST'])
 def add_spare():
@@ -228,7 +319,7 @@ def add_maintenance():
     spare_item = SpareInventory.query.get(spare_id)
     if spare_item:
         if spare_item.quantity >= quantity_used:
-            spare_item.quantity -= quantity_used  # ከስቶር ላይ መቀነስ
+            spare_item.quantity -= quantity_used
             
             new_record = MaintenanceRecord(
                 vehicle_model=vehicle_model,
