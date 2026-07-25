@@ -347,45 +347,48 @@ HTML_TEMPLATE = """
                             </div>
                         </div>
 
-                        <!-- Separate Consumables Inputs -->
+                        <!-- Separate Consumables Inputs (Battery, Lubrication, Tire) -->
                         <div class="col-md-12">
                             <div class="p-3 border rounded bg-light shadow-sm">
                                 <h6 class="fw-bold text-dark mb-3">🔋 Separate Consumables Tracking (Battery, Lubrication, Tire)</h6>
                                 <div class="row g-3 align-items-center">
                                     <div class="col-md-4 border-end">
-                                        <label class="form-label small fw-bold text-primary">Battery:</label>
+                                        <label class="form-label small fw-bold text-primary">Battery (ባትሪ):</label>
                                         <div class="input-group input-group-sm mb-1">
                                             <span class="input-group-text">Qty</span>
-                                            <input type="number" name="battery_qty" class="form-control" value="0">
+                                            <input type="number" name="battery_qty" class="form-control" value="0" min="0">
                                         </div>
-                                        <div class="input-group input-group-sm">
+                                        <div class="input-group input-group-sm mb-2">
                                             <span class="input-group-text">Cost (ETB)</span>
                                             <input type="number" step="0.01" name="battery_cost" class="form-control" value="0.00">
                                         </div>
+                                        <input type="text" name="battery_spec" class="form-control form-control-sm" placeholder="Battery Spec (e.g. 150Ah)">
                                     </div>
 
                                     <div class="col-md-4 border-end">
-                                        <label class="form-label small fw-bold text-primary">Lubrication (Oil/Grease):</label>
+                                        <label class="form-label small fw-bold text-primary">Lubrication (ዘይት/ግሪዝ):</label>
                                         <div class="input-group input-group-sm mb-1">
                                             <span class="input-group-text">Qty (L)</span>
-                                            <input type="number" step="0.1" name="lubrication_qty" class="form-control" value="0.0">
+                                            <input type="number" step="0.1" name="lubrication_qty" class="form-control" value="0.0" min="0">
                                         </div>
-                                        <div class="input-group input-group-sm">
+                                        <div class="input-group input-group-sm mb-2">
                                             <span class="input-group-text">Cost (ETB)</span>
                                             <input type="number" step="0.01" name="lubrication_cost" class="form-control" value="0.00">
                                         </div>
+                                        <input type="text" name="lubrication_spec" class="form-control form-control-sm" placeholder="Lubricant Type (e.g. SAE 15W40)">
                                     </div>
 
                                     <div class="col-md-4">
-                                        <label class="form-label small fw-bold text-primary">Tire:</label>
+                                        <label class="form-label small fw-bold text-primary">Tire (ጎማ):</label>
                                         <div class="input-group input-group-sm mb-1">
                                             <span class="input-group-text">Qty</span>
-                                            <input type="number" name="tire_qty" class="form-control" value="0">
+                                            <input type="number" name="tire_qty" class="form-control" value="0" min="0">
                                         </div>
-                                        <div class="input-group input-group-sm">
+                                        <div class="input-group input-group-sm mb-2">
                                             <span class="input-group-text">Cost (ETB)</span>
                                             <input type="number" step="0.01" name="tire_cost" class="form-control" value="0.00">
                                         </div>
+                                        <input type="text" name="tire_spec" class="form-control form-control-sm" placeholder="Tire Size (e.g. 12.00R24)">
                                     </div>
                                 </div>
                             </div>
@@ -398,7 +401,7 @@ HTML_TEMPLATE = """
                 </form>
             </div>
 
-            <!-- Table 1: Execution & Work Time Log (Water Blue Header with Save Report & Action Delete) -->
+            <!-- Table 1: Execution & Work Time Log -->
             <div class="summary-card mb-4" id="execution-log-section">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="fw-bold text-dark m-0">🛠️ Maintenance Execution & Work Time Log</h5>
@@ -422,9 +425,9 @@ HTML_TEMPLATE = """
                                 <th>End Time</th>
                                 <th>Effective Hours</th>
                                 <th>⚙️ Replaced Spares</th>
-                                <th>Battery Cost</th>
-                                <th>Lubrication Cost</th>
-                                <th>Tire Cost</th>
+                                <th>Battery</th>
+                                <th>Lubrication</th>
+                                <th>Tire</th>
                                 <th class="text-center text-white">Action (Delete)</th>
                             </tr>
                         </thead>
@@ -458,9 +461,30 @@ HTML_TEMPLATE = """
                                         <span class="text-muted">None</span>
                                     {% endif %}
                                 </td>
-                                <td class="fw-bold text-success">{{ "{:,.2f}".format(log.battery_cost) }} ETB</td>
-                                <td class="fw-bold text-success">{{ "{:,.2f}".format(log.lubrication_cost) }} ETB</td>
-                                <td class="fw-bold text-success">{{ "{:,.2f}".format(log.tire_cost) }} ETB</td>
+                                <td class="small">
+                                    {% if log.battery_qty > 0 %}
+                                        <strong>Qty:</strong> {{ log.battery_qty }} | <strong>Cost:</strong> {{ "{:,.2f}".format(log.battery_cost) }} ETB
+                                        {% if log.battery_spec %}<br><span class="text-muted">({{ log.battery_spec }})</span>{% endif %}
+                                    {% else %}
+                                        <span class="text-muted">0</span>
+                                    {% endif %}
+                                </td>
+                                <td class="small">
+                                    {% if log.lubrication_qty > 0 %}
+                                        <strong>Qty:</strong> {{ log.lubrication_qty }}L | <strong>Cost:</strong> {{ "{:,.2f}".format(log.lubrication_cost) }} ETB
+                                        {% if log.lubrication_spec %}<br><span class="text-muted">({{ log.lubrication_spec }})</span>{% endif %}
+                                    {% else %}
+                                        <span class="text-muted">0</span>
+                                    {% endif %}
+                                </td>
+                                <td class="small">
+                                    {% if log.tire_qty > 0 %}
+                                        <strong>Qty:</strong> {{ log.tire_qty }} | <strong>Cost:</strong> {{ "{:,.2f}".format(log.tire_cost) }} ETB
+                                        {% if log.tire_spec %}<br><span class="text-muted">({{ log.tire_spec }})</span>{% endif %}
+                                    {% else %}
+                                        <span class="text-muted">0</span>
+                                    {% endif %}
+                                </td>
                                 <td class="text-center">
                                     <a href="/delete_log/{{ log.id }}" class="btn btn-outline-danger btn-sm px-2 py-0 fw-bold" onclick="return confirm('Delete this specific log row?');">🗑️ Delete Row</a>
                                 </td>
@@ -479,7 +503,7 @@ HTML_TEMPLATE = """
     </div>
 </div>
 
-<!-- Spare Parts Inventory Modal Dialog (Auto-Opened on Load with Dynamic Add Row & Specification/Used For) -->
+<!-- Spare Parts Inventory Modal Dialog -->
 <div class="modal fade" id="inventoryModal" tabindex="-1" aria-labelledby="inventoryModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content shadow-lg border-0">
@@ -560,7 +584,6 @@ HTML_TEMPLATE = """
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    // Automatically open the Spare Inventory Modal as a front dialog box when the dashboard loads
     document.addEventListener("DOMContentLoaded", function() {
         var inventoryModal = new bootstrap.Modal(document.getElementById('inventoryModal'));
         inventoryModal.show();
@@ -611,7 +634,6 @@ HTML_TEMPLATE = """
         row.querySelector('.row-total-text').innerText = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " ETB";
     }
 
-    // Store Inventory Dynamic Row Functions
     function addStoreInventoryRow() {
         const container = document.getElementById('store-inventory-rows-container');
         const rowCount = container.children.length + 1;
@@ -866,6 +888,37 @@ def add_work_order():
                 "unit_price": price,
                 "total_cost": qty * price
             })
+            
+            # --- Auto-Deduct Replaced Spare Part from Store Inventory ---
+            for store_item in garage_data['spare_parts']:
+                if store_item['part_name'].lower() == name.lower():
+                    store_item['qty'] = max(0, store_item['qty'] - qty)
+
+    # --- Separate Consumables Data ---
+    batt_qty = int(request.form.get('battery_qty', 0) or 0)
+    batt_cost = float(request.form.get('battery_cost', 0) or 0)
+    batt_spec = request.form.get('battery_spec', '').strip()
+
+    lub_qty = float(request.form.get('lubrication_qty', 0) or 0)
+    lub_cost = float(request.form.get('lubrication_cost', 0) or 0)
+    lub_spec = request.form.get('lubrication_spec', '').strip()
+
+    tire_qty = int(request.form.get('tire_qty', 0) or 0)
+    tire_cost = float(request.form.get('tire_cost', 0) or 0)
+    tire_spec = request.form.get('tire_spec', '').strip()
+
+    # Optional: Deduct Battery/Tire from Store Inventory if matching name exists
+    if batt_qty > 0 and batt_spec:
+        for store_item in garage_data['spare_parts']:
+            if "battery" in store_item['part_name'].lower() or "ባትሪ" in store_item['part_name']:
+                store_item['qty'] = max(0, store_item['qty'] - batt_qty)
+                break
+
+    if tire_qty > 0 and tire_spec:
+        for store_item in garage_data['spare_parts']:
+            if "tire" in store_item['part_name'].lower() or "ጎማ" in store_item['part_name']:
+                store_item['qty'] = max(0, store_item['qty'] - tire_qty)
+                break
 
     new_id = (max([l['id'] for l in garage_data['maintenance_logs']]) + 1) if garage_data['maintenance_logs'] else 1
     new_log = {
@@ -886,12 +939,15 @@ def add_work_order():
         "effective_hours": eff_hours,
         "description": request.form.get('description', ''),
         "replaced_spares": replaced_list,
-        "battery_qty": int(request.form.get('battery_qty', 0) or 0),
-        "battery_cost": float(request.form.get('battery_cost', 0) or 0),
-        "lubrication_qty": float(request.form.get('lubrication_qty', 0) or 0),
-        "lubrication_cost": float(request.form.get('lubrication_cost', 0) or 0),
-        "tire_qty": int(request.form.get('tire_qty', 0) or 0),
-        "tire_cost": float(request.form.get('tire_cost', 0) or 0)
+        "battery_qty": batt_qty,
+        "battery_cost": batt_cost,
+        "battery_spec": batt_spec,
+        "lubrication_qty": lub_qty,
+        "lubrication_cost": lub_cost,
+        "lubrication_spec": lub_spec,
+        "tire_qty": tire_qty,
+        "tire_cost": tire_cost,
+        "tire_spec": tire_spec
     }
     garage_data['maintenance_logs'].append(new_log)
     return redirect(url_for('dashboard'))
@@ -991,8 +1047,8 @@ def export_master_excel():
         logs_df = logs_df.sort_values(by='Serial Number', ascending=True).drop_duplicates(subset=['Serial Number', 'Work Order No'], keep='first')
 
     summary_data = [
-        {"Report Type": "WEEKLY SUMMARY (Last 7 Days)", "Total Jobs": weekly['total_jobs'], "PM Jobs": weekly['pm_jobs'], "CM Jobs": weekly['cm_jobs'], "Total Work Hours (hrs)": weekly['total_work_hours'], "Spare Parts Total Cost (ETB)": weekly['total_spares_cost'], "Lubricants Cost (ETB)": weekly['total_lubrication_cost'], "Batteries Cost (ETB)": weekly['total_battery_cost'], "Tires Cost (ETB)": weekly['total_tire_cost'], "Total Expenditure (ETB)": weekly['total_expenditure']},
-        {"Report Type": "MONTHLY SUMMARY (Last 30 Days)", "Total Jobs": monthly['total_jobs'], "PM Jobs": monthly['pm_jobs'], "CM Jobs": monthly['cm_jobs'], "Total Work Hours (hrs)": monthly['total_work_hours'], "Spare Parts Total Cost (ETB)": monthly['total_spares_cost'], "Lubricants Cost (ETB)": monthly['total_lubrication_cost'], "Batteries Cost (ETB)": monthly['total_battery_cost'], "Tires Cost (ETB)": monthly['total_tire_cost'], "Total Expenditure (ETB)": monthly['total_expenditure']}
+        {"Report Type": "WEEKLY SUMMARY (Last 7 Days)", "TotalJobs": weekly['total_jobs'], "PM Jobs": weekly['pm_jobs'], "CM Jobs": weekly['cm_jobs'], "Total Work Hours (hrs)": weekly['total_work_hours'], "Spare Parts Total Cost (ETB)": weekly['total_spares_cost'], "Lubricants Cost (ETB)": weekly['total_lubrication_cost'], "Batteries Cost (ETB)": weekly['total_battery_cost'], "Tires Cost (ETB)": weekly['total_tire_cost'], "Total Expenditure (ETB)": weekly['total_expenditure']},
+        {"Report Type": "MONTHLY SUMMARY (Last 30 Days)", "TotalJobs": monthly['total_jobs'], "PM Jobs": monthly['pm_jobs'], "CM Jobs": monthly['cm_jobs'], "Total Work Hours (hrs)": monthly['total_work_hours'], "Spare Parts Total Cost (ETB)": monthly['total_spares_cost'], "Lubricants Cost (ETB)": monthly['total_lubrication_cost'], "Batteries Cost (ETB)": monthly['total_battery_cost'], "Tires Cost (ETB)": monthly['total_tire_cost'], "Total Expenditure (ETB)": monthly['total_expenditure']}
     ]
     summary_df = pd.DataFrame(summary_data)
     
