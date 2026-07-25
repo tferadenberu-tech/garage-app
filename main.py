@@ -4,16 +4,18 @@ from flask import Flask, render_template_string, request, redirect, url_for, sen
 from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v6.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# የዳታቤዝ ሞዴል (Spare Inventory እና Maintenance ሪኮርዶችን ለመያዝ)
+# Database Models
 class MaintenanceRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vehicle_model = db.Column(db.String(100), nullable=False)
+    maintenance_type = db.Column(db.String(50), nullable=False)  # CM, PM, Inspection
     spare_part_name = db.Column(db.String(100), nullable=False)
     spec = db.Column(db.String(100), nullable=False)
+    quantity_used = db.Column(db.Integer, nullable=False, default=1)
     operational_interval = db.Column(db.String(100), nullable=False)
     date = db.Column(db.String(50), nullable=False)
 
@@ -27,7 +29,6 @@ class SpareInventory(db.Model):
 with app.app_context():
     db.create_all()
 
-# የዳሽቦርድ HTML ቴምፕሌት (ከ Add Store Spare Inventory ጋር)
 DASHBOARD_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -37,27 +38,28 @@ DASHBOARD_HTML = """
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light p-4">
-    <div class="container">
+    <div class="container-fluid px-4">
         <h2 class="mb-4 text-primary">SteelY R.M.I Garage Maintnace dash Bord</h2>
         
-        <div class="mb-4">
+        <div class="mb-4 d-flex gap-2">
             <a href="/export/excel" class="btn btn-success">Export Report to Excel</a>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMaintenanceModal">+ Add Maintenance Record</button>
         </div>
 
         <!-- Store Spare Inventory Section -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                <h4 class="mb-0">Store Spare Inventory</h4>
-                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Add Store Spare Inventory</button>
+                <h4 class="mb-0 fs-5">Store Spare Inventory</h4>
+                <button class="btn btn-light btn-sm text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Add Store Spare Inventory</button>
             </div>
             <div class="card-body">
-                <table class="table table-bordered table-hover">
+                <table class="table table-bordered table-hover align-middle">
                     <thead class="table-secondary">
                         <tr>
                             <th>ID</th>
                             <th>Part Name</th>
                             <th>Specification (Spec)</th>
-                            <th>Quantity</th>
+                            <th>Available Quantity</th>
                             <th>Location</th>
                         </tr>
                     </thead>
@@ -67,7 +69,7 @@ DASHBOARD_HTML = """
                             <td>{{ item.id }}</td>
                             <td>{{ item.part_name }}</td>
                             <td>{{ item.spec }}</td>
-                            <td>{{ item.quantity }}</td>
+                            <td class="fw-bold {% if item.quantity < 5 %}text-danger{% else %}text-success{% endif %}">{{ item.quantity }}</td>
                             <td>{{ item.location }}</td>
                         </tr>
                         {% endfor %}
@@ -79,16 +81,18 @@ DASHBOARD_HTML = """
         <!-- Maintenance Records Section -->
         <div class="card shadow-sm">
             <div class="card-header bg-primary text-white">
-                <h4 class="mb-0">Maintenance Records</h4>
+                <h4 class="mb-0 fs-5">Maintenance Records (CM / PM / Inspection)</h4>
             </div>
             <div class="card-body">
-                <table class="table table-bordered table-hover">
+                <table class="table table-bordered table-hover align-middle">
                     <thead class="table-secondary">
                         <tr>
                             <th>ID</th>
                             <th>Vehicle Model</th>
+                            <th>Maintenance Type</th>
                             <th>Spare Part Name</th>
                             <th>Specification (Spec)</th>
+                            <th>Qty Used</th>
                             <th>Operational Interval</th>
                             <th>Date</th>
                         </tr>
@@ -98,8 +102,18 @@ DASHBOARD_HTML = """
                         <tr>
                             <td>{{ r.id }}</td>
                             <td>{{ r.vehicle_model }}</td>
+                            <td>
+                                {% if r.maintenance_type == 'CM' %}
+                                    <span class="badge bg-danger">CM (Corrective)</span>
+                                {% elif r.maintenance_type == 'PM' %}
+                                    <span class="badge bg-success">PM (Preventive)</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark">Inspection</span>
+                                {% endif %}
+                            </td>
                             <td>{{ r.spare_part_name }}</td>
                             <td>{{ r.spec }}</td>
+                            <td>{{ r.quantity_used }}</td>
                             <td>{{ r.operational_interval }}</td>
                             <td>{{ r.date }}</td>
                         </tr>
@@ -130,7 +144,7 @@ DASHBOARD_HTML = """
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Quantity</label>
-                            <input type="number" class="form-control" name="quantity" required>
+                            <input type="number" class="form-control" name="quantity" required min="1">
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Location</label>
@@ -139,6 +153,57 @@ DASHBOARD_HTML = """
                     </div>
                     <div class="modal-footer">
                         <button type="submit" class="btn btn-primary">Save Spare</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for Adding Maintenance Record -->
+    <div class="modal fade" id="addMaintenanceModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" action="/add_maintenance">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Add Maintenance Record</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Vehicle Model</label>
+                            <input type="text" class="form-control" name="vehicle_model" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold text-danger">Maintenance Type / Category</label>
+                            <select class="form-select border-danger" name="maintenance_type" required>
+                                <option value="CM">CM (Corrective Maintenance)</option>
+                                <option value="PM">PM (Preventive Maintenance)</option>
+                                <option value="Inspection">Inspection</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Select Spare Part (from Store)</label>
+                            <select class="form-select" name="spare_id" required>
+                                {% for item in inventory_items %}
+                                <option value="{{ item.id }}">{{ item.part_name }} (Spec: {{ item.spec }}) - Available: {{ item.quantity }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Quantity Used</label>
+                            <input type="number" class="form-control" name="quantity_used" required min="1" value="1">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Operational Interval</label>
+                            <input type="text" class="form-control" name="operational_interval" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Date</label>
+                            <input type="date" class="form-control" name="date" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary">Save Record & Deduct Spare</button>
                     </div>
                 </form>
             </div>
@@ -160,12 +225,42 @@ def index():
 def add_spare():
     part_name = request.form.get('part_name')
     spec = request.form.get('spec')
-    quantity = request.form.get('quantity')
+    quantity = int(request.form.get('quantity'))
     location = request.form.get('location')
     
     new_spare = SpareInventory(part_name=part_name, spec=spec, quantity=quantity, location=location)
     db.session.add(new_spare)
     db.session.commit()
+    return redirect(url_for('index'))
+
+@app.route('/add_maintenance', methods=['POST'])
+def add_maintenance():
+    vehicle_model = request.form.get('vehicle_model')
+    maintenance_type = request.form.get('maintenance_type')
+    spare_id = int(request.form.get('spare_id'))
+    quantity_used = int(request.form.get('quantity_used'))
+    operational_interval = request.form.get('operational_interval')
+    date = request.form.get('date')
+    
+    spare_item = SpareInventory.query.get(spare_id)
+    if spare_item:
+        if spare_item.quantity >= quantity_used:
+            spare_item.quantity -= quantity_used  # ከስቶር ላይ መቀነስ
+            
+            new_record = MaintenanceRecord(
+                vehicle_model=vehicle_model,
+                maintenance_type=maintenance_type,
+                spare_part_name=spare_item.part_name,
+                spec=spare_item.spec,
+                quantity_used=quantity_used,
+                operational_interval=operational_interval,
+                date=date
+            )
+            db.session.add(new_record)
+            db.session.commit()
+        else:
+            return "Error: Not enough quantity in store for this spare part!", 400
+            
     return redirect(url_for('index'))
 
 @app.route('/export/excel')
@@ -177,8 +272,10 @@ def export_excel():
             data.append({
                 'ID': r.id,
                 'Vehicle Model': r.vehicle_model,
+                'Maintenance Type': r.maintenance_type,
                 'Spare Part Name': r.spare_part_name,
                 'Specification (Spec)': r.spec,
+                'Quantity Used': r.quantity_used,
                 'Operational Interval': r.operational_interval,
                 'Date': r.date
             })
