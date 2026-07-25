@@ -5,7 +5,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, sen
 from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v2.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v3.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -460,11 +460,17 @@ def export_excel():
 def export_weekly():
     cutoff = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
     records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= cutoff).all()
-    data = [{'ID': r.id, 'Vehicle Model': r.vehicle_model, 'Spare Part Name': r.spare_part_name, 'Specification': r.spec, 'Work Type': r.work_type, 'Quantity Used': r.quantity_used, 'Operational Interval': r.operational_interval, 'Date': r.date} for r in records]
-    df = pd.DataFrame(data)
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Weekly Maintenance')
+        # Maintenance Sheet
+        m_data = [{'ID': r.id, 'Vehicle Model': r.vehicle_model, 'Spare Part Name': r.spare_part_name, 'Specification': r.spec, 'Work Type': r.work_type, 'Quantity Used': r.quantity_used, 'Operational Interval': r.operational_interval, 'Date': r.date} for r in records]
+        pd.DataFrame(m_data).to_excel(writer, index=False, sheet_name='Weekly Maintenance')
+        
+        # Extra Works Sheet for the same week
+        ew_records = ExtraWork.query.filter(ExtraWork.date >= cutoff).all()
+        e_data = [{'ID': ew.id, 'Task Description': ew.task_description, 'Vehicle / Equipment': ew.vehicle_or_equipment, 'Hours Spent (hrs)': ew.hours_spent, 'Date': ew.date} for ew in ew_records]
+        pd.DataFrame(e_data).to_excel(writer, index=False, sheet_name='Weekly Extra Works')
+        
     output.seek(0)
     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='SteelY_RMI_Garage_Weekly_Report.xlsx')
 
@@ -472,11 +478,17 @@ def export_weekly():
 def export_monthly():
     cutoff = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
     records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= cutoff).all()
-    data = [{'ID': r.id, 'Vehicle Model': r.vehicle_model, 'Spare Part Name': r.spare_part_name, 'Specification': r.spec, 'Work Type': r.work_type, 'Quantity Used': r.quantity_used, 'Operational Interval': r.operational_interval, 'Date': r.date} for r in records]
-    df = pd.DataFrame(data)
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Monthly Maintenance')
+        # Maintenance Sheet
+        m_data = [{'ID': r.id, 'Vehicle Model': r.vehicle_model, 'Spare Part Name': r.spare_part_name, 'Specification': r.spec, 'Work Type': r.work_type, 'Quantity Used': r.quantity_used, 'Operational Interval': r.operational_interval, 'Date': r.date} for r in records]
+        pd.DataFrame(m_data).to_excel(writer, index=False, sheet_name='Monthly Maintenance')
+        
+        # Extra Works Sheet for the same month
+        ew_records = ExtraWork.query.filter(ExtraWork.date >= cutoff).all()
+        e_data = [{'ID': ew.id, 'Task Description': ew.task_description, 'Vehicle / Equipment': ew.vehicle_or_equipment, 'Hours Spent (hrs)': ew.hours_spent, 'Date': ew.date} for ew in ew_records]
+        pd.DataFrame(e_data).to_excel(writer, index=False, sheet_name='Monthly Extra Works')
+        
     output.seek(0)
     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='SteelY_RMI_Garage_Monthly_Report.xlsx')
 
