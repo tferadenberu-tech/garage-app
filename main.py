@@ -4,14 +4,14 @@ from flask import Flask, render_template_string, request, redirect, url_for, sen
 from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v7.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
+# Database Models
 class MaintenanceRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vehicle_model = db.Column(db.String(100), nullable=False)
-    maintenance_type = db.Column(db.String(50), nullable=False)  # CM, PM, Inspection
     spare_part_name = db.Column(db.String(100), nullable=False)
     spec = db.Column(db.String(100), nullable=False)
     quantity_used = db.Column(db.Integer, nullable=False, default=1)
@@ -37,18 +37,18 @@ DASHBOARD_HTML = """
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light p-4">
-    <div class="container-fluid px-4">
+    <div class="container">
         <h2 class="mb-4 text-primary">SteelY R.M.I Garage Maintnace dash Bord</h2>
         
         <div class="mb-4 d-flex gap-2">
             <a href="/export/excel" class="btn btn-success">Export Report to Excel</a>
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMaintenanceModal">+ Add Maintenance Record (CM/PM)</button>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMaintenanceModal">+ Add Maintenance Record</button>
         </div>
 
         <!-- Store Spare Inventory Section -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
-                <h4 class="mb-0 fs-5">Store Spare Inventory</h4>
+                <h4 class="mb-0">Store Spare Inventory</h4>
                 <button class="btn btn-light btn-sm text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Add Store Spare Inventory</button>
             </div>
             <div class="card-body">
@@ -80,7 +80,7 @@ DASHBOARD_HTML = """
         <!-- Maintenance Records Section -->
         <div class="card shadow-sm">
             <div class="card-header bg-primary text-white">
-                <h4 class="mb-0 fs-5">Maintenance Records (CM / PM / Inspection)</h4>
+                <h4 class="mb-0">Maintenance Records</h4>
             </div>
             <div class="card-body">
                 <table class="table table-bordered table-hover align-middle">
@@ -88,7 +88,6 @@ DASHBOARD_HTML = """
                         <tr>
                             <th>ID</th>
                             <th>Vehicle Model</th>
-                            <th>Maintenance Type</th>
                             <th>Spare Part Name</th>
                             <th>Specification (Spec)</th>
                             <th>Qty Used</th>
@@ -101,15 +100,6 @@ DASHBOARD_HTML = """
                         <tr>
                             <td>{{ r.id }}</td>
                             <td>{{ r.vehicle_model }}</td>
-                            <td>
-                                {% if r.maintenance_type == 'CM' %}
-                                    <span class="badge bg-danger">CM (Corrective)</span>
-                                {% elif r.maintenance_type == 'PM' %}
-                                    <span class="badge bg-success">PM (Preventive)</span>
-                                {% else %}
-                                    <span class="badge bg-warning text-dark">Inspection</span>
-                                {% endif %}
-                            </td>
                             <td>{{ r.spare_part_name }}</td>
                             <td>{{ r.spec }}</td>
                             <td>{{ r.quantity_used }}</td>
@@ -173,14 +163,6 @@ DASHBOARD_HTML = """
                             <input type="text" class="form-control" name="vehicle_model" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-bold text-danger">Maintenance Type / Category</label>
-                            <select class="form-select border-danger" name="maintenance_type" required>
-                                <option value="CM">CM (Corrective Maintenance)</option>
-                                <option value="PM">PM (Preventive Maintenance)</option>
-                                <option value="Inspection">Inspection</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
                             <label class="form-label">Select Spare Part (from Store)</label>
                             <select class="form-select" name="spare_id" required>
                                 {% for item in inventory_items %}
@@ -235,7 +217,6 @@ def add_spare():
 @app.route('/add_maintenance', methods=['POST'])
 def add_maintenance():
     vehicle_model = request.form.get('vehicle_model')
-    maintenance_type = request.form.get('maintenance_type')
     spare_id = int(request.form.get('spare_id'))
     quantity_used = int(request.form.get('quantity_used'))
     operational_interval = request.form.get('operational_interval')
@@ -244,10 +225,10 @@ def add_maintenance():
     spare_item = SpareInventory.query.get(spare_id)
     if spare_item:
         if spare_item.quantity >= quantity_used:
-            spare_item.quantity -= quantity_used
+            spare_item.quantity -= quantity_used  # ከስቶር ላይ መቀነስ
+            
             new_record = MaintenanceRecord(
                 vehicle_model=vehicle_model,
-                maintenance_type=maintenance_type,
                 spare_part_name=spare_item.part_name,
                 spec=spare_item.spec,
                 quantity_used=quantity_used,
@@ -270,7 +251,6 @@ def export_excel():
             data.append({
                 'ID': r.id,
                 'Vehicle Model': r.vehicle_model,
-                'Maintenance Type': r.maintenance_type,
                 'Spare Part Name': r.spare_part_name,
                 'Specification (Spec)': r.spec,
                 'Quantity Used': r.quantity_used,
@@ -294,4 +274,4 @@ def export_excel():
         return f"Error generating Excel file: {str(e)}", 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(debug=True)
