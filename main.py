@@ -26,6 +26,13 @@ class SpareInventory(db.Model):
     stock_qty = db.Column(db.Integer, nullable=False)
     unit_price = db.Column(db.Float, nullable=False)
 
+class ExtraWork(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    task_description = db.Column(db.String(200), nullable=False)
+    vehicle_or_equipment = db.Column(db.String(100), nullable=False)
+    hours_spent = db.Column(db.Float, nullable=False)
+    date = db.Column(db.String(50), nullable=False)
+
 with app.app_context():
     db.create_all()
 
@@ -44,6 +51,7 @@ DASHBOARD_HTML = """
         <div class="mb-4 d-flex flex-wrap gap-2">
             <a href="/export/excel" class="btn btn-success">Export All Records to Excel</a>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMaintenanceModal">+ Add Maintenance Record</button>
+            <button class="btn btn-warning text-dark fw-bold" data-bs-toggle="modal" data-bs-target="#addExtraWorkModal">+ Add Extra Work</button>
         </div>
 
         <!-- Summaries Section Side-by-Side and Compact -->
@@ -162,6 +170,42 @@ DASHBOARD_HTML = """
                         {% else %}
                         <tr>
                             <td colspan="6" class="text-center text-muted">No inventory records found. Click '+ Add Inventory' to add.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Extra Works Overview -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-warning text-dark d-flex justify-content-between align-items-center py-2">
+                <h4 class="mb-0 fs-5">Additional / Extra Works (Non-Work Order Tasks)</h4>
+                <button class="btn btn-dark btn-sm fw-bold px-3 py-1" data-bs-toggle="modal" data-bs-target="#addExtraWorkModal" style="font-size: 14px;">+ Add Extra Work</button>
+            </div>
+            <div class="card-body">
+                <table class="table table-bordered table-hover align-middle">
+                    <thead class="table-secondary">
+                        <tr>
+                            <th>ID</th>
+                            <th>Task Description</th>
+                            <th>Vehicle / Equipment</th>
+                            <th>Hours Spent (hrs)</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ew in extra_works %}
+                        <tr>
+                            <td>{{ ew.id }}</td>
+                            <td>{{ ew.task_description }}</td>
+                            <td>{{ ew.vehicle_or_equipment }}</td>
+                            <td>{{ ew.hours_spent }} hrs</td>
+                            <td>{{ ew.date }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">No extra works recorded. Click '+ Add Extra Work' to add.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -290,6 +334,40 @@ DASHBOARD_HTML = """
         </div>
     </div>
 
+    <div class="modal fade" id="addExtraWorkModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" action="/add_extrawork">
+                    <div class="modal-header bg-warning text-dark">
+                        <h5 class="modal-title fw-bold">Add Additional / Extra Work</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Task Description</label>
+                            <input type="text" class="form-control" name="task_description" required placeholder="e.g., Workshop welding & fabrication">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Vehicle or Equipment Name</label>
+                            <input type="text" class="form-control" name="vehicle_or_equipment" required placeholder="e.g., Overhead Crane / Sino Truck">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Hours Spent (hrs)</label>
+                            <input type="number" step="0.5" class="form-control" name="hours_spent" required min="0.5" value="1.0">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Date</label>
+                            <input type="date" class="form-control" name="date" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-warning text-dark fw-bold">Save Extra Work</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
@@ -299,11 +377,12 @@ DASHBOARD_HTML = """
 def index():
     records = MaintenanceRecord.query.all()
     inventory_items = SpareInventory.query.all()
+    extra_works = ExtraWork.query.all()
     weekly_cutoff = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
     monthly_cutoff = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
     weekly_records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= weekly_cutoff).all()
     monthly_records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= monthly_cutoff).all()
-    return render_template_string(DASHBOARD_HTML, records=records, inventory_items=inventory_items, weekly_records=weekly_records, monthly_records=monthly_records)
+    return render_template_string(DASHBOARD_HTML, records=records, inventory_items=inventory_items, extra_works=extra_works, weekly_records=weekly_records, monthly_records=monthly_records)
 
 @app.route('/add_inventory', methods=['POST'])
 def add_inventory():
@@ -333,6 +412,17 @@ def add_maintenance():
             db.session.commit()
         else:
             return "Error: Not enough quantity in stock!", 400
+    return redirect(url_for('index'))
+
+@app.route('/add_extrawork', methods=['POST'])
+def add_extrawork():
+    task_description = request.form.get('task_description')
+    vehicle_or_equipment = request.form.get('vehicle_or_equipment')
+    hours_spent = float(request.form.get('hours_spent'))
+    date = request.form.get('date')
+    new_extrawork = ExtraWork(task_description=task_description, vehicle_or_equipment=vehicle_or_equipment, hours_spent=hours_spent, date=date)
+    db.session.add(new_extrawork)
+    db.session.commit()
     return redirect(url_for('index'))
 
 @app.route('/export/excel')
