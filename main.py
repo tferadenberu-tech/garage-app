@@ -427,28 +427,43 @@ def add_extrawork():
 
 @app.route('/export/excel')
 def export_excel():
-    return generate_report_excel(MaintenanceRecord.query.all(), 'SteelY_RMI_Garage_Report_All.xlsx')
+    # Excel ፋይል ሲወርድ ዋናዎቹን ሜንቴናሶች እና ተጨማሪ ስራዎችን (Extra Works) በሁለት የተለዩ ሸቶች (Sheets) አብሮ እንዲያወርድ አድርገነዋል
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # Sheet 1: Maintenance Records
+        m_data = [{'ID': r.id, 'Vehicle Model': r.vehicle_model, 'Spare Part Name': r.spare_part_name, 'Specification': r.spec, 'Quantity Used': r.quantity_used, 'Operational Interval': r.operational_interval, 'Date': r.date} for r in MaintenanceRecord.query.all()]
+        pd.DataFrame(m_data).to_excel(writer, index=False, sheet_name='Maintenance Records')
+        
+        # Sheet 2: Extra Works
+        e_data = [{'ID': ew.id, 'Task Description': ew.task_description, 'Vehicle / Equipment': ew.vehicle_or_equipment, 'Hours Spent (hrs)': ew.hours_spent, 'Date': ew.date} for ew in ExtraWork.query.all()]
+        pd.DataFrame(e_data).to_excel(writer, index=False, sheet_name='Extra Works')
+        
+    output.seek(0)
+    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='SteelY_RMI_Garage_Full_Report.xlsx')
 
 @app.route('/export/weekly')
 def export_weekly():
     cutoff = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
     records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= cutoff).all()
-    return generate_report_excel(records, 'SteelY_RMI_Garage_Weekly_Report.xlsx')
+    data = [{'ID': r.id, 'Vehicle Model': r.vehicle_model, 'Spare Part Name': r.spare_part_name, 'Specification': r.spec, 'Quantity Used': r.quantity_used, 'Operational Interval': r.operational_interval, 'Date': r.date} for r in records]
+    df = pd.DataFrame(data)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Weekly Maintenance')
+    output.seek(0)
+    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='SteelY_RMI_Garage_Weekly_Report.xlsx')
 
 @app.route('/export/monthly')
 def export_monthly():
     cutoff = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
     records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= cutoff).all()
-    return generate_report_excel(records, 'SteelY_RMI_Garage_Monthly_Report.xlsx')
-
-def generate_report_excel(records, filename):
     data = [{'ID': r.id, 'Vehicle Model': r.vehicle_model, 'Spare Part Name': r.spare_part_name, 'Specification': r.spec, 'Quantity Used': r.quantity_used, 'Operational Interval': r.operational_interval, 'Date': r.date} for r in records]
     df = pd.DataFrame(data)
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Garage Report')
+        df.to_excel(writer, index=False, sheet_name='Monthly Maintenance')
     output.seek(0)
-    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=filename)
+    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='SteelY_RMI_Garage_Monthly_Report.xlsx')
 
 if __name__ == '__main__':
     app.run(debug=True, port=5002)
