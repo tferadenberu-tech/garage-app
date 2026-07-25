@@ -10,9 +10,9 @@ app.secret_key = "steely_garage_secret_key"
 # --- In-Memory System Database ---
 garage_data = {
     "spare_parts": [
-        {"id": 1, "part_name": "Oil Filter", "spec": "LF16015 / Heavy Duty", "qty": 20, "unit_price": 1200.00},
-        {"id": 2, "part_name": "Fuel Filter", "spec": "FF5421 / High Efficiency", "qty": 15, "unit_price": 1800.00},
-        {"id": 3, "part_name": "Brake Shoe Set", "spec": "Rear Axle / Heavy Duty Standard", "qty": 8, "unit_price": 4500.00}
+        {"id": 1, "part_name": "Oil Filter", "spec": "LF16015 / Heavy Duty", "for_vehicle": "Sino Truck 371", "qty": 20, "unit_price": 1200.00},
+        {"id": 2, "part_name": "Fuel Filter", "spec": "FF5421 / High Efficiency", "for_vehicle": "Isuzu NPR", "qty": 15, "unit_price": 1800.00},
+        {"id": 3, "part_name": "Brake Shoe Set", "spec": "Rear Axle / Heavy Duty Standard", "for_vehicle": "FSR", "qty": 8, "unit_price": 4500.00}
     ],
     "maintenance_logs": [
         {
@@ -151,7 +151,7 @@ HTML_TEMPLATE = """
                 <a href="#summary-section" class="nav-link-custom">📊 Summaries & Filter</a>
                 <a href="#create-wo-section" class="nav-link-custom">➕ Create Work Order</a>
                 <a href="#execution-log-section" class="nav-link-custom">🛠️ Execution & Log</a>
-                <a href="#inventory-section" class="nav-link-custom">⚙️ Spare Inventory</a>
+                <a href="#" class="nav-link-custom" data-bs-toggle="modal" data-bs-target="#inventoryModal">⚙️ Spare Inventory</a>
             </nav>
         </div>
 
@@ -169,6 +169,7 @@ HTML_TEMPLATE = """
                         <span class="user-name">{{ user.name }}</span>
                         <span class="user-role">{{ user.role }}</span>
                     </div>
+                    <button type="button" class="btn btn-primary btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#inventoryModal">⚙️ View Spare Inventory</button>
                     <a href="/export/master_excel" class="btn-header-export shadow-sm">📊 Export Excel</a>
                     <a href="/logout" class="btn-header-logout shadow-sm">🚪 Logout</a>
                 </div>
@@ -474,40 +475,62 @@ HTML_TEMPLATE = """
                 </div>
             </div>
 
-            <!-- Table 2: Spare Parts Inventory -->
-            <div class="summary-card mb-4" id="inventory-section">
-                <h5 class="fw-bold text-dark mb-3">⚙️ Spare Parts Inventory</h5>
+        </div>
+    </div>
+</div>
+
+<!-- Spare Parts Inventory Modal Dialog (Auto-Opened on Load / Front Dialog Box) -->
+<div class="modal fade" id="inventoryModal" tabindex="-1" aria-labelledby="inventoryModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header table-water-blue text-white">
+                <h5 class="modal-title fw-bold" id="inventoryModalLabel">⚙️ Spare Parts Inventory (ቁጥጥር እና ዝርዝር)</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bg-light p-4">
+                <p class="text-muted small mb-3">በጋራዥ ክምችት ውስጥ የሚገኙ የእስፔር ፓርቶች ስም እና የቁጥር መጠን (Quantity) ብቻ ከዚህ በታች ይታያሉ፦</p>
                 <div class="table-responsive">
-                    <table class="table table-hover align-middle table-sm">
+                    <table class="table table-hover align-middle table-sm bg-white border shadow-sm rounded">
                         <thead class="table-water-blue">
                             <tr>
-                                <th>#</th>
-                                <th>Spare Part Name</th>
-                                <th>Specification</th>
-                                <th>Stock Qty</th>
-                                <th>Unit Price (ETB)</th>
+                                <th class="py-2">#</th>
+                                <th class="py-2">Spare Part Name</th>
+                                <th class="py-2 text-center">Stock Quantity (Qty)</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for part in inventory %}
                             <tr>
-                                <td>{{ part.id }}</td>
-                                <td class="fw-bold">{{ part.part_name }}</td>
-                                <td><span class="badge bg-light text-dark border">{{ part.spec }}</span></td>
-                                <td>{{ part.qty }}</td>
-                                <td>{{ "{:,.2f}".format(part.unit_price) }} ETB</td>
+                                <td class="py-2">{{ part.id }}</td>
+                                <td class="py-2 fw-bold text-dark">{{ part.part_name }}</td>
+                                <td class="py-2 text-center">
+                                    <span class="badge bg-primary fs-6 px-3 py-1">{{ part.qty }} Pcs</span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted py-3">No spare parts found in inventory.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
             </div>
-
+            <div class="modal-footer bg-white">
+                <button type="button" class="btn btn-secondary btn-sm px-4 fw-bold" data-bs-dismiss="modal">ዝጋ (Close)</button>
+            </div>
         </div>
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+    // Automatically open the Spare Inventory Modal as a front dialog box when the dashboard loads
+    document.addEventListener("DOMContentLoaded", function() {
+        var inventoryModal = new bootstrap.Modal(document.getElementById('inventoryModal'));
+        inventoryModal.show();
+    });
+
     function addSpareRow() {
         const container = document.getElementById('spare-rows-container');
         const newRow = document.createElement('div');
@@ -762,7 +785,7 @@ def add_work_order():
         "battery_cost": float(request.form.get('battery_cost', 0) or 0),
         "lubrication_qty": float(request.form.get('lubrication_qty', 0) or 0),
         "lubrication_cost": float(request.form.get('lubrication_cost', 0) or 0),
-        "tire_qty": int(request.form.get('tire_qty', 0) or 0),
+        "tire_qty": int(request.form.get('tire_csv', 0) or 0),
         "tire_cost": float(request.form.get('tire_cost', 0) or 0)
     }
     garage_data['maintenance_logs'].append(new_log)
@@ -815,7 +838,6 @@ def export_execution_excel():
     
     logs_df = pd.DataFrame(logs_export)
     
-    # Sort by Serial Number and drop any potential duplicate rows to prevent overlapping/duplication
     if not logs_df.empty:
         logs_df = logs_df.sort_values(by='Serial Number', ascending=True).drop_duplicates(subset=['Serial Number', 'Work Order No'], keep='first')
 
@@ -860,7 +882,6 @@ def export_master_excel():
         
     logs_df = pd.DataFrame(logs_export)
     
-    # Sort by Serial Number and remove duplicates for Master Excel as well
     if not logs_df.empty:
         logs_df = logs_df.sort_values(by='Serial Number', ascending=True).drop_duplicates(subset=['Serial Number', 'Work Order No'], keep='first')
 
