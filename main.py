@@ -15,6 +15,7 @@ class MaintenanceRecord(db.Model):
     spare_part_name = db.Column(db.String(100), nullable=False)
     spec = db.Column(db.String(100), nullable=False)
     quantity_used = db.Column(db.Integer, nullable=False, default=1)
+    work_type = db.Column(db.String(50), nullable=False)  # PM, CM, Inspection
     operational_interval = db.Column(db.String(100), nullable=False)
     date = db.Column(db.String(50), nullable=False)
 
@@ -71,7 +72,8 @@ DASHBOARD_HTML = """
                                     <tr>
                                         <th>ID</th>
                                         <th>Model</th>
-                                        <th>Spare Part Name</th>
+                                        <th>Spare Part</th>
+                                        <th>Type</th>
                                         <th>Qty</th>
                                         <th>Date</th>
                                     </tr>
@@ -82,12 +84,13 @@ DASHBOARD_HTML = """
                                         <td>{{ r.id }}</td>
                                         <td>{{ r.vehicle_model }}</td>
                                         <td>{{ r.spare_part_name }}</td>
+                                        <td><span class="badge bg-secondary">{{ r.work_type }}</span></td>
                                         <td>{{ r.quantity_used }}</td>
                                         <td>{{ r.date }}</td>
                                     </tr>
                                     {% else %}
                                     <tr>
-                                        <td colspan="5" class="text-center text-muted">No records found.</td>
+                                        <td colspan="6" class="text-center text-muted">No records found.</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -112,7 +115,8 @@ DASHBOARD_HTML = """
                                     <tr>
                                         <th>ID</th>
                                         <th>Model</th>
-                                        <th>Spare Part Name</th>
+                                        <th>Spare Part</th>
+                                        <th>Type</th>
                                         <th>Qty</th>
                                         <th>Date</th>
                                     </tr>
@@ -123,12 +127,13 @@ DASHBOARD_HTML = """
                                         <td>{{ r.id }}</td>
                                         <td>{{ r.vehicle_model }}</td>
                                         <td>{{ r.spare_part_name }}</td>
+                                        <td><span class="badge bg-secondary">{{ r.work_type }}</span></td>
                                         <td>{{ r.quantity_used }}</td>
                                         <td>{{ r.date }}</td>
                                     </tr>
                                     {% else %}
                                     <tr>
-                                        <td colspan="5" class="text-center text-muted">No records found.</td>
+                                        <td colspan="6" class="text-center text-muted">No records found.</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -226,6 +231,7 @@ DASHBOARD_HTML = """
                             <th>Vehicle Model</th>
                             <th>Spare Part Name</th>
                             <th>Specification</th>
+                            <th>Work Type</th>
                             <th>Qty Used</th>
                             <th>Operational Interval</th>
                             <th>Date</th>
@@ -238,13 +244,14 @@ DASHBOARD_HTML = """
                             <td>{{ r.vehicle_model }}</td>
                             <td>{{ r.spare_part_name }}</td>
                             <td>{{ r.spec }}</td>
+                            <td><span class="badge bg-info text-dark">{{ r.work_type }}</span></td>
                             <td>{{ r.quantity_used }}</td>
                             <td>{{ r.operational_interval }}</td>
                             <td>{{ r.date }}</td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="7" class="text-center text-muted">No maintenance records found.</td>
+                            <td colspan="8" class="text-center text-muted">No maintenance records found.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -311,6 +318,14 @@ DASHBOARD_HTML = """
                                 {% for item in inventory_items %}
                                 <option value="{{ item.id }}">{{ item.spare_part_name }} (Spec: {{ item.specification }}) - Stock: {{ item.stock_qty }}</option>
                                 {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Work Type / Category</label>
+                            <select class="form-select" name="work_type" required>
+                                <option value="PM">PM (Preventive Maintenance)</option>
+                                <option value="CM">CM (Corrective Maintenance)</option>
+                                <option value="Inspection">Inspection</option>
                             </select>
                         </div>
                         <div class="mb-3">
@@ -400,6 +415,7 @@ def add_inventory():
 def add_maintenance():
     vehicle_model = request.form.get('vehicle_model')
     spare_id = int(request.form.get('spare_id'))
+    work_type = request.form.get('work_type')
     quantity_used = int(request.form.get('quantity_used'))
     operational_interval = request.form.get('operational_interval')
     date = request.form.get('date')
@@ -407,7 +423,7 @@ def add_maintenance():
     if spare_item:
         if spare_item.stock_qty >= quantity_used:
             spare_item.stock_qty -= quantity_used
-            new_record = MaintenanceRecord(vehicle_model=vehicle_model, spare_part_name=spare_item.spare_part_name, spec=spare_item.specification, quantity_used=quantity_used, operational_interval=operational_interval, date=date)
+            new_record = MaintenanceRecord(vehicle_model=vehicle_model, spare_part_name=spare_item.spare_part_name, spec=spare_item.specification, work_type=work_type, quantity_used=quantity_used, operational_interval=operational_interval, date=date)
             db.session.add(new_record)
             db.session.commit()
         else:
@@ -427,17 +443,16 @@ def add_extrawork():
 
 @app.route('/export/excel')
 def export_excel():
-    # Excel ፋይል ሲወርድ ዋናዎቹን ሜንቴናሶች እና ተጨማሪ ስራዎችን (Extra Works) በሁለት የተለዩ ሸቶች (Sheets) አብሮ እንዲያወርድ አድርገነዋል
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        # Sheet 1: Maintenance Records
-        m_data = [{'ID': r.id, 'Vehicle Model': r.vehicle_model, 'Spare Part Name': r.spare_part_name, 'Specification': r.spec, 'Quantity Used': r.quantity_used, 'Operational Interval': r.operational_interval, 'Date': r.date} for r in MaintenanceRecord.query.all()]
+        m_data = [{'ID': r.id, 'Vehicle Model': r.vehicle_model, 'Spare Part Name': r.spare_part_name, 'Specification': r.spec, 'Work Type': r.work_type, 'Quantity Used': r.quantity_used, 'Operational Interval': r.operational_interval, 'Date': r.date} for r in MaintenanceRecord.query.all()]
         pd.DataFrame(m_data).to_excel(writer, index=False, sheet_name='Maintenance Records')
         
-        # Sheet 2: Extra Works
         e_data = [{'ID': ew.id, 'Task Description': ew.task_description, 'Vehicle / Equipment': ew.vehicle_or_equipment, 'Hours Spent (hrs)': ew.hours_spent, 'Date': ew.date} for ew in ExtraWork.query.all()]
         pd.DataFrame(e_data).to_excel(writer, index=False, sheet_name='Extra Works')
         
+        i_data = [{'Spare Part Name': i.spare_part_name, 'Specification': i.specification, 'Used For': i.used_for, 'Stock Qty': i.stock_qty, 'Unit Price': i.unit_price, 'Total Value': i.stock_qty * i.unit_price} for i in SpareInventory.query.all()]
+        pd.DataFrame(i_data).to_excel(writer, index=False, sheet_name='Inventory Overview')
     output.seek(0)
     return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='SteelY_RMI_Garage_Full_Report.xlsx')
 
@@ -445,7 +460,7 @@ def export_excel():
 def export_weekly():
     cutoff = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
     records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= cutoff).all()
-    data = [{'ID': r.id, 'Vehicle Model': r.vehicle_model, 'Spare Part Name': r.spare_part_name, 'Specification': r.spec, 'Quantity Used': r.quantity_used, 'Operational Interval': r.operational_interval, 'Date': r.date} for r in records]
+    data = [{'ID': r.id, 'Vehicle Model': r.vehicle_model, 'Spare Part Name': r.spare_part_name, 'Specification': r.spec, 'Work Type': r.work_type, 'Quantity Used': r.quantity_used, 'Operational Interval': r.operational_interval, 'Date': r.date} for r in records]
     df = pd.DataFrame(data)
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -457,7 +472,7 @@ def export_weekly():
 def export_monthly():
     cutoff = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
     records = MaintenanceRecord.query.filter(MaintenanceRecord.date >= cutoff).all()
-    data = [{'ID': r.id, 'Vehicle Model': r.vehicle_model, 'Spare Part Name': r.spare_part_name, 'Specification': r.spec, 'Quantity Used': r.quantity_used, 'Operational Interval': r.operational_interval, 'Date': r.date} for r in records]
+    data = [{'ID': r.id, 'Vehicle Model': r.vehicle_model, 'Spare Part Name': r.spare_part_name, 'Specification': r.spec, 'Work Type': r.work_type, 'Quantity Used': r.quantity_used, 'Operational Interval': r.operational_interval, 'Date': r.date} for r in records]
     df = pd.DataFrame(data)
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
