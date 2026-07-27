@@ -340,13 +340,19 @@ def dashboard():
         return redirect(url_for('login'))
     work_orders = WorkOrder.query.all()
     inventory_items = SpareInventory.query.all()
-    return render_template_string(DASHBOARD_HTML, work_orders=work_orders, inventory_items=inventory_items)
+    
+    response = make_response(render_template_string(DASHBOARD_HTML, work_orders=work_orders, inventory_items=inventory_items))
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 @app.route('/logout')
 def logout():
     session.clear()
-    response = redirect(url_for('login'))
+    response = make_response(redirect(url_for('login')))
     response.delete_cookie('session')
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
 
 @app.route('/add_spare', methods=['POST'])
