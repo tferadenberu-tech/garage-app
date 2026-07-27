@@ -253,7 +253,7 @@ HTML_TEMPLATE = """
                             <input type="text" name="driver" class="form-control form-control-sm" placeholder="e.g. አበበ ከ.">
                         </div>
                         
-                        <!-- Assigned Technicians / Mechanics: Input & Button in One Inline Row (As requested) -->
+                        <!-- Assigned Technicians / Mechanics: Simple Input & Button in One Inline Row (As requested) -->
                         <div class="col-md-5">
                             <label class="form-label small fw-bold text-success">Assigned Technicians / Mechanics:</label>
                             <div class="input-group input-group-sm">
