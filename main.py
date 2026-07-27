@@ -87,14 +87,14 @@ DASHBOARD_HTML = """
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light p-3">
-    <div class="container-fluid px-2">
+    <div class="container-fluid px-3">
         <div class="card shadow-sm p-3 mb-3 bg-white">
             <div class="row align-items-center g-2">
                 <div class="col-md-7">
                     <h4 class="text-primary fw-bold mb-0">SteelY R.M.I Garage Maintenance</h4>
                     <small class="text-muted">Integrated Work Time, Consumables & Maintenance Platform</small>
                 </div>
-                <div class="col-md-5 d-flex justify-content-md-end align-items-center gap-2 flex-wrap">
+                <div class="col-md-5 d-flex justify-content-md-end align-items-center gap-2">
                     <div class="text-start text-md-end">
                         <span class="badge bg-secondary">Dinberu Tefera</span><br>
                         <small class="text-muted fw-bold" style="font-size: 9px;">HEAD OF MECHANICAL WORKSHOP</small>
