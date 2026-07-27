@@ -8,6 +8,9 @@ app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v8.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SESSION_COOKIE_SECURE'] = False  # Set to True if using strict HTTPS proxy routing
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 db = SQLAlchemy(app)
 
 class WorkOrder(db.Model):
@@ -23,7 +26,7 @@ class WorkOrder(db.Model):
     assigned_technicians = db.Column(db.String(200), nullable=False)
     start_datetime = db.Column(db.String(50), nullable=False)
     end_datetime = db.Column(db.String(50), nullable=False)
-    maintenance_type = db.Column(db.String(50), nullable=False) # PM, CM, Inspection & Check
+    maintenance_type = db.Column(db.String(50), nullable=False) 
     work_category = db.Column(db.String(100), nullable=False) 
     description = db.Column(db.Text, nullable=True)
     spare_parts_qty = db.Column(db.Integer, nullable=False, default=0)
@@ -107,7 +110,6 @@ DASHBOARD_HTML = """
 
         <!-- SUMMARY ROW (WEEKLY & MONTHLY) -->
         <div class="row mb-4">
-            <!-- Weekly Summary -->
             <div class="col-md-6">
                 <div class="card shadow-sm h-100">
                     <div class="card-header bg-secondary text-white">
@@ -137,7 +139,6 @@ DASHBOARD_HTML = """
                 </div>
             </div>
 
-            <!-- Monthly Summary -->
             <div class="col-md-6">
                 <div class="card shadow-sm h-100">
                     <div class="card-header bg-primary text-white">
@@ -307,7 +308,6 @@ DASHBOARD_HTML = """
                                 <input type="datetime-local" class="form-control" name="end_datetime" required>
                             </div>
                             
-                            <!-- Maintenance Type & Work Category -->
                             <div class="col-md-4">
                                 <label class="form-label fw-bold text-danger">Maintenance Type</label>
                                 <select class="form-select border-danger fw-bold text-primary" name="maintenance_type" required>
@@ -326,7 +326,6 @@ DASHBOARD_HTML = """
                                 <textarea class="form-control" name="description" rows="2" placeholder="Detailed work description or notes..."></textarea>
                             </div>
 
-                            <!-- Detailed Cost Fields -->
                             <div class="col-md-4">
                                 <label class="form-label">Spare Parts Qty (Pcs)</label>
                                 <input type="number" class="form-control" name="spare_parts_qty" value="0" min="0">
@@ -429,7 +428,6 @@ def dashboard():
     work_orders = WorkOrder.query.all()
     inventory_items = SpareInventory.query.all()
 
-    # Calculations for Weekly (7 days) and Monthly (30 days) summaries
     now = datetime.now()
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
@@ -451,7 +449,6 @@ def dashboard():
             except:
                 wo_date = now
 
-        # Monthly check
         if wo_date >= month_ago:
             monthly_jobs += 1
             if wo.maintenance_type == 'PM': monthly_pm += 1
@@ -466,7 +463,6 @@ def dashboard():
             monthly_tire_cost += wo.tires_cost
             monthly_total_exp += wo.total_expenditure
 
-        # Weekly check
         if wo_date >= week_ago:
             weekly_jobs += 1
             if wo.maintenance_type == 'PM': weekly_pm += 1
@@ -549,7 +545,6 @@ def add_work_order():
     batteries_cost = float(request.form.get('batteries_cost', 0.0))
     tires_cost = float(request.form.get('tires_cost', 0.0))
     
-    # Calculate effective work hours if possible
     effective_hours = 0.0
     try:
         s_dt = datetime.strptime(start_datetime, '%Y-%m-%dT%H:%M')
@@ -557,7 +552,7 @@ def add_work_order():
         diff = (e_dt - s_dt).total_seconds() / 3600.0
         effective_hours = max(0.0, diff)
     except:
-        effective_hours = 2.0 # Default fallback hours
+        effective_hours = 2.0
 
     total_expenditure = spare_parts_cost + lubricants_cost + batteries_cost + tires_cost
     
