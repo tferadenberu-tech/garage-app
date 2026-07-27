@@ -79,12 +79,21 @@ DASHBOARD_HTML = """
 <body class="bg-light p-4">
     <div class="container-fluid px-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2 class="text-primary fw-bold mb-0">SteelY R.M.I Garage Maintnace dash Bord</h2>
-            <a href="/logout" class="btn btn-outline-danger fw-bold">🚪 Logout</a>
+            <div>
+                <h2 class="text-primary fw-bold mb-0">SteelY R.M.I Garage Maintnace dash Bord</h2>
+                <small class="text-muted">Integrated Work Time, Consumables & Maintenance Tracking Platform</small>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                <div class="text-end">
+                    <span class="badge bg-secondary">Dinberu Tefera</span><br>
+                    <small class="text-muted fw-bold">HEAD OF MECHANICAL WORKSHOP AND GARAGE</small>
+                </div>
+                <a href="/export/excel" class="btn btn-success btn-sm">📊 Export Excel</a>
+                <a href="/logout" class="btn btn-danger btn-sm">Logout</a>
+            </div>
         </div>
         
         <div class="mb-4 d-flex gap-2">
-            <a href="/export/excel" class="btn btn-success">📊 Export Master Excel Report</a>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">+ Create New Work Order</button>
             <button class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Store Spare Inventory</button>
         </div>
@@ -336,7 +345,9 @@ def dashboard():
 @app.route('/logout')
 def logout():
     session.clear()
-    return redirect(url_for('login'))
+    response = redirect(url_for('login'))
+    response.delete_cookie('session')
+    return response
 
 @app.route('/add_spare', methods=['POST'])
 def add_spare():
