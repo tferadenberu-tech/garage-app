@@ -88,21 +88,19 @@ DASHBOARD_HTML = """
 </head>
 <body class="bg-light p-4">
     <div class="container-fluid px-4">
-        <div class="card shadow-sm p-4 mb-4 bg-white">
+        <div class="card shadow-sm p-3 mb-4 bg-white">
             <div class="row align-items-center">
-                <div class="col-md-6">
-                    <h2 class="text-primary fw-bold mb-1">SteelY R.M.I Garage Maintnace dash Bord</h2>
-                    <small class="text-muted">Integrated Work Time, Consumables & Maintenance Tracking Platform</small>
+                <div class="col-lg-5">
+                    <h3 class="text-primary fw-bold mb-1" style="font-size: 22px;">SteelY R.M.I Garage Maintenance</h3>
+                    <small class="text-muted">Integrated Work Time, Consumables & Maintenance Platform</small>
                 </div>
-                <div class="col-md-6 text-md-end mt-3 mt-md-0 d-flex justify-content-md-end align-items-center gap-3 flex-wrap">
-                    <div class="text-start text-md-end">
+                <div class="col-lg-7 d-flex justify-content-lg-end align-items-center gap-2 mt-3 mt-lg-0 flex-wrap">
+                    <div class="text-end me-2">
                         <span class="badge bg-secondary">Dinberu Tefera</span><br>
-                        <small class="text-muted fw-bold" style="font-size: 11px;">HEAD OF MECHANICAL WORKSHOP AND GARAGE</small>
+                        <small class="text-muted fw-bold" style="font-size: 10px;">HEAD OF MECHANICAL WORKSHOP</small>
                     </div>
-                    <div>
-                        <a href="/export/excel" class="btn btn-success btn-sm fw-bold">📊 Export Excel</a>
-                        <a href="/logout" class="btn btn-danger btn-sm fw-bold ms-1">Logout</a>
-                    </div>
+                    <a href="/export/excel" class="btn btn-success btn-sm fw-bold">📊 Export Excel</a>
+                    <a href="/logout" class="btn btn-danger btn-sm fw-bold px-3">🚪 Logout</a>
                 </div>
             </div>
         </div>
