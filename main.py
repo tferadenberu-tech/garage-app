@@ -1,5 +1,6 @@
 import io
 import csv
+from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, redirect, url_for, make_response, session
 from flask_sqlalchemy import SQLAlchemy
 
@@ -22,10 +23,16 @@ class WorkOrder(db.Model):
     assigned_technicians = db.Column(db.String(200), nullable=False)
     start_datetime = db.Column(db.String(50), nullable=False)
     end_datetime = db.Column(db.String(50), nullable=False)
-    maintenance_type = db.Column(db.String(50), nullable=False) 
+    maintenance_type = db.Column(db.String(50), nullable=False) # PM, CM, Inspection & Check
     work_category = db.Column(db.String(100), nullable=False) 
     description = db.Column(db.Text, nullable=True)
-    spare_parts_info = db.Column(db.Text, nullable=True)
+    spare_parts_qty = db.Column(db.Integer, nullable=False, default=0)
+    spare_parts_cost = db.Column(db.Float, nullable=False, default=0.0)
+    lubricants_volume = db.Column(db.Float, nullable=False, default=0.0)
+    lubricants_cost = db.Column(db.Float, nullable=False, default=0.0)
+    batteries_cost = db.Column(db.Float, nullable=False, default=0.0)
+    tires_cost = db.Column(db.Float, nullable=False, default=0.0)
+    effective_work_hours = db.Column(db.Float, nullable=False, default=0.0)
     total_expenditure = db.Column(db.Float, nullable=False, default=0.0)
 
 class SpareInventory(db.Model):
@@ -96,6 +103,69 @@ DASHBOARD_HTML = """
         <div class="mb-4 d-flex gap-2">
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">+ Create New Work Order</button>
             <button class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Store Spare Inventory</button>
+        </div>
+
+        <!-- SUMMARY ROW (WEEKLY & MONTHLY) -->
+        <div class="row mb-4">
+            <!-- Weekly Summary -->
+            <div class="col-md-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0 fs-6">WEEKLY SUMMARY (LAST 7 DAYS)</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="fw-bold mb-2">Total Jobs Executed: <span class="text-primary">{{ weekly_jobs }}</span></p>
+                        <ul class="list-unstyled ms-3 mb-3 small">
+                            <li>• Preventive Maintenance (PM): <strong>{{ weekly_pm }}</strong></li>
+                            <li>• Corrective Maintenance (CM): <strong>{{ weekly_cm }}</strong></li>
+                            <li>• Inspection & Checkup: <strong>{{ weekly_insp }}</strong></li>
+                        </ul>
+                        <p class="fw-bold mb-2 text-primary">Total Effective Work Time: {{ "%.1f"|format(weekly_hours) }} hrs</p>
+                        <hr class="my-2">
+                        <div class="row small text-muted">
+                            <div class="col-6">Spare Parts Quantity: <strong>{{ weekly_spare_qty }} Pcs</strong></div>
+                            <div class="col-6">Spare Parts Cost: <strong>ETB {{ "%.2f"|format(weekly_spare_cost) }}</strong></div>
+                            <div class="col-6">Lubricants Volume: <strong>{{ "%.1f"|format(weekly_lube_vol) }} Liters</strong></div>
+                            <div class="col-6">Lubricants Cost: <strong>ETB {{ "%.2f"|format(weekly_lube_cost) }}</strong></div>
+                            <div class="col-6">Batteries Cost: <strong>ETB {{ "%.2f"|format(weekly_batt_cost) }}</strong></div>
+                            <div class="col-6">Tires Cost: <strong>ETB {{ "%.2f"|format(weekly_tire_cost) }}</strong></div>
+                        </div>
+                        <div class="mt-3 pt-2 border-top fw-bold text-dark">
+                            Total Expenditure: ETB {{ "%.2f"|format(weekly_total_exp) }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Monthly Summary -->
+            <div class="col-md-6">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0 fs-6">MONTHLY SUMMARY (LAST 30 DAYS)</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="fw-bold mb-2">Total Jobs Executed: <span class="text-primary">{{ monthly_jobs }}</span></p>
+                        <ul class="list-unstyled ms-3 mb-3 small">
+                            <li>• Preventive Maintenance (PM): <strong>{{ monthly_pm }}</strong></li>
+                            <li>• Corrective Maintenance (CM): <strong>{{ monthly_cm }}</strong></li>
+                            <li>• Inspection & Checkup: <strong>{{ monthly_insp }}</strong></li>
+                        </ul>
+                        <p class="fw-bold mb-2 text-primary">Total Effective Work Time: {{ "%.1f"|format(monthly_hours) }} hrs</p>
+                        <hr class="my-2">
+                        <div class="row small text-muted">
+                            <div class="col-6">Spare Parts Quantity: <strong>{{ monthly_spare_qty }} Pcs</strong></div>
+                            <div class="col-6">Spare Parts Cost: <strong>ETB {{ "%.2f"|format(monthly_spare_cost) }}</strong></div>
+                            <div class="col-6">Lubricants Volume: <strong>{{ "%.1f"|format(monthly_lube_vol) }} Liters</strong></div>
+                            <div class="col-6">Lubricants Cost: <strong>ETB {{ "%.2f"|format(monthly_lube_cost) }}</strong></div>
+                            <div class="col-6">Batteries Cost: <strong>ETB {{ "%.2f"|format(monthly_batt_cost) }}</strong></div>
+                            <div class="col-6">Tires Cost: <strong>ETB {{ "%.2f"|format(monthly_tire_cost) }}</strong></div>
+                        </div>
+                        <div class="mt-3 pt-2 border-top fw-bold text-success">
+                            Total Expenditure: ETB {{ "%.2f"|format(monthly_total_exp) }}
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Store Spare Inventory Section -->
@@ -237,7 +307,7 @@ DASHBOARD_HTML = """
                                 <input type="datetime-local" class="form-control" name="end_datetime" required>
                             </div>
                             
-                            <!-- Maintenance Type & Work Category Side-by-Side Layout -->
+                            <!-- Maintenance Type & Work Category -->
                             <div class="col-md-4">
                                 <label class="form-label fw-bold text-danger">Maintenance Type</label>
                                 <select class="form-select border-danger fw-bold text-primary" name="maintenance_type" required>
@@ -256,13 +326,30 @@ DASHBOARD_HTML = """
                                 <textarea class="form-control" name="description" rows="2" placeholder="Detailed work description or notes..."></textarea>
                             </div>
 
-                            <div class="col-md-6">
-                                <label class="form-label">Spare Parts & Consumables Info</label>
-                                <input type="text" class="form-control" name="spare_parts_info" placeholder="Spare part or lubricants used">
+                            <!-- Detailed Cost Fields -->
+                            <div class="col-md-4">
+                                <label class="form-label">Spare Parts Qty (Pcs)</label>
+                                <input type="number" class="form-control" name="spare_parts_qty" value="0" min="0">
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Total Expenditure (ETB)</label>
-                                <input type="number" step="0.01" class="form-control" name="total_expenditure" required value="0.00">
+                            <div class="col-md-4">
+                                <label class="form-label">Spare Parts Cost (ETB)</label>
+                                <input type="number" step="0.01" class="form-control" name="spare_parts_cost" value="0.00" min="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Lubricants Volume (Liters)</label>
+                                <input type="number" step="0.1" class="form-control" name="lubricants_volume" value="0.0" min="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Lubricants Cost (ETB)</label>
+                                <input type="number" step="0.01" class="form-control" name="lubricants_cost" value="0.00" min="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Batteries Cost (ETB)</label>
+                                <input type="number" step="0.01" class="form-control" name="batteries_cost" value="0.00" min="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Tires Cost (ETB)</label>
+                                <input type="number" step="0.01" class="form-control" name="tires_cost" value="0.00" min="0">
                             </div>
                         </div>
                     </div>
@@ -338,10 +425,76 @@ def login():
 def dashboard():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
+    
     work_orders = WorkOrder.query.all()
     inventory_items = SpareInventory.query.all()
+
+    # Calculations for Weekly (7 days) and Monthly (30 days) summaries
+    now = datetime.now()
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
+    weekly_jobs = weekly_pm = weekly_cm = weekly_insp = 0
+    weekly_hours = weekly_spare_qty = weekly_spare_cost = 0.0
+    weekly_lube_vol = weekly_lube_cost = weekly_batt_cost = weekly_tire_cost = weekly_total_exp = 0.0
+
+    monthly_jobs = monthly_pm = monthly_cm = monthly_insp = 0
+    monthly_hours = monthly_spare_qty = monthly_spare_cost = 0.0
+    monthly_lube_vol = monthly_lube_cost = monthly_batt_cost = monthly_tire_cost = monthly_total_exp = 0.0
+
+    for wo in work_orders:
+        try:
+            wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
+        except:
+            try:
+                wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%d %H:%M')
+            except:
+                wo_date = now
+
+        # Monthly check
+        if wo_date >= month_ago:
+            monthly_jobs += 1
+            if wo.maintenance_type == 'PM': monthly_pm += 1
+            elif wo.maintenance_type == 'CM': monthly_cm += 1
+            else: monthly_insp += 1
+            monthly_hours += wo.effective_work_hours
+            monthly_spare_qty += wo.spare_parts_qty
+            monthly_spare_cost += wo.spare_parts_cost
+            monthly_lube_vol += wo.lubricants_volume
+            monthly_lube_cost += wo.lubricants_cost
+            monthly_batt_cost += wo.batteries_cost
+            monthly_tire_cost += wo.tires_cost
+            monthly_total_exp += wo.total_expenditure
+
+        # Weekly check
+        if wo_date >= week_ago:
+            weekly_jobs += 1
+            if wo.maintenance_type == 'PM': weekly_pm += 1
+            elif wo.maintenance_type == 'CM': weekly_cm += 1
+            else: weekly_insp += 1
+            weekly_hours += wo.effective_work_hours
+            weekly_spare_qty += wo.spare_parts_qty
+            weekly_spare_cost += wo.spare_parts_cost
+            weekly_lube_vol += wo.lubricants_volume
+            weekly_lube_cost += wo.lubricants_cost
+            weekly_batt_cost += wo.batteries_cost
+            weekly_tire_cost += wo.tires_cost
+            weekly_total_exp += wo.total_expenditure
+
+    response = make_response(render_template_string(
+        DASHBOARD_HTML, 
+        work_orders=work_orders, 
+        inventory_items=inventory_items,
+        weekly_jobs=weekly_jobs, weekly_pm=weekly_pm, weekly_cm=weekly_cm, weekly_insp=weekly_insp,
+        weekly_hours=weekly_hours, weekly_spare_qty=weekly_spare_qty, weekly_spare_cost=weekly_spare_cost,
+        weekly_lube_vol=weekly_lube_vol, weekly_lube_cost=weekly_lube_cost, weekly_batt_cost=weekly_batt_cost,
+        weekly_tire_cost=weekly_tire_cost, weekly_total_exp=weekly_total_exp,
+        monthly_jobs=monthly_jobs, monthly_pm=monthly_pm, monthly_cm=monthly_cm, monthly_insp=monthly_insp,
+        monthly_hours=monthly_hours, monthly_spare_qty=monthly_spare_qty, monthly_spare_cost=monthly_spare_cost,
+        monthly_lube_vol=monthly_lube_vol, monthly_lube_cost=monthly_lube_cost, monthly_batt_cost=monthly_batt_cost,
+        monthly_tire_cost=monthly_tire_cost, monthly_total_exp=monthly_total_exp
+    ))
     
-    response = make_response(render_template_string(DASHBOARD_HTML, work_orders=work_orders, inventory_items=inventory_items))
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response.headers["Pragma"] = "no-cache"
     response.headers["Expires"] = "0"
@@ -373,6 +526,7 @@ def add_spare():
 def add_work_order():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
+    
     serial_number = request.form.get('serial_number')
     work_order_no = request.form.get('work_order_no')
     vehicle_plate = request.form.get('vehicle_plate')
@@ -387,8 +541,25 @@ def add_work_order():
     maintenance_type = request.form.get('maintenance_type')
     work_category = request.form.get('work_category')
     description = request.form.get('description')
-    spare_parts_info = request.form.get('spare_parts_info')
-    total_expenditure = float(request.form.get('total_expenditure', 0.0))
+    
+    spare_parts_qty = int(request.form.get('spare_parts_qty', 0))
+    spare_parts_cost = float(request.form.get('spare_parts_cost', 0.0))
+    lubricants_volume = float(request.form.get('lubricants_volume', 0.0))
+    lubricants_cost = float(request.form.get('lubricants_cost', 0.0))
+    batteries_cost = float(request.form.get('batteries_cost', 0.0))
+    tires_cost = float(request.form.get('tires_cost', 0.0))
+    
+    # Calculate effective work hours if possible
+    effective_hours = 0.0
+    try:
+        s_dt = datetime.strptime(start_datetime, '%Y-%m-%dT%H:%M')
+        e_dt = datetime.strptime(end_datetime, '%Y-%m-%dT%H:%M')
+        diff = (e_dt - s_dt).total_seconds() / 3600.0
+        effective_hours = max(0.0, diff)
+    except:
+        effective_hours = 2.0 # Default fallback hours
+
+    total_expenditure = spare_parts_cost + lubricants_cost + batteries_cost + tires_cost
     
     new_wo = WorkOrder(
         serial_number=serial_number,
@@ -405,7 +576,13 @@ def add_work_order():
         maintenance_type=maintenance_type,
         work_category=work_category,
         description=description,
-        spare_parts_info=spare_parts_info,
+        spare_parts_qty=spare_parts_qty,
+        spare_parts_cost=spare_parts_cost,
+        lubricants_volume=lubricants_volume,
+        lubricants_cost=lubricants_cost,
+        batteries_cost=batteries_cost,
+        tires_cost=tires_cost,
+        effective_work_hours=effective_hours,
         total_expenditure=total_expenditure
     )
     db.session.add(new_wo)
@@ -425,7 +602,8 @@ def export_excel():
             'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
             'Current Reading', 'Reading Unit', 'Job Status', 'Driver Name', 
             'Assigned Technicians', 'Start Time', 'End Time', 
-            'Maintenance Type', 'Work Category', 'Description', 'Spare Parts Info', 'Total Expenditure (ETB)'
+            'Maintenance Type', 'Work Category', 'Description', 
+            'Spare Qty', 'Spare Cost', 'Lube Vol', 'Lube Cost', 'Batt Cost', 'Tire Cost', 'Effective Hours (hrs)', 'Total Expenditure (ETB)'
         ])
         
         for wo in work_orders:
@@ -433,7 +611,8 @@ def export_excel():
                 wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
                 wo.current_reading, wo.reading_unit, wo.job_status, wo.driver_name, 
                 wo.assigned_technicians, wo.start_datetime, wo.end_datetime, 
-                wo.maintenance_type, wo.work_category, wo.description, wo.spare_parts_info, wo.total_expenditure
+                wo.maintenance_type, wo.work_category, wo.description, 
+                wo.spare_parts_qty, wo.spare_parts_cost, wo.lubricants_volume, wo.lubricants_cost, wo.batteries_cost, wo.tires_cost, wo.effective_work_hours, wo.total_expenditure
             ])
             
         output = make_response(si.getvalue())
