@@ -33,8 +33,8 @@ garage_data = {
             "effective_hours": 6.5,
             "description": "Engine Oil & Filter Change",
             "replaced_spares": [
-                {"part_name": "Oil Filter (LF16015)", "qty": 1, "unit_price": 1200.0, "total_cost": 1200.0},
-                {"part_name": "Fuel Filter (FF5421)", "qty": 1, "unit_price": 1800.0, "total_cost": 1800.0}
+                {"part_name": "Oil Filter (LF16015)", "spec": "LF16015", "qty": 1, "unit_price": 1200.0, "total_cost": 1200.0},
+                {"part_name": "Fuel Filter (FF5421)", "spec": "FF5421", "qty": 1, "unit_price": 1800.0, "total_cost": 1800.0}
             ],
             "battery_qty": 1, "battery_cost": 15000.0,
             "lubrication_qty": 20.0, "lubrication_cost": 4500.0,
@@ -151,7 +151,7 @@ HTML_TEMPLATE = """
                 <a href="#summary-section" class="nav-link-custom">📊 Summaries & Filter</a>
                 <a href="#create-wo-section" class="nav-link-custom">➕ Create Work Order</a>
                 <a href="#execution-log-section" class="nav-link-custom">🛠️ Execution & Log</a>
-                <a href="#inventory-section" class="nav-link-custom" data-bs-toggle="modal" data-bs-target="#inventoryModal">⚙️ Spare Inventory</a>
+                <a href="#" class="nav-link-custom" data-bs-toggle="modal" data-bs-target="#inventoryModal">⚙️ Spare Inventory</a>
             </nav>
         </div>
 
@@ -294,8 +294,7 @@ HTML_TEMPLATE = """
                         <div class="col-md-5">
                             <label class="form-label small fw-bold text-primary">Assigned Technicians / Mechanics:</label>
                             <div class="input-group input-group-sm">
-                                <input type="text" name="technicians" class="form-control" placeholder="e.g., Ato Mihret, Dinberu Tefera">
-                                <button type="button" class="btn btn-outline-primary fw-semibold px-3">+ Assign</button>
+                                <input type="text" name="technicians" class="form-control" placeholder="e.g., Ato Mihret, Dinberu Tefera" required>
                             </div>
                         </div>
 
@@ -315,7 +314,7 @@ HTML_TEMPLATE = """
                             <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. Engine Maintenance and Spare Parts Replacement" required>
                         </div>
 
-                        <!-- Dynamic Replaced Spare Parts Section (Using Descriptive Breakdown Schema) -->
+                        <!-- Dynamic Replaced Spare Parts Section -->
                         <div class="col-md-12">
                             <div class="p-3 border rounded bg-light shadow-sm">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -398,7 +397,7 @@ HTML_TEMPLATE = """
                 </form>
             </div>
 
-            <!-- Table 1: Execution & Work Time Log (Water Blue Header with Save Report & Action Delete) -->
+            <!-- Table 1: Execution & Work Time Log -->
             <div class="summary-card mb-4" id="execution-log-section">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h5 class="fw-bold text-dark m-0">🛠️ Maintenance Execution & Work Time Log</h5>
@@ -479,45 +478,39 @@ HTML_TEMPLATE = """
     </div>
 </div>
 
-<!-- Spare Parts Inventory Modal Dialog -->
+<!-- Spare Parts Inventory Modal -->
 <div class="modal fade" id="inventoryModal" tabindex="-1" aria-labelledby="inventoryModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title fw-bold" id="inventoryModalLabel">⚙️ Spare Parts Inventory</h5>
+                <h5 class="modal-title fw-bold" id="inventoryModalLabel">⚙️ Spare Parts Store Inventory</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body bg-light">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle table-sm bg-white border">
-                        <thead class="table-water-blue">
-                            <tr>
-                                <th>#</th>
-                                <th>Spare Part Name</th>
-                                <th>Specification</th>
-                                <th>For Vehicle</th>
-                                <th>Stock Qty</th>
-                                <th>Unit Price (ETB)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for part in inventory %}
-                            <tr>
-                                <td>{{ part.id }}</td>
-                                <td class="fw-bold">{{ part.part_name }}</td>
-                                <td><span class="badge bg-light text-dark border">{{ part.spec }}</span></td>
-                                <td><span class="badge bg-info text-dark">{{ part.for_vehicle }}</span></td>
-                                <td>{{ part.qty }}</td>
-                                <td>{{ "{:,.2f}".format(part.unit_price) }} ETB</td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="6" class="text-center text-muted py-3">No spare parts found in inventory.</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+            <div class="modal-body">
+                <table class="table table-striped table-bordered table-sm align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>ID</th>
+                            <th>Part Name</th>
+                            <th>Specification</th>
+                            <th>Vehicle Model</th>
+                            <th>Qty Stock</th>
+                            <th>Unit Price (ETB)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for part in spare_inventory %}
+                        <tr>
+                            <td>{{ part.id }}</td>
+                            <td class="fw-bold">{{ part.part_name }}</td>
+                            <td>{{ part.spec }}</td>
+                            <td>{{ part.for_vehicle }}</td>
+                            <td><span class="badge bg-success">{{ part.qty }} Pcs</span></td>
+                            <td>{{ "{:,.2f}".format(part.unit_price) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
@@ -557,11 +550,10 @@ HTML_TEMPLATE = """
 
     function removeSpareRow(button) {
         const row = button.closest('.spare-row');
-        const container = document.getElementById('spare-rows-container');
-        if (container.children.length > 1) {
+        if (document.querySelectorAll('.spare-row').length > 1) {
             row.remove();
         } else {
-            alert("At least one spare part row is required!");
+            alert("At least one spare row placeholder required (or leave blank descriptions).");
         }
     }
 
@@ -570,330 +562,217 @@ HTML_TEMPLATE = """
         const qty = parseFloat(row.querySelector('.spare-qty').value) || 0;
         const price = parseFloat(row.querySelector('.spare-price').value) || 0;
         const total = qty * price;
-        row.querySelector('.row-total-text').innerText = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " ETB";
+        row.querySelector('.row-total-text').innerText = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
     }
 </script>
 </body>
 </html>
 """
 
-LOGIN_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Login - SteelY R.M.I Garage</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="bg-dark d-flex align-items-center justify-content-center vh-100">
-    <div class="card p-4 shadow" style="width: 350px;">
-        <h3 class="text-center mb-3 text-primary">SteelY R.M.I</h3>
-        <p class="text-center text-muted small">Garage Maintenance System Login</p>
-        {% if error %}
-            <div class="alert alert-danger py-1 small text-center">{{ error }}</div>
-        {% endif %}
-        <form method="POST">
-            <div class="mb-3">
-                <label class="form-label small fw-bold">Username:</label>
-                <input type="text" name="username" class="form-control" required placeholder="admin">
-            </div>
-            <div class="mb-3">
-                <label class="form-label small fw-bold">Password:</label>
-                <input type="password" name="password" class="form-control" required placeholder="password">
-            </div>
-            <button type="submit" class="btn btn-primary w-100 fw-bold">Login</button>
-        </form>
-    </div>
-</body>
-</html>
-"""
+# --- Flask Routes ---
 
-def compute_period_summary(logs_list, days):
-    now = datetime.now()
-    cutoff = now - timedelta(days=days)
-    period_logs = []
-    for l in logs_list:
-        try:
-            dt = datetime.strptime(l['start_time'], "%Y-%m-%d %H:%M")
-            if dt >= cutoff:
-                period_logs.append(l)
-        except:
-            period_logs.append(l)
-            
-    total_jobs = len(period_logs)
-    pm_jobs = sum(1 for l in period_logs if l.get('type') == 'PM')
-    cm_jobs = sum(1 for l in period_logs if l.get('type') == 'CM')
-    total_work_hours = round(sum(l.get('effective_hours', 0) for l in period_logs), 2)
+@app.route("/")
+def index():
+    # User Profile Simulation
+    user = {"name": "Dinberu Tefera", "role": "Head of Mechanical Workshop and Garage"}
     
-    total_spare_qty = sum(sum(sp.get('qty', 0) for sp in l.get('replaced_spares', [])) for l in period_logs)
-    total_spares_cost = sum(sum(sp.get('total_cost', 0) for sp in l.get('replaced_spares', [])) for l in period_logs)
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
     
-    total_lubrication_qty = sum(l.get('lubrication_qty', 0) for l in period_logs)
-    total_lubrication_cost = sum(l.get('lubrication_cost', 0) for l in period_logs)
+    logs = garage_data["maintenance_logs"]
     
-    total_battery_cost = sum(l.get('battery_cost', 0) for l in period_logs)
-    total_tire_cost = sum(l.get('tire_cost', 0) for l in period_logs)
-    
-    total_expenditure = total_spares_cost + total_lubrication_cost + total_battery_cost + total_tire_cost
-    
-    return {
-        "total_jobs": total_jobs,
-        "pm_jobs": pm_jobs,
-        "cm_jobs": cm_jobs,
-        "total_work_hours": total_work_hours,
-        "total_spare_qty": total_spare_qty,
-        "total_spares_cost": total_spares_cost,
-        "total_lubrication_qty": total_lubrication_qty,
-        "total_lubrication_cost": total_lubrication_cost,
-        "total_battery_cost": total_battery_cost,
-        "total_tire_cost": total_tire_cost,
-        "total_expenditure": total_expenditure
-    }
-
-def get_summaries(logs_list):
-    weekly_summary = compute_period_summary(logs_list, 7)
-    monthly_summary = compute_period_summary(logs_list, 30)
-    return weekly_summary, monthly_summary
-
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    error = None
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        if username == 'admin' and password == 'admin123':
-            session['logged_in'] = True
-            session['user'] = {"name": "System Admin", "role": "Administrator"}
-            return redirect(url_for('dashboard'))
-        else:
-            error = "Invalid Username or Password (use admin / admin123)"
-    return render_template_string(LOGIN_TEMPLATE, error=error)
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    return redirect(url_for('login'))
-
-@app.route('/')
-def dashboard():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
-        
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    
-    filtered_logs = garage_data['maintenance_logs']
+    # Filter logs if date range query provided
+    filtered_logs = logs
     if start_date and end_date:
         try:
-            s_dt = datetime.strptime(start_date, "%Y-%m-%d")
-            e_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
-            temp_logs = []
-            for l in filtered_logs:
-                try:
-                    l_dt = datetime.strptime(l['start_time'][:10], "%Y-%m-%d")
-                    if s_dt <= l_dt < e_dt:
-                        temp_logs.append(l)
-                except:
-                    pass
-            filtered_logs = temp_logs
+            sd = datetime.strptime(start_date, "%Y-%m-%d")
+            ed = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+            filtered_logs = [
+                log for log in logs 
+                if sd <= datetime.strptime(log["start_time"][:10], "%Y-%m-%d") < ed
+            ]
         except:
             pass
 
-    weekly, monthly = get_summaries(garage_data['maintenance_logs'])
+    # Calculations for Weekly (last 7 days) and Monthly (last 30 days) Summaries
+    now = datetime.now()
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+    
+    def compute_summary(days_limit):
+        cutoff = now - timedelta(days=days_limit)
+        matched = []
+        for l in logs:
+            try:
+                dt = datetime.strptime(l["start_time"][:10], "%Y-%m-%d")
+                if dt >= cutoff:
+                    matched.append(l)
+            except:
+                pass
+        
+        total_jobs = len(matched)
+        pm_jobs = sum(1 for m in matched if m.get("type") == "PM")
+        cm_jobs = sum(1 for m in matched if m.get("type") == "CM" or m.get("type") == "Corrective")
+        total_work_hours = sum(m.get("effective_hours", 0) for m in matched)
+        
+        total_spare_qty = sum(sum(sp.get("qty", 0) for sp in m.get("replaced_spares", [])) for m in matched)
+        total_spares_cost = sum(sum(sp.get("total_cost", 0) for sp in m.get("replaced_spares", [])) for m in matched)
+        
+        total_lubrication_qty = sum(m.get("lubrication_qty", 0) for m in matched)
+        total_lubrication_cost = sum(m.get("lubrication_cost", 0) for m in matched)
+        total_battery_cost = sum(m.get("battery_cost", 0) for m in matched)
+        total_tire_cost = sum(m.get("tire_cost", 0) for m in matched)
+        
+        total_expenditure = total_spares_cost + total_lubrication_cost + total_battery_cost + total_tire_cost
+        
+        return {
+            "total_jobs": total_jobs,
+            "pm_jobs": pm_jobs if pm_jobs > 0 else total_jobs, # fallback representation default
+            "cm_jobs": cm_jobs,
+            "total_work_hours": round(total_work_hours, 2),
+            "total_spare_qty": total_spare_qty,
+            "total_spares_cost": total_spares_cost,
+            "total_lubrication_qty": total_lubrication_qty,
+            "total_lubrication_cost": total_lubrication_cost,
+            "total_battery_cost": total_battery_cost,
+            "total_tire_cost": total_tire_cost,
+            "total_expenditure": total_expenditure
+        }
+
+    weekly_summary = compute_summary(7)
+    monthly_summary = compute_summary(30)
+
     return render_template_string(
-        HTML_TEMPLATE, 
-        logs=filtered_logs, 
-        inventory=garage_data['spare_parts'],
-        weekly=weekly,
-        monthly=monthly,
-        user=session.get('user')
+        HTML_TEMPLATE,
+        user=user,
+        logs=filtered_logs,
+        spare_inventory=garage_data["spare_parts"],
+        weekly=weekly_summary,
+        monthly=monthly_summary
     )
 
-@app.route('/add_work_order', methods=['POST'])
+@app.route("/add_work_order", methods=["POST"])
 def add_work_order():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
-
-    start_raw = request.form.get('start_time', '')
-    finish_raw = request.form.get('finish_time', '')
+    sn = request.form.get("sn")
+    wo_no = request.form.get("wo_no")
+    vehicle = request.form.get("vehicle")
+    model = request.form.get("model")
+    reading_value = int(request.form.get("reading_value", 0))
+    reading_unit = request.form.get("reading_unit", "KM")
+    work_status = request.form.get("work_status", "Completed")
+    driver = request.form.get("driver")
+    technicians = request.form.get("technicians")
+    start_time = request.form.get("start_time").replace("T", " ")
+    finish_time = request.form.get("finish_time").replace("T", " ")
+    description = request.form.get("description")
     
-    start_disp = start_raw.replace('T', ' ') if start_raw else ''
-    finish_disp = finish_raw.replace('T', ' ') if finish_raw else ''
+    effective_hours = calculate_effective_hours(request.form.get("start_time"), request.form.get("finish_time"))
+    next_service = calculate_next_service(reading_value, reading_unit)
     
-    eff_hours = calculate_effective_hours(start_raw, finish_raw)
+    # Parse dynamic spare rows
+    spare_names = request.form.getlist("spare_name[]")
+    spare_specs = request.form.getlist("spare_spec[]")
+    spare_qtys = request.form.getlist("spare_qty[]")
+    spare_prices = request.form.getlist("spare_price[]")
     
-    try:
-        r_val = int(request.form.get('reading_value', 0))
-    except:
-        r_val = 0
-        
-    r_unit = request.form.get('reading_unit', 'KM')
-    next_serv = calculate_next_service(r_val, r_unit)
-    
-    techs_input = request.form.get('technicians', '').strip()
-    
-    spare_names = request.form.getlist('spare_name[]')
-    spare_specs = request.form.getlist('spare_spec[]')
-    spare_qtys = request.form.getlist('spare_qty[]')
-    spare_prices = request.form.getlist('spare_price[]')
-    
-    replaced_list = []
+    replaced_spares = []
     for i in range(len(spare_names)):
-        name = spare_names[i].strip()
-        spec = spare_specs[i].strip() if i < len(spare_specs) else ""
-        if name:
-            try:
-                qty = int(spare_qtys[i])
-            except:
-                qty = 1
-            try:
-                price = float(spare_prices[i])
-            except:
-                price = 0.0
-                
-            replaced_list.append({
-                "part_name": name,
-                "spec": spec,
-                "qty": qty,
-                "unit_price": price,
-                "total_cost": qty * price
+        if spare_names[i].strip():
+            q = int(spare_qtys[i]) if i < len(spare_qtys) and spare_qtys[i] else 1
+            p = float(spare_prices[i]) if i < len(spare_prices) and spare_prices[i] else 0.0
+            replaced_spares.append({
+                "part_name": spare_names[i],
+                "spec": spare_specs[i] if i < len(spare_specs) else "",
+                "qty": q,
+                "unit_price": p,
+                "total_cost": q * p
             })
 
-    new_id = (max([l['id'] for l in garage_data['maintenance_logs']]) + 1) if garage_data['maintenance_logs'] else 1
-    new_log = {
-        "id": new_id,
-        "sn": request.form.get('sn', f'SN-00{new_id}'),
-        "wo_no": request.form.get('wo_no', f'WO-2026-00{new_id}'),
-        "vehicle": request.form.get('vehicle', 'N/A'),
-        "model": request.form.get('model', 'N/A'),
-        "reading_value": r_val,
-        "reading_unit": r_unit,
-        "next_service": next_serv,
-        "work_status": request.form.get('work_status', 'Completed'),
-        "driver": request.form.get('driver', 'N/A'),
-        "technicians": techs_input if techs_input else "N/A",
-        "type": "PM",
-        "start_time": start_disp,
-        "finish_time": finish_disp,
-        "effective_hours": eff_hours,
-        "description": request.form.get('description', ''),
-        "replaced_spares": replaced_list,
-        "battery_qty": int(request.form.get('battery_qty', 0) or 0),
-        "battery_cost": float(request.form.get('battery_cost', 0) or 0),
-        "lubrication_qty": float(request.form.get('lubrication_qty', 0) or 0),
-        "lubrication_cost": float(request.form.get('lubrication_cost', 0) or 0),
-        "tire_qty": int(request.form.get('tire_qty', 0) or 0),
-        "tire_cost": float(request.form.get('tire_cost', 0) or 0)
+    battery_qty = int(request.form.get("battery_qty", 0))
+    battery_cost = float(request.form.get("battery_cost", 0.0))
+    lubrication_qty = float(request.form.get("lubrication_qty", 0.0))
+    lubrication_cost = float(request.form.get("lubrication_cost", 0.0))
+    tire_qty = int(request.form.get("tire_qty", 0))
+    tire_cost = float(request.form.get("tire_cost", 0.0))
+
+    new_entry = {
+        "id": len(garage_data["maintenance_logs"]) + 1,
+        "sn": sn,
+        "wo_no": wo_no,
+        "vehicle": vehicle,
+        "model": model,
+        "reading_value": reading_value,
+        "reading_unit": reading_unit,
+        "next_service": next_service,
+        "driver": driver,
+        "technicians": technicians,
+        "type": "PM" if "Preventive" in description else "CM",
+        "work_status": work_status,
+        "start_time": start_time,
+        "finish_time": finish_time,
+        "effective_hours": effective_hours,
+        "description": description,
+        "replaced_spares": replaced_spares,
+        "battery_qty": battery_qty,
+        "battery_cost": battery_cost,
+        "lubrication_qty": lubrication_qty,
+        "lubrication_cost": lubrication_cost,
+        "tire_qty": tire_qty,
+        "tire_cost": tire_cost
     }
-    garage_data['maintenance_logs'].append(new_log)
-    return redirect(url_for('dashboard'))
 
-@app.route('/delete_log/<int:log_id>')
+    garage_data["maintenance_logs"].append(new_entry)
+    return redirect(url_for("index"))
+
+@app.route("/delete_log/<int:log_id>")
 def delete_log(log_id):
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
-    
-    garage_data['maintenance_logs'] = [l for l in garage_data['maintenance_logs'] if l['id'] != log_id]
-    return redirect(url_for('dashboard'))
+    garage_data["maintenance_logs"] = [l for l in garage_data["maintenance_logs"] if l["id"] != log_id]
+    return redirect(url_for("index"))
 
-@app.route('/reset_all_logs')
+@app.route("/reset_all_logs")
 def reset_all_logs():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
-    
-    garage_data['maintenance_logs'] = []
-    return redirect(url_for('dashboard'))
+    garage_data["maintenance_logs"] = []
+    return redirect(url_for("index"))
 
-@app.route('/export/execution_excel')
-def export_execution_excel():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
-
-    output = io.BytesIO()
-    logs_export = []
-    for l in garage_data['maintenance_logs']:
-        sp_text = ", ".join([f"{sp['part_name']} ({sp['spec']}) - {sp['qty']} pcs" for sp in l.get('replaced_spares', [])])
-        sp_cost = sum([sp['total_cost'] for sp in l.get('replaced_spares', [])])
-        
-        logs_export.append({
-            'Serial Number': l['sn'],
-            'Work Order No': l['wo_no'],
-            'Vehicle Plate': l['vehicle'],
-            'Current Reading': f"{l['reading_value']} {l['reading_unit']}",
-            'Next Service Alert': l['next_service'],
-            'Status': l['work_status'],
-            'Assigned Technicians': l['technicians'],
-            'Start Time': l['start_time'],
-            'End Time': l['finish_time'],
-            'Effective Hours (hrs)': l['effective_hours'],
-            'Replaced Spare Parts': sp_text,
-            'Spare Parts Total Cost (ETB)': sp_cost,
-            'Battery Cost (ETB)': l['battery_cost'],
-            'Lubrication Cost (ETB)': l['lubrication_cost'],
-            'Tire Cost (ETB)': l['tire_cost']
+@app.route("/export/execution_excel")
+@app.route("/export/master_excel")
+def export_excel():
+    logs = garage_data["maintenance_logs"]
+    flat_data = []
+    for l in logs:
+        flat_data.append({
+            "Serial No": l["sn"],
+            "Work Order": l["wo_no"],
+            "Vehicle Plate": l["vehicle"],
+            "Model": l["model"],
+            "Reading": f"{l['reading_value']} {l['reading_unit']}",
+            "Next Service": l["next_service"],
+            "Status": l["work_status"],
+            "Technicians": l["technicians"],
+            "Start Time": l["start_time"],
+            "End Time": l["finish_time"],
+            "Effective Hours": l["effective_hours"],
+            "Battery Cost (ETB)": l["battery_cost"],
+            "Lubrication Cost (ETB)": l["lubrication_cost"],
+            "Tire Cost (ETB)": l["tire_cost"]
         })
     
-    logs_df = pd.DataFrame(logs_export)
-    
-    if not logs_df.empty:
-        logs_df = logs_df.sort_values(by='Serial Number', ascending=True).drop_duplicates(subset=['Serial Number', 'Work Order No'], keep='first')
-
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        logs_df.to_excel(writer, sheet_name='Execution & Work Time Log', index=False)
-        
-    output.seek(0)
-    return send_file(output, download_name='SteelY_Maintenance_Execution_Log.xlsx', as_attachment=True)
-
-@app.route('/export/master_excel')
-def export_master_excel():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
-
+    df = pd.DataFrame(flat_data)
     output = io.BytesIO()
-    weekly, monthly = get_summaries(garage_data['maintenance_logs'])
-    
-    logs_export = []
-    for l in garage_data['maintenance_logs']:
-        sp_text = ", ".join([f"{sp['part_name']} ({sp['spec']}) ({sp['qty']} pcs)" for sp in l.get('replaced_spares', [])])
-        sp_cost = sum([sp['total_cost'] for sp in l.get('replaced_spares', [])])
-        
-        logs_export.append({
-            'Serial Number': l['sn'],
-            'Work Order No': l['wo_no'],
-            'Vehicle Plate': l['vehicle'],
-            'Vehicle Model': l['model'],
-            'Reading Value': l['reading_value'],
-            'Reading Unit': l['reading_unit'],
-            'Next Service Schedule': l['next_service'],
-            'Work Status': l['work_status'],
-            'Assigned Technicians': l['technicians'],
-            'Start Time': l['start_time'],
-            'End Time': l['finish_time'],
-            'Effective Hours': l['effective_hours'],
-            'Replaced Spare Part (spec)': sp_text,
-            'Spare Parts Total Cost (ETB)': sp_cost,
-            'Battery Cost (ETB)': l['battery_cost'],
-            'Lubrication Cost (ETB)': l['lubrication_cost'],
-            'Tire Cost (ETB)': l['tire_cost']
-        })
-        
-    logs_df = pd.DataFrame(logs_export)
-    
-    if not logs_df.empty:
-        logs_df = logs_df.sort_values(by='Serial Number', ascending=True).drop_duplicates(subset=['Serial Number', 'Work Order No'], keep='first')
-
-    summary_data = [
-        {"Report Type": "WEEKLY SUMMARY (Last 7 Days)", "Total Jobs": weekly['total_jobs'], "PM Jobs": weekly['pm_jobs'], "CM Jobs": weekly['cm_jobs'], "Total Work Hours (hrs)": weekly['total_work_hours'], "Spare Parts Total Cost (ETB)": weekly['total_spares_cost'], "Lubricants Cost (ETB)": weekly['total_lubrication_cost'], "Batteries Cost (ETB)": weekly['total_battery_cost'], "Tires Cost (ETB)": weekly['total_tire_cost'], "Total Expenditure (ETB)": weekly['total_expenditure']},
-        {"Report Type": "MONTHLY SUMMARY (Last 30 Days)", "Total Jobs": monthly['total_jobs'], "PM Jobs": monthly['pm_jobs'], "CM Jobs": monthly['cm_jobs'], "Total Work Hours (hrs)": monthly['total_work_hours'], "Spare Parts Total Cost (ETB)": monthly['total_spares_cost'], "Lubricants Cost (ETB)": monthly['total_lubrication_cost'], "Batteries Cost (ETB)": monthly['total_battery_cost'], "Tires Cost (ETB)": monthly['total_tire_cost'], "Total Expenditure (ETB)": monthly['total_expenditure']}
-    ]
-    summary_df = pd.DataFrame(summary_data)
-    
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        summary_df.to_excel(writer, sheet_name='Weekly & Monthly Summaries', index=False)
-        logs_df.to_excel(writer, sheet_name='Master Maintenance Log', index=False)
-        
+        df.to_excel(writer, index=False, sheet_name="Garage_Execution_Logs")
     output.seek(0)
-    return send_file(output, download_name='SteelY_Master_Garage_Report.xlsx', as_attachment=True)
+    
+    return send_file(
+        output,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name="SteelY_Garage_Master_Report.xlsx"
+    )
 
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+@app.route("/logout")
+def logout():
+    return redirect(url_for("index"))
+
+if __name__ == "__main__":
+    app.run(debug=True)
