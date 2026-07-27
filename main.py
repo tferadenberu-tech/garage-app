@@ -86,39 +86,39 @@ DASHBOARD_HTML = """
     <title>SteelY R.M.I Garage Maintnace dash Bord</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-<body class="bg-light p-4">
-    <div class="container-fluid px-4">
-        <div class="card shadow-sm p-3 mb-4 bg-white">
-            <div class="row align-items-center">
-                <div class="col-lg-5">
-                    <h3 class="text-primary fw-bold mb-1" style="font-size: 22px;">SteelY R.M.I Garage Maintenance</h3>
+<body class="bg-light p-3">
+    <div class="container-fluid px-2">
+        <div class="card shadow-sm p-3 mb-3 bg-white">
+            <div class="row align-items-center g-2">
+                <div class="col-md-7">
+                    <h4 class="text-primary fw-bold mb-0">SteelY R.M.I Garage Maintenance</h4>
                     <small class="text-muted">Integrated Work Time, Consumables & Maintenance Platform</small>
                 </div>
-                <div class="col-lg-7 d-flex justify-content-lg-end align-items-center gap-2 mt-3 mt-lg-0 flex-wrap">
-                    <div class="text-end me-2">
+                <div class="col-md-5 d-flex justify-content-md-end align-items-center gap-2 flex-wrap">
+                    <div class="text-start text-md-end">
                         <span class="badge bg-secondary">Dinberu Tefera</span><br>
-                        <small class="text-muted fw-bold" style="font-size: 10px;">HEAD OF MECHANICAL WORKSHOP</small>
+                        <small class="text-muted fw-bold" style="font-size: 9px;">HEAD OF MECHANICAL WORKSHOP</small>
                     </div>
-                    <a href="/export/excel" class="btn btn-success btn-sm fw-bold">📊 Export Excel</a>
-                    <a href="/logout" class="btn btn-danger btn-sm fw-bold px-3">🚪 Logout</a>
+                    <a href="/export/excel" class="btn btn-success btn-sm fw-bold">📊 Excel</a>
+                    <a href="/logout" class="btn btn-danger btn-sm fw-bold">🚪 Logout</a>
                 </div>
             </div>
         </div>
         
-        <div class="mb-4 d-flex gap-2">
-            <button class="btn btn-primary fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">+ Create New Work Order</button>
-            <button class="btn btn-dark fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Store Spare Inventory</button>
+        <div class="mb-3 d-flex gap-2">
+            <button class="btn btn-primary btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">+ Create New Work Order</button>
+            <button class="btn btn-dark btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Store Spare Inventory</button>
         </div>
 
-        <div class="row mb-4">
-            <div class="col-md-6">
+        <div class="row mb-3">
+            <div class="col-md-6 mb-2">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-secondary text-white">
+                    <div class="card-header bg-secondary text-white py-2">
                         <h5 class="mb-0 fs-6">WEEKLY SUMMARY (LAST 7 DAYS)</h5>
                     </div>
                     <div class="card-body">
                         <p class="fw-bold mb-2">Total Jobs Executed: <span class="text-primary">{{ weekly_jobs }}</span></p>
-                        <ul class="list-unstyled ms-3 mb-3 small">
+                        <ul class="list-unstyled ms-3 mb-2 small">
                             <li>• Preventive Maintenance (PM): <strong>{{ weekly_pm }}</strong></li>
                             <li>• Corrective Maintenance (CM): <strong>{{ weekly_cm }}</strong></li>
                             <li>• Inspection & Checkup: <strong>{{ weekly_insp }}</strong></li>
@@ -126,28 +126,28 @@ DASHBOARD_HTML = """
                         <p class="fw-bold mb-2 text-primary">Total Effective Work Time: {{ "%.1f"|format(weekly_hours) }} hrs</p>
                         <hr class="my-2">
                         <div class="row small text-muted">
-                            <div class="col-6">Spare Parts Quantity: <strong>{{ weekly_spare_qty }} Pcs</strong></div>
-                            <div class="col-6">Spare Parts Cost: <strong>ETB {{ "%.2f"|format(weekly_spare_cost) }}</strong></div>
-                            <div class="col-6">Lubricants Volume: <strong>{{ "%.1f"|format(weekly_lube_vol) }} Liters</strong></div>
-                            <div class="col-6">Lubricants Cost: <strong>ETB {{ "%.2f"|format(weekly_lube_cost) }}</strong></div>
+                            <div class="col-6">Spare Qty: <strong>{{ weekly_spare_qty }} Pcs</strong></div>
+                            <div class="col-6">Spare Cost: <strong>ETB {{ "%.2f"|format(weekly_spare_cost) }}</strong></div>
+                            <div class="col-6">Lubricants: <strong>{{ "%.1f"|format(weekly_lube_vol) }} L</strong></div>
+                            <div class="col-6">Lube Cost: <strong>ETB {{ "%.2f"|format(weekly_lube_cost) }}</strong></div>
                             <div class="col-6">Batteries Cost: <strong>ETB {{ "%.2f"|format(weekly_batt_cost) }}</strong></div>
                             <div class="col-6">Tires Cost: <strong>ETB {{ "%.2f"|format(weekly_tire_cost) }}</strong></div>
                         </div>
-                        <div class="mt-3 pt-2 border-top fw-bold text-dark">
+                        <div class="mt-2 pt-2 border-top fw-bold text-dark">
                             Total Expenditure: ETB {{ "%.2f"|format(weekly_total_exp) }}
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="col-md-6">
+            <div class="col-md-6 mb-2">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-primary text-white">
+                    <div class="card-header bg-primary text-white py-2">
                         <h5 class="mb-0 fs-6">MONTHLY SUMMARY (LAST 30 DAYS)</h5>
                     </div>
                     <div class="card-body">
                         <p class="fw-bold mb-2">Total Jobs Executed: <span class="text-primary">{{ monthly_jobs }}</span></p>
-                        <ul class="list-unstyled ms-3 mb-3 small">
+                        <ul class="list-unstyled ms-3 mb-2 small">
                             <li>• Preventive Maintenance (PM): <strong>{{ monthly_pm }}</strong></li>
                             <li>• Corrective Maintenance (CM): <strong>{{ monthly_cm }}</strong></li>
                             <li>• Inspection & Checkup: <strong>{{ monthly_insp }}</strong></li>
@@ -155,14 +155,14 @@ DASHBOARD_HTML = """
                         <p class="fw-bold mb-2 text-primary">Total Effective Work Time: {{ "%.1f"|format(monthly_hours) }} hrs</p>
                         <hr class="my-2">
                         <div class="row small text-muted">
-                            <div class="col-6">Spare Parts Quantity: <strong>{{ monthly_spare_qty }} Pcs</strong></div>
-                            <div class="col-6">Spare Parts Cost: <strong>ETB {{ "%.2f"|format(monthly_spare_cost) }}</strong></div>
-                            <div class="col-6">Lubricants Volume: <strong>{{ "%.1f"|format(monthly_lube_vol) }} Liters</strong></div>
-                            <div class="col-6">Lubricants Cost: <strong>ETB {{ "%.2f"|format(monthly_lube_cost) }}</strong></div>
+                            <div class="col-6">Spare Qty: <strong>{{ monthly_spare_qty }} Pcs</strong></div>
+                            <div class="col-6">Spare Cost: <strong>ETB {{ "%.2f"|format(monthly_spare_cost) }}</strong></div>
+                            <div class="col-6">Lubricants: <strong>{{ "%.1f"|format(monthly_lube_vol) }} L</strong></div>
+                            <div class="col-6">Lube Cost: <strong>ETB {{ "%.2f"|format(monthly_lube_cost) }}</strong></div>
                             <div class="col-6">Batteries Cost: <strong>ETB {{ "%.2f"|format(monthly_batt_cost) }}</strong></div>
                             <div class="col-6">Tires Cost: <strong>ETB {{ "%.2f"|format(monthly_tire_cost) }}</strong></div>
                         </div>
-                        <div class="mt-3 pt-2 border-top fw-bold text-success">
+                        <div class="mt-2 pt-2 border-top fw-bold text-success">
                             Total Expenditure: ETB {{ "%.2f"|format(monthly_total_exp) }}
                         </div>
                     </div>
@@ -170,12 +170,12 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
-        <div class="card shadow-sm mb-4">
-            <div class="card-header bg-secondary text-white">
-                <h4 class="mb-0 fs-5">Store Spare Inventory</h4>
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-secondary text-white py-2">
+                <h5 class="mb-0 fs-6">Store Spare Inventory</h5>
             </div>
-            <div class="card-body">
-                <table class="table table-bordered table-hover align-middle">
+            <div class="card-body p-2">
+                <table class="table table-bordered table-hover align-middle mb-0 small">
                     <thead class="table-light">
                         <tr>
                             <th>ID</th>
@@ -201,11 +201,11 @@ DASHBOARD_HTML = """
         </div>
 
         <div class="card shadow-sm">
-            <div class="card-header bg-primary text-white">
-                <h4 class="mb-0 fs-5">Maintenance Execution & Work Time Log</h4>
+            <div class="card-header bg-primary text-white py-2">
+                <h5 class="mb-0 fs-6">Maintenance Execution & Work Time Log</h5>
             </div>
-            <div class="card-body">
-                <table class="table table-bordered table-hover align-middle">
+            <div class="card-body p-2">
+                <table class="table table-bordered table-hover align-middle mb-0 small">
                     <thead class="table-secondary">
                         <tr>
                             <th>ID / S/N</th>
