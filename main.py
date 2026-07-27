@@ -4,7 +4,7 @@ from flask import Flask, render_template_string, request, redirect, url_for, mak
 from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
-app.secret_key = 'steely_rmi_secret_key'
+app.secret_key = 'steely_rmi_secure_secret_key_2026'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v8.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
@@ -52,7 +52,7 @@ LOGIN_HTML = """
         {% if error %}
             <div class="alert alert-danger py-2 text-center">{{ error }}</div>
         {% endif %}
-        <form method="POST">
+        <form method="POST" action="/login">
             <div class="mb-3">
                 <label class="form-label">Username</label>
                 <input type="text" class="form-control" name="username" required autocomplete="off" value="admin">
@@ -305,13 +305,20 @@ DASHBOARD_HTML = """
 </html>
 """
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route('/')
+def index():
+    if session.get('logged_in'):
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('login'))
+
+@app.route('/login', methods=['GET', 'POST'])
 def login():
     error = None
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
         if username == 'admin' and password == 'steely2026':
+            session.clear()
             session['logged_in'] = True
             return redirect(url_for('dashboard'))
         else:
@@ -328,7 +335,7 @@ def dashboard():
 
 @app.route('/logout')
 def logout():
-    session.pop('logged_in', None)
+    session.clear()
     return redirect(url_for('login'))
 
 @app.route('/add_spare', methods=['POST'])
