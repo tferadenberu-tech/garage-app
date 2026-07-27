@@ -8,7 +8,7 @@ app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v8.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True if using strict HTTPS proxy routing
+app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 db = SQLAlchemy(app)
@@ -108,7 +108,6 @@ DASHBOARD_HTML = """
             <button class="btn btn-dark" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Store Spare Inventory</button>
         </div>
 
-        <!-- SUMMARY ROW (WEEKLY & MONTHLY) -->
         <div class="row mb-4">
             <div class="col-md-6">
                 <div class="card shadow-sm h-100">
@@ -169,7 +168,6 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
-        <!-- Store Spare Inventory Section -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-secondary text-white">
                 <h4 class="mb-0 fs-5">Store Spare Inventory</h4>
@@ -200,7 +198,6 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
-        <!-- Work Orders / Execution & Log Section -->
         <div class="card shadow-sm">
             <div class="card-header bg-primary text-white">
                 <h4 class="mb-0 fs-5">Maintenance Execution & Work Time Log</h4>
@@ -248,7 +245,6 @@ DASHBOARD_HTML = """
         </div>
     </div>
 
-    <!-- Modal for Adding Work Order -->
     <div class="modal fade" id="addWorkOrderModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -307,7 +303,6 @@ DASHBOARD_HTML = """
                                 <label class="form-label">End Date & Time</label>
                                 <input type="datetime-local" class="form-control" name="end_datetime" required>
                             </div>
-                            
                             <div class="col-md-4">
                                 <label class="form-label fw-bold text-danger">Maintenance Type</label>
                                 <select class="form-select border-danger fw-bold text-primary" name="maintenance_type" required>
@@ -316,16 +311,13 @@ DASHBOARD_HTML = """
                                     <option value="Inspection & Check">Inspection & Check</option>
                                 </select>
                             </div>
-
                             <div class="col-md-8">
                                 <label class="form-label fw-bold">Work Category & Description</label>
                                 <input type="text" class="form-control mb-1" name="work_category" required placeholder="e.g. Engine Maintenance">
                             </div>
-
                             <div class="col-12">
                                 <textarea class="form-control" name="description" rows="2" placeholder="Detailed work description or notes..."></textarea>
                             </div>
-
                             <div class="col-md-4">
                                 <label class="form-label">Spare Parts Qty (Pcs)</label>
                                 <input type="number" class="form-control" name="spare_parts_qty" value="0" min="0">
@@ -360,7 +352,6 @@ DASHBOARD_HTML = """
         </div>
     </div>
 
-    <!-- Modal for Adding Spare Inventory -->
     <div class="modal fade" id="addSpareModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
