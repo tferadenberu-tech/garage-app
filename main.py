@@ -26,7 +26,7 @@ garage_data = {
             "next_service": "129,500 KM (+5000)",
             "driver": "አለማየሁ ተ.",
             "technicians": "አቶ ምህረት, አቶ ኢብራሂም",
-            "type": "PM",
+            "maintenance_type": "PM",
             "work_status": "Completed",
             "start_time": "2026-07-20 08:00",
             "finish_time": "2026-07-20 14:30",
@@ -184,7 +184,7 @@ HTML_TEMPLATE = """
                         <div class="p-2 bg-light rounded mb-2 border">
                             <div class="stat-line text-muted mb-1">• Preventive Maintenance (PM): <strong>{{ weekly.pm_jobs }}</strong></div>
                             <div class="stat-line text-muted mb-1">• Corrective Maintenance (CM): <strong>{{ weekly.cm_jobs }}</strong></div>
-                            <div class="stat-line text-muted mb-0">• Inspection & Checkup: <strong>0</strong></div>
+                            <div class="stat-line text-muted mb-0">• Inspection & Checkup: <strong>{{ weekly.inspection_jobs }}</strong></div>
                         </div>
                         <div class="stat-line text-primary fw-bold">Total Effective Work Time: <strong>{{ weekly.total_work_hours }} hrs</strong></div>
                         <hr class="my-2">
@@ -205,7 +205,7 @@ HTML_TEMPLATE = """
                         <div class="p-2 bg-light rounded mb-2 border">
                             <div class="stat-line text-muted mb-1">• Preventive Maintenance (PM): <strong>{{ monthly.pm_jobs }}</strong></div>
                             <div class="stat-line text-muted mb-1">• Corrective Maintenance (CM): <strong>{{ monthly.cm_jobs }}</strong></div>
-                            <div class="stat-line text-muted mb-0">• Inspection & Checkup: <strong>0</strong></div>
+                            <div class="stat-line text-muted mb-0">• Inspection & Checkup: <strong>{{ monthly.inspection_jobs }}</strong></div>
                         </div>
                         <div class="stat-line text-primary fw-bold">Total Effective Work Time: <strong>{{ monthly.total_work_hours }} hrs</strong></div>
                         <hr class="my-2">
@@ -277,7 +277,17 @@ HTML_TEMPLATE = """
                             </select>
                         </div>
 
-                        <div class="col-md-2">
+                        <!-- Maintenance Type Selection Box (PM, CM, Inspection) -->
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold text-primary">🔧 Maintenance Type:</label>
+                            <select name="maintenance_type" class="form-select form-select-sm border-primary fw-bold" required>
+                                <option value="PM">PM (Preventive Maintenance)</option>
+                                <option value="CM">CM (Corrective Maintenance)</option>
+                                <option value="Inspection">Inspection (Checkup)</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-3">
                             <label class="form-label small fw-bold">Job Status:</label>
                             <select name="work_status" class="form-select form-select-sm" required>
                                 <option value="Completed">Completed</option>
@@ -291,11 +301,9 @@ HTML_TEMPLATE = """
                         </div>
                         
                         <!-- Assigned Technicians / Mechanics -->
-                        <div class="col-md-5">
-                            <label class="form-label small fw-bold text-primary">Assigned Technicians / Mechanics:</label>
-                            <div class="input-group input-group-sm">
-                                <input type="text" name="technicians" class="form-control" placeholder="e.g., Ato Mihret, Dinberu Tefera" required>
-                            </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold text-primary">Assigned Technicians:</label>
+                            <input type="text" name="technicians" class="form-control form-control-sm" placeholder="e.g., Ato Mihret" required>
                         </div>
 
                         <!-- Start Date & Time and End Date & Time -->
@@ -310,8 +318,8 @@ HTML_TEMPLATE = """
                         </div>
 
                         <div class="col-md-12">
-                            <label class="form-label small fw-bold">Work Category & Description:</label>
-                            <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. Engine Maintenance and Spare Parts Replacement" required>
+                            <label class="form-label small fw-bold">Work Description:</label>
+                            <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. Maintenance details and diagnostics note" required>
                         </div>
 
                         <!-- Dynamic Replaced Spare Parts Section -->
@@ -415,6 +423,7 @@ HTML_TEMPLATE = """
                                 <th>Plate No</th>
                                 <th>Current Reading</th>
                                 <th>🔔 Next Service Alert</th>
+                                <th>Maint. Type</th>
                                 <th>Status</th>
                                 <th>Assigned Technicians</th>
                                 <th>Start Time</th>
@@ -436,12 +445,21 @@ HTML_TEMPLATE = """
                                 <td class="small fw-bold">{{ "{:,}".format(log.reading_value) }} {{ log.reading_unit }}</td>
                                 <td><span class="badge bg-info text-dark fw-bold">{{ log.next_service }}</span></td>
                                 <td>
+                                    {% if log.maintenance_type == 'PM' %}
+                                        <span class="badge bg-primary">PM</span>
+                                    {% elif log.maintenance_type == 'CM' %}
+                                        <span class="badge bg-danger">CM</span>
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark">Inspection</span>
+                                    {% endif %}
+                                </td>
+                                <td>
                                     {% if log.work_status == 'Completed' %}
                                         <span class="badge bg-success">Completed</span>
                                     {% elif log.work_status == 'In Progress' %}
                                         <span class="badge bg-warning text-dark">In Progress</span>
                                     {% else %}
-                                        <span class="badge bg-danger">Pending</span>
+                                        <span class="badge bg-secondary">Pending</span>
                                     {% endif %}
                                 </td>
                                 <td class="small fw-bold text-primary">{{ log.technicians }}</td>
@@ -466,7 +484,7 @@ HTML_TEMPLATE = """
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="15" class="text-center text-muted py-3">No maintenance logs found.</td>
+                                <td colspan="16" class="text-center text-muted py-3">No maintenance logs found.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -573,7 +591,6 @@ HTML_TEMPLATE = """
 
 @app.route("/")
 def index():
-    # User Profile Simulation
     user = {"name": "Dinberu Tefera", "role": "Head of Mechanical Workshop and Garage"}
     
     start_date = request.args.get("start_date")
@@ -581,7 +598,6 @@ def index():
     
     logs = garage_data["maintenance_logs"]
     
-    # Filter logs if date range query provided
     filtered_logs = logs
     if start_date and end_date:
         try:
@@ -594,10 +610,7 @@ def index():
         except:
             pass
 
-    # Calculations for Weekly (last 7 days) and Monthly (last 30 days) Summaries
     now = datetime.now()
-    week_ago = now - timedelta(days=7)
-    month_ago = now - timedelta(days=30)
     
     def compute_summary(days_limit):
         cutoff = now - timedelta(days=days_limit)
@@ -611,10 +624,11 @@ def index():
                 pass
         
         total_jobs = len(matched)
-        pm_jobs = sum(1 for m in matched if m.get("type") == "PM")
-        cm_jobs = sum(1 for m in matched if m.get("type") == "CM" or m.get("type") == "Corrective")
-        total_work_hours = sum(m.get("effective_hours", 0) for m in matched)
+        pm_jobs = sum(1 for m in matched if m.get("maintenance_type") == "PM")
+        cm_jobs = sum(1 for m in matched if m.get("maintenance_type") == "CM")
+        inspection_jobs = sum(1 for m in matched if m.get("maintenance_type") == "Inspection")
         
+        total_work_hours = sum(m.get("effective_hours", 0) for m in matched)
         total_spare_qty = sum(sum(sp.get("qty", 0) for sp in m.get("replaced_spares", [])) for m in matched)
         total_spares_cost = sum(sum(sp.get("total_cost", 0) for sp in m.get("replaced_spares", [])) for m in matched)
         
@@ -627,8 +641,9 @@ def index():
         
         return {
             "total_jobs": total_jobs,
-            "pm_jobs": pm_jobs if pm_jobs > 0 else total_jobs, # fallback representation default
+            "pm_jobs": pm_jobs,
             "cm_jobs": cm_jobs,
+            "inspection_jobs": inspection_jobs,
             "total_work_hours": round(total_work_hours, 2),
             "total_spare_qty": total_spare_qty,
             "total_spares_cost": total_spares_cost,
@@ -659,6 +674,7 @@ def add_work_order():
     model = request.form.get("model")
     reading_value = int(request.form.get("reading_value", 0))
     reading_unit = request.form.get("reading_unit", "KM")
+    maintenance_type = request.form.get("maintenance_type", "PM")
     work_status = request.form.get("work_status", "Completed")
     driver = request.form.get("driver")
     technicians = request.form.get("technicians")
@@ -669,7 +685,6 @@ def add_work_order():
     effective_hours = calculate_effective_hours(request.form.get("start_time"), request.form.get("finish_time"))
     next_service = calculate_next_service(reading_value, reading_unit)
     
-    # Parse dynamic spare rows
     spare_names = request.form.getlist("spare_name[]")
     spare_specs = request.form.getlist("spare_spec[]")
     spare_qtys = request.form.getlist("spare_qty[]")
@@ -706,7 +721,7 @@ def add_work_order():
         "next_service": next_service,
         "driver": driver,
         "technicians": technicians,
-        "type": "PM" if "Preventive" in description else "CM",
+        "maintenance_type": maintenance_type,
         "work_status": work_status,
         "start_time": start_time,
         "finish_time": finish_time,
@@ -747,6 +762,7 @@ def export_excel():
             "Model": l["model"],
             "Reading": f"{l['reading_value']} {l['reading_unit']}",
             "Next Service": l["next_service"],
+            "Maintenance Type": l["maintenance_type"],
             "Status": l["work_status"],
             "Technicians": l["technicians"],
             "Start Time": l["start_time"],
