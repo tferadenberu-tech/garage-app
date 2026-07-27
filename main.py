@@ -21,6 +21,7 @@ class WorkOrder(db.Model):
     assigned_technicians = db.Column(db.String(200), nullable=False)
     start_datetime = db.Column(db.String(50), nullable=False)
     end_datetime = db.Column(db.String(50), nullable=False)
+    maintenance_type = db.Column(db.String(50), nullable=False) # CM, PM, Inspection & Check
     work_category = db.Column(db.String(100), nullable=False) 
     description = db.Column(db.Text, nullable=True)
     spare_parts_info = db.Column(db.Text, nullable=True)
@@ -98,7 +99,8 @@ DASHBOARD_HTML = """
                             <th>Work Order No</th>
                             <th>Vehicle Model & Plate</th>
                             <th>Job Status</th>
-                            <th>Work Category (CM / PM / Inspection)</th>
+                            <th>Maintenance Type</th>
+                            <th>Work Category & Description</th>
                             <th>Assigned Technicians</th>
                             <th>Start / End Time</th>
                             <th>Total Cost (ETB)</th>
@@ -118,8 +120,9 @@ DASHBOARD_HTML = """
                                 {% endif %}
                             </td>
                             <td>
-                                <span class="badge bg-dark">{{ wo.work_category }}</span>
+                                <span class="badge bg-info text-dark">{{ wo.maintenance_type }}</span>
                             </td>
+                            <td>{{ wo.work_category }}</td>
                             <td>{{ wo.assigned_technicians }}</td>
                             <td><small>{{ wo.start_datetime }} to {{ wo.end_datetime }}</small></td>
                             <td class="fw-bold text-success">{{ wo.total_expenditure }} ETB</td>
@@ -156,7 +159,7 @@ DASHBOARD_HTML = """
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Vehicle Type / Model</label>
-                                <input type="text" class="form-control" name="vehicle_model" required placeholder="e.g. Sino Truck">
+                                <input type="text" class="form-control" name="vehicle_model" required placeholder="e.g. Sino Truck 371">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Current Reading</label>
@@ -179,8 +182,8 @@ DASHBOARD_HTML = """
                                 <input type="text" class="form-control" name="driver_name" required placeholder="Driver Name">
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label">Assigned Technicians</label>
-                                <input type="text" class="form-control" name="assigned_technicians" required value="Ato Mihret, Ato Ibrahim">
+                                <label class="form-label">Assigned Technicians / Mechanics</label>
+                                <input type="text" class="form-control" name="assigned_technicians" required value="Ato Mihret, Dinberu Tefera">
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label">Start Date & Time</label>
@@ -191,14 +194,22 @@ DASHBOARD_HTML = """
                                 <input type="datetime-local" class="form-control" name="end_datetime" required>
                             </div>
                             
-                            <!-- Maintenance Type Selection (CM, PM, Inspection) Dialogue / Dropdown Box -->
-                            <div class="col-12">
-                                <label class="form-label fw-bold text-danger">Maintenance Type & Category Selection</label>
-                                <select class="form-select mb-2 border-danger fw-bold text-primary" name="work_category_type" required>
-                                    <option value="PM - Preventive Maintenance">PM (Preventive Maintenance)</option>
-                                    <option value="CM - Corrective Maintenance">CM (Corrective Maintenance)</option>
-                                    <option value="Inspection & Checkup">Inspection & Checkup</option>
+                            <!-- Maintenance Type & Work Category Side-by-Side Layout matching your request -->
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-danger">Maintenance Type</label>
+                                <select class="form-select border-danger fw-bold text-primary" name="maintenance_type" required>
+                                    <option value="CM">CM (Corrective Maintenance)</option>
+                                    <option value="PM">PM (Preventive Maintenance)</option>
+                                    <option value="Inspection & Check">Inspection & Check</option>
                                 </select>
+                            </div>
+
+                            <div class="col-md-8">
+                                <label class="form-label fw-bold">Work Category & Description</label>
+                                <input type="text" class="form-control mb-1" name="work_category" required placeholder="e.g. Engine Maintenance">
+                            </div>
+
+                            <div class="col-12">
                                 <textarea class="form-control" name="description" rows="2" placeholder="Detailed work description or notes..."></textarea>
                             </div>
 
@@ -291,12 +302,11 @@ def add_work_order():
     assigned_technicians = request.form.get('assigned_technicians')
     start_datetime = request.form.get('start_datetime')
     end_datetime = request.form.get('end_datetime')
-    work_category_type = request.form.get('work_category_type')
+    maintenance_type = request.form.get('maintenance_type')
+    work_category = request.form.get('work_category')
     description = request.form.get('description')
     spare_parts_info = request.form.get('spare_parts_info')
     total_expenditure = float(request.form.get('total_expenditure', 0.0))
-    
-    full_category = f"{work_category_type} - {description}" if description else work_category_type
     
     new_wo = WorkOrder(
         serial_number=serial_number,
@@ -310,7 +320,8 @@ def add_work_order():
         assigned_technicians=assigned_technicians,
         start_datetime=start_datetime,
         end_datetime=end_datetime,
-        work_category=full_category,
+        maintenance_type=maintenance_type,
+        work_category=work_category,
         description=description,
         spare_parts_info=spare_parts_info,
         total_expenditure=total_expenditure
@@ -326,12 +337,12 @@ def export_excel():
         si = io.StringIO()
         cw = csv.writer(si)
         
-        # Write Headers for Excel Report
+        # Write Headers for Excel Report including Maintenance Type
         cw.writerow([
             'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
             'Current Reading', 'Reading Unit', 'Job Status', 'Driver Name', 
             'Assigned Technicians', 'Start Time', 'End Time', 
-            'Work Category & Description', 'Spare Parts Info', 'Total Expenditure (ETB)'
+            'Maintenance Type', 'Work Category', 'Description', 'Spare Parts Info', 'Total Expenditure (ETB)'
         ])
         
         # Write Data Rows
@@ -340,7 +351,7 @@ def export_excel():
                 wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
                 wo.current_reading, wo.reading_unit, wo.job_status, wo.driver_name, 
                 wo.assigned_technicians, wo.start_datetime, wo.end_datetime, 
-                wo.work_category, wo.spare_parts_info, wo.total_expenditure
+                wo.maintenance_type, wo.work_category, wo.description, wo.spare_parts_info, wo.total_expenditure
             ])
             
         output = make_response(si.getvalue())
