@@ -90,16 +90,17 @@ DASHBOARD_HTML = """
     <div class="container-fluid px-3">
         <div class="card shadow-sm p-3 mb-3 bg-white">
             <div class="row align-items-center g-2">
-                <div class="col-md-7">
+                <div class="col-md-6">
                     <h4 class="text-primary fw-bold mb-0">SteelY R.M.I Garage Maintenance</h4>
                     <small class="text-muted">Integrated Work Time, Consumables & Maintenance Platform</small>
                 </div>
-                <div class="col-md-5 d-flex justify-content-md-end align-items-center gap-2">
+                <div class="col-md-6 d-flex justify-content-md-end align-items-center gap-2 flex-wrap">
                     <div class="text-start text-md-end">
                         <span class="badge bg-secondary">Dinberu Tefera</span><br>
                         <small class="text-muted fw-bold" style="font-size: 9px;">HEAD OF MECHANICAL WORKSHOP</small>
                     </div>
-                    <a href="/export/excel" class="btn btn-success btn-sm fw-bold">📊 Excel</a>
+                    <a href="/export/excel" class="btn btn-success btn-sm fw-bold">📊 Work Orders CSV</a>
+                    <a href="/export/master_report" class="btn btn-warning btn-sm fw-bold text-dark">📑 All-In-One Master Report</a>
                     <a href="/logout" class="btn btn-danger btn-sm fw-bold">🚪 Logout</a>
                 </div>
             </div>
@@ -604,11 +605,59 @@ def export_excel():
             ])
             
         output = make_response(si.getvalue())
-        output.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Master_Report.csv"
+        output.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_WorkOrders_Report.csv"
         output.headers["Content-type"] = "text/csv"
         return output
     except Exception as e:
         return f"Error exporting report: {str(e)}", 500
+
+@app.route('/export/master_report')
+def export_master_report():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    try:
+        work_orders = WorkOrder.query.all()
+        inventory_items = SpareInventory.query.all()
+        
+        si = io.StringIO()
+        cw = csv.writer(si)
+        
+        # Section 1: Work Orders Header & Data
+        cw.writerow(['=== SECTION 1: WORK ORDERS & MAINTENANCE LOGS ==='])
+        cw.writerow([
+            'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
+            'Current Reading', 'Reading Unit', 'Job Status', 'Driver Name', 
+            'Assigned Technicians', 'Start Time', 'End Time', 
+            'Maintenance Type', 'Work Category', 'Description', 
+            'Spare Qty', 'Spare Cost', 'Lube Vol', 'Lube Cost', 'Batt Cost', 'Tire Cost', 'Effective Hours (hrs)', 'Total Expenditure (ETB)'
+        ])
+        for wo in work_orders:
+            cw.writerow([
+                wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
+                wo.current_reading, wo.reading_unit, wo.job_status, wo.driver_name, 
+                wo.assigned_technicians, wo.start_datetime, wo.end_datetime, 
+                wo.maintenance_type, wo.work_category, wo.description, 
+                wo.spare_parts_qty, wo.spare_parts_cost, wo.lubricants_volume, wo.lubricants_cost, wo.batteries_cost, wo.tires_cost, wo.effective_work_hours, wo.total_expenditure
+            ])
+        
+        # Blank separator rows
+        cw.writerow([])
+        cw.writerow([])
+        
+        # Section 2: Store Spare Inventory Header & Data
+        cw.writerow(['=== SECTION 2: STORE SPARE INVENTORY ==='])
+        cw.writerow(['Part ID', 'Part Name', 'Specification (Spec)', 'Available Quantity', 'Location'])
+        for item in inventory_items:
+            cw.writerow([
+                item.id, item.part_name, item.spec, item.quantity, item.location
+            ])
+            
+        output = make_response(si.getvalue())
+        output.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_All_In_One_Master_Report.csv"
+        output.headers["Content-type"] = "text/csv"
+        return output
+    except Exception as e:
+        return f"Error exporting master report: {str(e)}", 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
