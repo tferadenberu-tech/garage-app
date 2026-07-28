@@ -1,10 +1,8 @@
 import io
+import csv
 from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, redirect, url_for, make_response, session
 from flask_sqlalchemy import SQLAlchemy
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
 
 app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
@@ -240,7 +238,7 @@ DASHBOARD_HTML = """
                             <td>{{ wo.work_category }}</td>
                             <td>{{ wo.assigned_technicians }}</td>
                             <td><small>{{ wo.start_datetime }} to {{ wo.end_datetime }}</small></td>
-                            <td class="fw-bold text-success">{{ "%.2f"|format(wo.total_expenditure) }} ETB</td>
+                            <td class="fw-bold text-success">{{ wo.total_expenditure }} ETB</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -587,208 +585,54 @@ def export_master_report():
         work_orders = WorkOrder.query.all()
         inventory_items = SpareInventory.query.all()
         
-        wb = openpyxl.Workbook()
+        si = io.StringIO()
+        cw = csv.writer(si)
         
-        # Setup sheets
-        ws_summary = wb.active
-        ws_summary.title = "Executive Summary"
-        ws_wo = wb.create_sheet(title="Work Orders & Maintenance Logs")
-        ws_inv = wb.create_sheet(title="Spare Inventory")
-
-        for ws in [ws_summary, ws_wo, ws_inv]:
-            ws.views.sheetView[0].showGridLines = True
-
-        # Styles
-        font_title = Font(name="Calibri", size=14, bold=True, color="FFFFFF")
-        font_header = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
-        font_bold = Font(name="Calibri", size=11, bold=True, color="000000")
-        font_normal = Font(name="Calibri", size=11, color="000000")
-        
-        fill_header = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
-        fill_sub = PatternFill(start_color="3B82F6", end_color="3B82F6", fill_type="solid")
-        fill_zebra = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
-        
-        align_center = Alignment(horizontal="center", vertical="center")
-        align_left = Alignment(horizontal="left", vertical="center")
-        align_right = Alignment(horizontal="right", vertical="center")
-        
-        border_thin = Side(border_style="thin", color="CBD5E1")
-        border_thick = Side(border_style="medium", color="1E3A8A")
-        border_double = Side(border_style="double", color="1E3A8A")
-        
-        cell_border = Border(left=border_thin, right=border_thin, top=border_thin, bottom=border_thin)
-        header_border = Border(left=border_thin, right=border_thin, top=border_thin, bottom=border_thick)
-        total_border = Border(top=border_thin, bottom=border_double, left=border_thin, right=border_thin)
-
-        # --- TAB 1: EXECUTIVE SUMMARY ---
-        ws_summary.merge_cells("A1:D2")
-        t_cell = ws_summary["A1"]
-        t_cell.value = "STEELY R.M.I GARAGE & WORKSHOP MAINTENANCE MASTER SUMMARY"
-        t_cell.font = font_title
-        t_cell.fill = fill_header
-        t_cell.alignment = align_center
-        
-        ws_summary["A4"] = "Prepared By:"
-        ws_summary["B4"] = "Dinberu Tefera (Head of Mechanical Workshop and Garage)"
-        ws_summary["A4"].font = font_bold
-        ws_summary["B4"].font = font_normal
-
-        headers_sum = ["Metric Category", "All-Time Cumulative"]
-        for col_idx, h_text in enumerate(headers_sum, start=1):
-            c = ws_summary.cell(row=6, column=col_idx, value=h_text)
-            c.font = font_header
-            c.fill = fill_header
-            c.alignment = align_center
-            c.border = header_border
-
-        max_wo_row = max(len(work_orders) + 2, 3)
-        summary_rows = [
-            ("Total Jobs Executed", f"=COUNTA('Work Orders & Maintenance Logs'!B3:B{max_wo_row})"),
-            ("Preventive Maintenance (PM)", f"=COUNTIF('Work Orders & Maintenance Logs'!L3:L{max_wo_row}, \"PM\")"),
-            ("Corrective Maintenance (CM)", f"=COUNTIF('Work Orders & Maintenance Logs'!L3:L{max_wo_row}, \"CM\")"),
-            ("Inspection & Checkup", f"=COUNTIF('Work Orders & Maintenance Logs'!L3:L{max_wo_row}, \"Inspection & Check\")"),
-            ("Total Effective Work Hours (hrs)", f"=SUM('Work Orders & Maintenance Logs'!U3:U{max_wo_row})"),
-            ("Spare Parts Cost (ETB)", f"=SUM('Work Orders & Maintenance Logs'!P3:P{max_wo_row})"),
-            ("Lubricants Cost (ETB)", f"=SUM('Work Orders & Maintenance Logs'!R3:R{max_wo_row})"),
-            ("Batteries Cost (ETB)", f"=SUM('Work Orders & Maintenance Logs'!S3:S{max_wo_row})"),
-            ("Tires Cost (ETB)", f"=SUM('Work Orders & Maintenance Logs'!T3:T{max_wo_row})"),
-            ("Total Expenditure (ETB)", f"=SUM('Work Orders & Maintenance Logs'!V3:V{max_wo_row})"),
-        ]
-
-        for idx, (m_name, m_formula) in enumerate(summary_rows, start=7):
-            c1 = ws_summary.cell(row=idx, column=1, value=m_name)
-            c1.font = font_bold
-            c1.border = cell_border
-            c1.alignment = align_left
-            
-            c2 = ws_summary.cell(row=idx, column=2, value=m_formula)
-            c2.font = font_normal
-            c2.border = cell_border
-            c2.alignment = align_right
-            if "Cost" in m_name or "Expenditure" in m_name:
-                c2.number_format = '#,##0.00'
-            elif "Hours" in m_name:
-                c2.number_format = '#,##0.0'
-            else:
-                c2.number_format = '#,##0'
-
-        ws_summary.column_dimensions['A'].width = 35
-        ws_summary.column_dimensions['B'].width = 25
-
-        # --- TAB 2: WORK ORDERS & MAINTENANCE LOGS ---
-        wo_headers = [
-            "Serial Number", "Work Order No", "Vehicle Plate", "Vehicle Model", 
-            "Current Reading", "Reading Unit", "Job Status", "Driver Name", 
-            "Assigned Technicians", "Start Time", "End Time", 
-            "Maintenance Type", "Work Category", "Description", 
-            "Spare Qty", "Spare Cost (ETB)", "Lube Vol (L)", "Lube Cost (ETB)", 
-            "Batt Cost (ETB)", "Tire Cost (ETB)", "Effective Hours", "Total Expenditure (ETB)"
-        ]
-
-        ws_wo.merge_cells("A1:V1")
-        t_wo = ws_wo["A1"]
-        t_wo.value = "SECTION 1: WORK ORDERS & MAINTENANCE EXECUTION LOGS"
-        t_wo.font = font_title
-        t_wo.fill = fill_header
-        t_wo.alignment = align_center
-
-        for col_idx, text in enumerate(wo_headers, start=1):
-            c = ws_wo.cell(row=2, column=col_idx, value=text)
-            c.font = font_header
-            c.fill = fill_sub
-            c.alignment = align_center
-            c.border = header_border
-
-        for row_idx, wo in enumerate(work_orders, start=3):
-            tot_form = f"=P{row_idx}+R{row_idx}+S{row_idx}+T{row_idx}"
-            row_data = [
+        # Section 1: Work Orders Header & Data
+        cw.writerow(['=== SECTION 1: WORK ORDERS & MAINTENANCE LOGS ==='])
+        cw.writerow([
+            'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
+            'Current Reading', 'Reading Unit', 'Job Status', 'Driver Name', 
+            'Assigned Technicians', 'Start Time', 'End Time', 
+            'Maintenance Type', 'Work Category', 'Description', 
+            'Spare Qty', 'Spare Cost', 'Lube Vol', 'Lube Cost', 'Batt Cost', 'Tire Cost', 'Effective Hours (hrs)', 'Total Expenditure (ETB)'
+        ])
+        for wo in work_orders:
+            cw.writerow([
                 wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
                 wo.current_reading, wo.reading_unit, wo.job_status, wo.driver_name, 
                 wo.assigned_technicians, wo.start_datetime, wo.end_datetime, 
                 wo.maintenance_type, wo.work_category, wo.description, 
-                wo.spare_parts_qty, wo.spare_parts_cost, wo.lubricants_volume, wo.lubricants_cost, 
-                wo.batteries_cost, wo.tires_cost, wo.effective_work_hours, tot_form
-            ]
-            for col_idx, val in enumerate(row_data, start=1):
-                c = ws_wo.cell(row=row_idx, column=col_idx, value=val)
-                c.font = font_normal
-                c.border = cell_border
-                if col_idx in [15, 17]:
-                    c.alignment = align_right
-                    c.number_format = '#,##0.0' if col_idx == 17 else '#,##0'
-                elif col_idx in [16, 18, 19, 20, 22]:
-                    c.alignment = align_right
-                    c.number_format = '#,##0.00'
-                elif col_idx == 21:
-                    c.alignment = align_right
-                    c.number_format = '#,##0.0'
-                else:
-                    c.alignment = align_left
-                if row_idx % 2 == 0:
-                    c.fill = fill_zebra
-
-        # Totals row for Work Orders
-        tot_r_wo = len(work_orders) + 3
-        ws_wo.cell(row=tot_r_wo, column=1, value="TOTAL").font = font_bold
-        ws_wo.cell(row=tot_r_wo, column=1).border = total_border
-        for c_idx in range(2, 23):
-            c = ws_wo.cell(row=tot_r_wo, column=c_idx)
-            c.border = total_border
-            col_ltr = get_column_letter(c_idx)
-            if c_idx in [15, 16, 17, 18, 19, 20, 21, 22]:
-                c.value = f"=SUM({col_ltr}3:{col_ltr}{tot_r_wo-1})"
-                c.font = font_bold
-                c.alignment = align_right
-                c.number_format = '#,##0.00' if c_idx not in [15, 17, 21] else '#,##0.0'
-
-        for col in ws_wo.columns:
-            max_l = max(len(str(cell.value or '')) for cell in col)
-            ws_wo.column_dimensions[get_column_letter(col[0].column)].width = max(max_l + 3, 15)
-
-        # --- TAB 3: SPARE INVENTORY ---
-        inv_headers = ["ID", "Part Name", "Specification (Spec)", "Available Quantity", "Location"]
-        ws_inv.merge_cells("A1:E1")
-        t_inv = ws_inv["A1"]
-        t_inv.value = "SECTION 2: STORE SPARE INVENTORY MASTER"
-        t_inv.font = font_title
-        t_inv.fill = fill_header
-        t_inv.alignment = align_center
-
-        for col_idx, text in enumerate(inv_headers, start=1):
-            c = ws_inv.cell(row=2, column=col_idx, value=text)
-            c.font = font_header
-            c.fill = fill_sub
-            c.alignment = align_center
-            c.border = header_border
-
-        for row_idx, item in enumerate(inventory_items, start=3):
-            item_data = [item.id, item.part_name, item.spec, item.quantity, item.location]
-            for col_idx, val in enumerate(item_data, start=1):
-                c = ws_inv.cell(row=row_idx, column=col_idx, value=val)
-                c.font = font_normal
-                c.border = cell_border
-                if col_idx == 4:
-                    c.alignment = align_right
-                    c.number_format = '#,##0'
-                else:
-                    c.alignment = align_left
-                if row_idx % 2 == 0:
-                    c.fill = fill_zebra
-
-        for col in ws_inv.columns:
-            max_l = max(len(str(cell.value or '')) for cell in col)
-            ws_inv.column_dimensions[get_column_letter(col[0].column)].width = max(max_l + 5, 20)
-
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
-
-        resp = make_response(output.read())
-        resp.headers["Content-Disposition"] = "attachment; filename=steely_rmi_master_report_2026.xlsx"
-        resp.headers["Content-Type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        return resp
+                wo.spare_parts_qty, wo.spare_parts_cost, wo.lubricants_volume, wo.lubricants_cost, wo.batteries_cost, wo.tires_cost, wo.effective_work_hours, wo.total_expenditure
+            ])
+        
+        # Blank separator rows
+        cw.writerow([])
+        cw.writerow([])
+        
+        # Section 2: Store Spare Inventory Header & Data
+        cw.writerow(['=== SECTION 2: STORE SPARE INVENTORY ==='])
+        cw.writerow(['ID', 'Part Name', 'Specification (Spec)', 'Available Quantity', 'Location'])
+        for item in inventory_items:
+            cw.writerow([item.id, item.part_name, item.spec, item.quantity, item.location])
+            
+        output = make_response(si.getvalue())
+        output.headers["Content-Disposition"] = "attachment; filename=steely_rmi_master_report_2026.csv"
+        output.headers["Content-type"] = "text/csv"
+        return output
     except Exception as e:
         return f"Export Error: {str(e)}", 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+
+wb = openpyxl.Workbook()
+# Setup sheets
+ws_summary = wb.active
+ws_summary.title = "Executive Summary"
+ws_wo = wb.create_sheet(title="Work Orders & Maintenance Logs")
+ws_inv = wb.create_sheet(title="Spare Inventory")
+
+print("Workbook initialized successfully.")
