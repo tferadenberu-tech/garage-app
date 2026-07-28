@@ -612,18 +612,16 @@ def export_master_report():
         
         # Section 2: Store Spare Inventory Header & Data
         cw.writerow(['=== SECTION 2: STORE SPARE INVENTORY ==='])
-        cw.writerow(['Part ID', 'Part Name', 'Specification (Spec)', 'Available Quantity', 'Location'])
+        cw.writerow(['ID', 'Part Name', 'Specification (Spec)', 'Available Quantity', 'Location'])
         for item in inventory_items:
-            cw.writerow([
-                item.id, item.part_name, item.spec, item.quantity, item.location
-            ])
+            cw.writerow([item.id, item.part_name, item.spec, item.quantity, item.location])
             
         output = make_response(si.getvalue())
-        output.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_All_In_One_Master_Report.csv"
+        output.headers["Content-Disposition"] = "attachment; filename=steely_rmi_master_report_2026.csv"
         output.headers["Content-type"] = "text/csv"
         return output
     except Exception as e:
-        return f"Error exporting master report: {str(e)}", 500
+        return f"Export Error: {str(e)}", 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
