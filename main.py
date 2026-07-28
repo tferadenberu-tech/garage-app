@@ -8,7 +8,7 @@ from openpyxl.utils import get_column_letter
 
 app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v10.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v11.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -59,9 +59,6 @@ LOGIN_HTML = """
 <body class="bg-dark d-flex align-items-center justify-content-center vh-100">
     <div class="card p-4 shadow-lg" style="width: 380px; background: #1e2124; color: white; border-radius: 12px;">
         <h3 class="text-center mb-4 text-primary fw-bold">SteelY R.M.I</h3>
-        {% if error %}
-            <div class="alert alert-danger py-2 text-center">{{ error }}</div>
-        {% endif %}
         <form method="POST" action="/login">
             <div class="mb-3">
                 <label class="form-label">Username</label>
@@ -99,7 +96,7 @@ DASHBOARD_HTML = """
                         <span class="badge bg-secondary">Dinberu Tefera</span><br>
                         <small class="text-muted fw-bold" style="font-size: 9px;">HEAD OF MECHANICAL WORKSHOP AND GARAGE</small>
                     </div>
-                    <a href="/export/master_report" class="btn btn-success btn-sm fw-bold">📊 Export Excel Dashboard (Photo Format)</a>
+                    <a href="/export/master_report" class="btn btn-success btn-sm fw-bold">📊 Download Master Excel Report</a>
                     <a href="/logout" class="btn btn-danger btn-sm fw-bold">🚪 Logout</a>
                 </div>
             </div>
@@ -117,23 +114,11 @@ DASHBOARD_HTML = """
             <div class="card-body p-2">
                 <table class="table table-bordered table-hover align-middle mb-0 small">
                     <thead class="table-light">
-                        <tr>
-                            <th>ID</th>
-                            <th>Part Name</th>
-                            <th>Specification (Spec)</th>
-                            <th>Available Quantity</th>
-                            <th>Location</th>
-                        </tr>
+                        <tr><th>ID</th><th>Part Name</th><th>Specification (Spec)</th><th>Available Quantity</th><th>Location</th></tr>
                     </thead>
                     <tbody>
                         {% for item in inventory_items %}
-                        <tr>
-                            <td>{{ item.id }}</td>
-                            <td>{{ item.part_name }}</td>
-                            <td>{{ item.spec }}</td>
-                            <td class="fw-bold">{{ item.quantity }}</td>
-                            <td>{{ item.location }}</td>
-                        </tr>
+                        <tr><td>{{ item.id }}</td><td>{{ item.part_name }}</td><td>{{ item.spec }}</td><td class="fw-bold">{{ item.quantity }}</td><td>{{ item.location }}</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -147,17 +132,7 @@ DASHBOARD_HTML = """
             <div class="card-body p-2">
                 <table class="table table-bordered table-hover align-middle mb-0 small">
                     <thead class="table-secondary">
-                        <tr>
-                            <th>ID / S/N</th>
-                            <th>Work Order No</th>
-                            <th>Vehicle Model & Plate</th>
-                            <th>Job Status</th>
-                            <th>Maintenance Type</th>
-                            <th>Work Category</th>
-                            <th>Assigned Technicians</th>
-                            <th>Start / End Time</th>
-                            <th>Total Cost (ETB)</th>
-                        </tr>
+                        <tr><th>ID / S/N</th><th>Work Order No</th><th>Vehicle Model & Plate</th><th>Job Status</th><th>Maintenance Type</th><th>Work Category</th><th>Assigned Technicians</th><th>Start / End Time</th><th>Total Cost (ETB)</th></tr>
                     </thead>
                     <tbody>
                         {% for wo in work_orders %}
@@ -201,18 +176,35 @@ DASHBOARD_HTML = """
                             <div class="col-md-4"><label class="form-label">Technicians</label><input type="text" class="form-control" name="assigned_technicians" required value="Dinberu Tefera"></div>
                             <div class="col-md-6"><label class="form-label">Start Time</label><input type="datetime-local" class="form-control" name="start_datetime" required></div>
                             <div class="col-md-6"><label class="form-label">End Time</label><input type="datetime-local" class="form-control" name="end_datetime" required></div>
-                            <div class="col-md-4"><label class="form-label">Maintenance Type</label><select class="form-select" name="maintenance_type"><option value="CM">CM</option><option value="PM">PM</option></select></div>
+                            <div class="col-md-4"><label class="form-label">Maintenance Type</label><select class="form-select" name="maintenance_type"><option value="PM">PM</option><option value="CM">CM</option><option value="Inspection & Checkup">Inspection & Checkup</option></select></div>
                             <div class="col-md-8"><label class="form-label">Work Category</label><input type="text" class="form-control" name="work_category" required value="Engine Overhaul"></div>
-                            <div class="col-12"><textarea class="form-control" name="description" rows="2" placeholder="Description...">Fixed broken window and engine gasket.</textarea></div>
+                            <div class="col-12"><textarea class="form-control" name="description" rows="2">Fixed broken window and engine gasket.</textarea></div>
                             <div class="col-md-4"><label class="form-label">Spare Qty</label><input type="number" class="form-control" name="spare_parts_qty" value="2"></div>
-                            <div class="col-md-4"><label class="form-label">Spare Cost (ETB)</label><input type="number" step="0.01" class="form-control" name="spare_parts_cost" value="8500"></div>
+                            <div class="col-md-4"><label class="form-label">Spare Cost (ETB)</label><input type="number" step="0.01" class="form-control" name="spare_parts_cost" value="48800"></div>
                             <div class="col-md-4"><label class="form-label">Lube Vol (L)</label><input type="number" step="0.1" class="form-control" name="lubricants_volume" value="15.0"></div>
-                            <div class="col-md-4"><label class="form-label">Lube Cost (ETB)</label><input type="number" step="0.01" class="form-control" name="lubricants_cost" value="3200"></div>
+                            <div class="col-md-4"><label class="form-label">Lube Cost (ETB)</label><input type="number" step="0.01" class="form-control" name="lubricants_cost" value="18600"></div>
                             <div class="col-md-4"><label class="form-label">Batteries Cost</label><input type="number" step="0.01" class="form-control" name="batteries_cost" value="9000"></div>
                             <div class="col-md-4"><label class="form-label">Tires Cost</label><input type="number" step="0.01" class="form-control" name="tires_cost" value="36000"></div>
                         </div>
                     </div>
                     <div class="modal-footer"><button type="submit" class="btn btn-primary">Save Work Order</button></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="addSpareModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" action="/add_spare">
+                    <div class="modal-header bg-dark text-white"><h5 class="modal-title">Add Store Spare</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <div class="mb-3"><label class="form-label">Part Name</label><input type="text" class="form-control" name="part_name" required value="24V Magnetic Starter"></div>
+                        <div class="mb-3"><label class="form-label">Specification</label><input type="text" class="form-control" name="spec" required value="Heavy Duty"></div>
+                        <div class="mb-3"><label class="form-label">Quantity</label><input type="number" class="form-control" name="quantity" required value="12"></div>
+                        <div class="mb-3"><label class="form-label">Location</label><input type="text" class="form-control" name="location" required value="Main Store A1"></div>
+                    </div>
+                    <div class="modal-footer"><button type="submit" class="btn btn-dark">Save Spare</button></div>
                 </form>
             </div>
         </div>
@@ -231,14 +223,12 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    error = None
     if request.method == 'POST':
         if request.form.get('username') == 'admin' and request.form.get('password') == 'steely2026':
             session.clear()
             session['logged_in'] = True
             return redirect(url_for('dashboard'))
-        error = 'Invalid credentials!'
-    return render_template_string(LOGIN_HTML, error=error)
+    return render_template_string(LOGIN_HTML)
 
 @app.route('/logout')
 def logout():
@@ -250,6 +240,19 @@ def dashboard():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
     return render_template_string(DASHBOARD_HTML, work_orders=WorkOrder.query.all(), inventory_items=SpareInventory.query.all())
+
+@app.route('/add_spare', methods=['POST'])
+def add_spare():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    db.session.add(SpareInventory(
+        part_name=request.form.get('part_name'),
+        spec=request.form.get('spec'),
+        quantity=int(request.form.get('quantity')),
+        location=request.form.get('location')
+    ))
+    db.session.commit()
+    return redirect(url_for('dashboard'))
 
 @app.route('/add_work_order', methods=['POST'])
 def add_work_order():
@@ -281,7 +284,7 @@ def add_work_order():
         job_status=request.form.get('job_status'),
         driver_name=request.form.get('driver_name'),
         assigned_technicians=request.form.get('assigned_technicians'),
-        start_datetime=start_dt,
+        start_datetime=start_datetime_str := start_dt,
         end_datetime=end_dt,
         maintenance_type=request.form.get('maintenance_type'),
         work_category=request.form.get('work_category'),
@@ -365,7 +368,6 @@ def export_master_report():
 
     max_wo_row = max(len(work_orders) + 2, 3)
     
-    # Formulas or values mapping to Weekly, Monthly, All-Time
     summary_rows = [
         ("Total Jobs Executed", 
          f"=COUNTA('Work Orders & Maintenance Logs'!B3:B{max_wo_row})", 
@@ -380,9 +382,9 @@ def export_master_report():
          f"=COUNTIF('Work Orders & Maintenance Logs'!L3:L{max_wo_row}, \"CM\")", 
          f"=COUNTIF('Work Orders & Maintenance Logs'!L3:L{max_wo_row}, \"CM\")"),
         ("Inspection & Checkup", 
-         f"=COUNTIF('Work Orders & Maintenance Logs'!L3:L{max_wo_row}, \"Inspection & Check\")", 
-         f"=COUNTIF('Work Orders & Maintenance Logs'!L3:L{max_wo_row}, \"Inspection & Check\")", 
-         f"=COUNTIF('Work Orders & Maintenance Logs'!L3:L{max_wo_row}, \"Inspection & Check\")"),
+         f"=COUNTIF('Work Orders & Maintenance Logs'!L3:L{max_wo_row}, \"Inspection & Checkup\")", 
+         f"=COUNTIF('Work Orders & Maintenance Logs'!L3:L{max_wo_row}, \"Inspection & Checkup\")", 
+         f"=COUNTIF('Work Orders & Maintenance Logs'!L3:L{max_wo_row}, \"Inspection & Checkup\")"),
         ("Total Effective Work Hours (hrs)", 
          f"=SUM('Work Orders & Maintenance Logs'!U3:U{max_wo_row})", 
          f"=SUM('Work Orders & Maintenance Logs'!U3:U{max_wo_row})", 
