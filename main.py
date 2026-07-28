@@ -284,7 +284,7 @@ def add_work_order():
         job_status=request.form.get('job_status'),
         driver_name=request.form.get('driver_name'),
         assigned_technicians=request.form.get('assigned_technicians'),
-        start_datetime=start_datetime_str := start_dt,
+        start_datetime=start_dt,
         end_datetime=end_dt,
         maintenance_type=request.form.get('maintenance_type'),
         work_category=request.form.get('work_category'),
@@ -337,7 +337,7 @@ def export_master_report():
     cell_border = Border(left=border_thin, right=border_thin, top=border_thin, bottom=border_thin)
     header_border = Border(left=border_thin, right=border_thin, top=border_thin, bottom=border_thick)
 
-    # --- TAB 1: EXECUTIVE SUMMARY (Matching Photo Layout Exactly) ---
+    # --- TAB 1: EXECUTIVE SUMMARY ---
     ws_summary.merge_cells("A1:D2")
     t_cell = ws_summary["A1"]
     t_cell.value = "STEELY R.M.I GARAGE & WORKSHOP MAINTENANCE MASTER DASHBOARD"
