@@ -6,6 +6,3 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand:gunicorn main:app 
-    envVars:
-    - key:python_VERSION
-    value: 3.11.0
