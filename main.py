@@ -1,794 +1,720 @@
 import io
-import json
+import csv
 from datetime import datetime, timedelta
-import pandas as pd
-from flask import Flask, render_template_string, request, redirect, url_for, send_file, session
+from flask import Flask, render_template_string, request, redirect, url_for, make_response, session
+from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
-app.secret_key = "steely_garage_secret_key"
+app.secret_key = 'steely_rmi_secure_secret_key_2026'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v13.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-# --- In-Memory System Database ---
-garage_data = {
-    "spare_parts": [
-        {"id": 1, "part_name": "Oil Filter", "spec": "LF16015 / Heavy Duty", "for_vehicle": "Sino Truck 371", "qty": 20, "unit_price": 1200.00},
-        {"id": 2, "part_name": "Fuel Filter", "spec": "FF5421 / High Efficiency", "for_vehicle": "Isuzu NPR", "qty": 15, "unit_price": 1800.00},
-        {"id": 3, "part_name": "Brake Shoe Set", "spec": "Rear Axle / Heavy Duty Standard", "for_vehicle": "FSR", "qty": 8, "unit_price": 4500.00}
-    ],
-    "maintenance_logs": [
-        {
-            "id": 1,
-            "sn": "SN-001",
-            "wo_no": "WO-2026-001",
-            "vehicle": "AA-3-12345",
-            "model": "Sino Truck 371",
-            "reading_value": 124500,
-            "reading_unit": "KM",
-            "next_service": "129,500 KM (+5000)",
-            "driver": "አለማየሁ ተ.",
-            "technicians": "አቶ ምህረት, አቶ ኢብራሂም",
-            "maintenance_type": "PM",
-            "work_status": "Completed",
-            "start_time": "2026-07-20 08:00",
-            "finish_time": "2026-07-20 14:30",
-            "effective_hours": 6.5,
-            "description": "Engine Oil & Filter Change",
-            "replaced_spares": [
-                {"part_name": "Oil Filter (LF16015)", "spec": "LF16015", "qty": 1, "unit_price": 1200.0, "total_cost": 1200.0},
-                {"part_name": "Fuel Filter (FF5421)", "spec": "FF5421", "qty": 1, "unit_price": 1800.0, "total_cost": 1800.0}
-            ],
-            "battery_qty": 1, "battery_cost": 15000.0,
-            "lubrication_qty": 20.0, "lubrication_cost": 4500.0,
-            "tire_qty": 0, "tire_cost": 0.0
-        }
-    ]
-}
+class WorkOrder(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    serial_number = db.Column(db.String(50), nullable=False)
+    work_order_no = db.Column(db.String(50), nullable=False)
+    vehicle_plate = db.Column(db.String(50), nullable=False)
+    vehicle_model = db.Column(db.String(100), nullable=False)
+    current_reading = db.Column(db.Float, nullable=False, default=0.0)
+    reading_unit = db.Column(db.String(20), nullable=False)
+    next_due_reading = db.Column(db.Float, nullable=False, default=0.0)
+    job_status = db.Column(db.String(50), nullable=False)
+    driver_name = db.Column(db.String(100), nullable=False)
+    assigned_technicians = db.Column(db.String(200), nullable=False)
+    start_datetime = db.Column(db.String(50), nullable=False)
+    end_datetime = db.Column(db.String(50), nullable=False)
+    maintenance_type = db.Column(db.String(50), nullable=False) 
+    work_category = db.Column(db.String(100), nullable=False) 
+    description = db.Column(db.Text, nullable=True)
+    spare_parts_qty = db.Column(db.Integer, nullable=False, default=0)
+    spare_parts_cost = db.Column(db.Float, nullable=False, default=0.0)
+    lubricants_volume = db.Column(db.Float, nullable=False, default=0.0)
+    lubricants_cost = db.Column(db.Float, nullable=False, default=0.0)
+    batteries_cost = db.Column(db.Float, nullable=False, default=0.0)
+    tires_cost = db.Column(db.Float, nullable=False, default=0.0)
+    effective_work_hours = db.Column(db.Float, nullable=False, default=0.0)
+    total_expenditure = db.Column(db.Float, nullable=False, default=0.0)
 
-def calculate_effective_hours(start_str, finish_str):
-    try:
-        fmt = "%Y-%m-%dT%H:%M"
-        t1 = datetime.strptime(start_str, fmt)
-        t2 = datetime.strptime(finish_str, fmt)
-        diff = (t2 - t1).total_seconds() / 3600.0
-        return round(max(diff, 0.0), 2)
-    except:
-        return 0.0
+class SpareInventory(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    part_name = db.Column(db.String(100), nullable=False)
+    spec = db.Column(db.String(100), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+    location = db.Column(db.String(100), nullable=False)
 
-def calculate_next_service(val, unit):
-    try:
-        val_int = int(val)
-    except:
-        return "N/A"
-    
-    if unit == "Hour":
-        next_val = val_int + 250
-        return f"{next_val:,} Hours (+250)"
-    else:
-        next_val = val_int + 5000
-        return f"{next_val:,} KM (+5000)"
+with app.app_context():
+    db.create_all()
 
-# --- Frontend HTML Template ---
-HTML_TEMPLATE = """
+LOGIN_HTML = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SteelY R.M.I - Login</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-dark d-flex align-items-center justify-content-center vh-100">
+    <div class="card p-4 shadow-lg" style="width: 380px; background: #1e2124; color: white; border-radius: 12px;">
+        <h3 class="text-center mb-4 text-primary fw-bold">SteelY R.M.I</h3>
+        {% if error %}
+            <div class="alert alert-danger py-2 text-center">{{ error }}</div>
+        {% endif %}
+        <form method="POST" action="/login">
+            <div class="mb-3">
+                <label class="form-label">Username</label>
+                <input type="text" class="form-control" name="username" required autocomplete="off" value="admin">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Password</label>
+                <input type="password" class="form-control" name="password" required value="steely2026">
+            </div>
+            <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">Login to Dashboard</button>
+        </form>
+    </div>
+</body>
+</html>
+"""
+
+DASHBOARD_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
     <title>SteelY R.M.I Garage Maintnace dash Bord</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        :root {
-            --bg-main: #f8fafc;
-            --sidebar-bg: #090d16;
-            --accent-blue: #2563eb;
-            --accent-cyan: #0ea5e9;
-            --card-bg: #ffffff;
-            --text-main: #1e293b;
-            --text-muted: #64748b;
+        /* በግራ በኩል ቋሚ የሳይድባር ክፍት ቦታ (Spacing) ማስተካከያ */
+        body {
+            background-color: #f4f6f9;
         }
-        body { font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-main); color: var(--text-main); }
-        
-        .sidebar { background: linear-gradient(180deg, #090d16 0%, #111827 100%); min-height: 100vh; color: #94a3b8; padding: 30px 18px; box-shadow: 4px 0 20px rgba(0,0,0,0.08); border-right: 1px solid rgba(255,255,255,0.05); }
-        .sidebar .brand-title { color: #f8fafc; font-size: 1.5rem; font-weight: 800; margin-bottom: 4px; letter-spacing: -0.5px; }
-        .admin-badge { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; font-size: 0.68rem; font-weight: 700; padding: 4px 10px; border-radius: 6px; display: inline-block; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 0.8px; box-shadow: 0 2px 5px rgba(37,99,235,0.3); }
-        
-        .btn-export-main { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; font-weight: 600; border: none; border-radius: 10px; width: 100%; text-align: left; padding: 12px 16px; margin-bottom: 25px; box-shadow: 0 4px 12px rgba(5,150,105,0.2); transition: all 0.2s ease; }
-        .btn-export-main:hover { background: linear-gradient(135deg, #047857 100%, #065f46 100%); color: white; transform: translateY(-1px); }
-        
-        .nav-link-custom { color: #94a3b8; text-decoration: none; display: flex; align-items: center; gap: 12px; padding: 12px 16px; font-size: 0.93rem; font-weight: 500; border-radius: 10px; margin-bottom: 8px; transition: all 0.2s ease; }
-        .nav-link-custom:hover { background-color: rgba(37, 99, 235, 0.12); color: #60a5fa; transform: translateX(3px); }
-        
-        .main-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; background: var(--card-bg); padding: 22px 30px; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 2px 10px rgba(0,0,0,0.01); }
-        .main-title { font-size: 1.7rem; font-weight: 800; color: #0f172a; margin-bottom: 2px; letter-spacing: -0.5px; }
-        .main-subtitle { color: var(--text-muted); font-size: 0.88rem; font-weight: 500; }
-        
-        .top-user-panel { display: flex; align-items: center; gap: 18px; }
-        .user-box { text-align: right; border-right: 2px solid #f1f5f9; padding-right: 18px; }
-        .user-name { font-weight: 700; color: #1e293b; display: block; font-size: 0.92rem; }
-        .user-role { background-color: #2563eb; color: white; font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
-        
-        .btn-header-logout { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; font-weight: 600; padding: 9px 18px; border-radius: 10px; text-decoration: none; font-size: 0.88rem; box-shadow: 0 2px 6px rgba(239,68,68,0.2); }
-        .btn-header-export { background: linear-gradient(135deg, #059669 0%, #047857 100%); color: white; font-weight: 600; padding: 9px 18px; border-radius: 10px; text-decoration: none; font-size: 0.88rem; box-shadow: 0 2px 6px rgba(5,150,105,0.2); }
-
-        .summary-card { background: var(--card-bg); border-radius: 16px; padding: 24px; border: 1px solid #e2e8f0; box-shadow: 0 4px 15px -3px rgba(0,0,0,0.03); transition: transform 0.2s ease; }
-        .summary-card:hover { transform: translateY(-2px); }
-        .summary-card h6 { color: #2563eb; font-weight: 700; font-size: 0.82rem; border-bottom: 2px solid #eff6ff; padding-bottom: 12px; margin-bottom: 18px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .stat-line { font-size: 0.92rem; margin-bottom: 10px; color: #475569; font-weight: 500; }
-        .cost-line { color: #047857; font-weight: 700; font-size: 1.05rem; margin-top: 15px; background: #ecfdf5; padding: 10px 14px; border-radius: 8px; display: inline-block; border: 1px solid #d1fae5; }
-        
-        table.table thead.table-water-blue, 
-        .table-water-blue { 
-            background: #0284c7 !important; 
-            background-color: #0284c7 !important; 
+        .main-layout-container {
+            margin-left: 240px; /* በግራ በኩል ክፍት ቦታ ፈጥሯል */
+            padding: 20px;
+            max-width: calc(100% - 240px);
+            transition: all 0.3s ease;
         }
-        table.table thead.table-water-blue th, 
-        .table-water-blue th { 
-            background-color: #0284c7 !important; 
-            color: #ffffff !important; 
-            font-weight: 700 !important; 
-            border-color: #0284c7 !important; 
+        .sidebar-space {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 220px;
+            height: 100%;
+            background: #212529;
+            color: white;
+            padding: 20px;
+            z-index: 1000;
         }
-
-        .btn-primary { background-color: #2563eb; border: none; border-radius: 8px; font-weight: 600; padding: 8px 16px; box-shadow: 0 2px 5px rgba(37,99,235,0.2); }
-        .btn-primary:hover { background-color: #1d4ed8; }
-        .form-control, .form-select { border-radius: 8px; border-color: #cbd5e1; padding: 9px 12px; font-size: 0.9rem; }
-        .form-control:focus, .form-select:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+        @media (max-width: 992px) {
+            .main-layout-container {
+                margin-left: 0;
+                max-width: 100%;
+            }
+            .sidebar-space {
+                display: none;
+            }
+        }
     </style>
 </head>
 <body>
-<div class="container-fluid p-0">
-    <div class="row g-0">
-        
-        <!-- Left Sidebar Navigation -->
-        <div class="col-md-2 sidebar">
-            <div class="brand-title">SteelY R.M.I</div>
-            <div class="admin-badge">⚡ System Admin</div>
-            
-            <a href="/export/master_excel" class="btn btn-export-main shadow-sm">
-                📊 Export Master Excel
-            </a>
+    <!-- በግራ በኩል የሚታይ ቋሚ የክፍት ቦታ / Sidebar เมนู -->
+    <div class="sidebar-space d-none d-lg-block">
+        <h5 class="text-primary fw-bold mb-4">SteelY Garage</h5>
+        <ul class="nav flex-column gap-2">
+            <li class="nav-item"><a href="/dashboard" class="nav-link text-white active bg-primary rounded">🏠 Dashboard</a></li>
+            <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 Master Report</a></li>
+            <li class="nav-item"><a href="/export/maintenance_execution" class="nav-link text-white">📥 Execution Log</a></li>
+            <li class="nav-item mt-5"><a href="/logout" class="nav-link text-danger">🚪 Logout</a></li>
+        </ul>
+    </div>
 
-            <nav class="mt-2">
-                <a href="#summary-section" class="nav-link-custom">📊 Summaries & Filter</a>
-                <a href="#create-wo-section" class="nav-link-custom">➕ Create Work Order</a>
-                <a href="#execution-log-section" class="nav-link-custom">🛠️ Execution & Log</a>
-                <a href="#" class="nav-link-custom" data-bs-toggle="modal" data-bs-target="#inventoryModal">⚙️ Spare Inventory</a>
-            </nav>
+    <!-- ዋናው የድስፕሌይ ይዘት በግራ በኩል ክፍት ቦታ ተሰጥቶታል -->
+    <div class="main-layout-container">
+        
+        <!-- Header Section -->
+        <div class="card shadow-sm p-3 mb-3 bg-white">
+            <div class="row align-items-center g-2">
+                <div class="col-md-5">
+                    <h4 class="text-primary fw-bold mb-0">SteelY R.M.I Garage Maintenance</h4>
+                    <small class="text-muted">Integrated Work Time, Consumables & Maintenance Platform</small>
+                </div>
+                <div class="col-md-7 d-flex justify-content-md-end align-items-center gap-2 flex-wrap">
+                    <div class="text-start text-md-end">
+                        <span class="badge bg-secondary">Dinberu Tefera</span><br>
+                        <small class="text-muted fw-bold" style="font-size: 9px;">HEAD OF MECHANICAL WORKSHOP AND GARAGE</small>
+                    </div>
+                    <a href="/export/master_report" class="btn btn-success btn-sm fw-bold">📊 Master Report Excel</a>
+                    <a href="/logout" class="btn btn-danger btn-sm fw-bold d-lg-none">🚪 Logout</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mb-3 d-flex gap-2 flex-wrap">
+            <button class="btn btn-primary btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">+ Create New Work Order</button>
+            <button class="btn btn-dark btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Store Spare Inventory</button>
         </div>
 
-        <!-- Right Main Workspace -->
-        <div class="col-md-10 p-4">
-            
-            <!-- Top Header Banner -->
-            <div class="main-header">
-                <div>
-                    <h1 class="main-title">SteelY R.M.I Garage Maintnace dash Bord</h1>
-                    <div class="main-subtitle">Integrated Work Time, Consumables & Maintenance Tracking Platform</div>
-                </div>
-                <div class="top-user-panel">
-                    <div class="user-box">
-                        <span class="user-name">{{ user.name }}</span>
-                        <span class="user-role">{{ user.role }}</span>
+        <!-- 1. Weekly & Monthly Summaries Row -->
+        <div class="row mb-3">
+            <div class="col-xl-6 mb-2">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-secondary text-white py-2">
+                        <h5 class="mb-0 fs-6">WEEKLY SUMMARY (LAST 7 DAYS)</h5>
                     </div>
-                    <button type="button" class="btn btn-primary btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#inventoryModal">⚙️ View Spare Inventory</button>
-                    <a href="/export/master_excel" class="btn-header-export shadow-sm">📊 Export Excel</a>
-                    <a href="/logout" class="btn-header-logout shadow-sm">🚪 Logout</a>
-                </div>
-            </div>
-
-            <!-- Top Summary Cards -->
-            <div class="row g-3 mb-4" id="summary-section">
-                <div class="col-md-6">
-                    <div class="summary-card">
-                        <h6>WEEKLY SUMMARY (LAST 7 DAYS)</h6>
-                        <div class="stat-line">Total Jobs Executed: <strong>{{ weekly.total_jobs }}</strong></div>
-                        <div class="p-2 bg-light rounded mb-2 border">
-                            <div class="stat-line text-muted mb-1">• Preventive Maintenance (PM): <strong>{{ weekly.pm_jobs }}</strong></div>
-                            <div class="stat-line text-muted mb-1">• Corrective Maintenance (CM): <strong>{{ weekly.cm_jobs }}</strong></div>
-                            <div class="stat-line text-muted mb-0">• Inspection & Checkup: <strong>{{ weekly.inspection_jobs }}</strong></div>
-                        </div>
-                        <div class="stat-line text-primary fw-bold">Total Effective Work Time: <strong>{{ weekly.total_work_hours }} hrs</strong></div>
+                    <div class="card-body">
+                        <p class="fw-bold mb-2">Total Jobs Executed: <span class="text-primary">{{ weekly_jobs }}</span></p>
+                        <ul class="list-unstyled ms-3 mb-2 small">
+                            <li>• Preventive Maintenance (PM): <strong>{{ weekly_pm }}</strong></li>
+                            <li>• Corrective Maintenance (CM): <strong>{{ weekly_cm }}</strong></li>
+                            <li>• Inspection & Checkup: <strong>{{ weekly_insp }}</strong></li>
+                        </ul>
+                        <p class="fw-bold mb-2 text-primary">Total Effective Work Time: {{ "%.1f"|format(weekly_hours) }} hrs</p>
                         <hr class="my-2">
-                        <div class="stat-line">Spare Parts Quantity: <strong>{{ weekly.total_spare_qty }} Pcs</strong></div>
-                        <div class="stat-line">Spare Parts Cost: <strong>ETB {{ "{:,.2f}".format(weekly.total_spares_cost) }}</strong></div>
-                        <div class="stat-line">Lubricants Volume: <strong>{{ weekly.total_lubrication_qty }} Liters</strong></div>
-                        <div class="stat-line">Lubricants Cost: <strong>ETB {{ "{:,.2f}".format(weekly.total_lubrication_cost) }}</strong></div>
-                        <div class="stat-line">Batteries Cost: <strong>ETB {{ "{:,.2f}".format(weekly.total_battery_cost) }}</strong></div>
-                        <div class="stat-line">Tires Cost: <strong>ETB {{ "{:,.2f}".format(weekly.total_tire_cost) }}</strong></div>
-                        <div class="cost-line w-100 text-center">Total Expenditure: ETB {{ "{:,.2f}".format(weekly.total_expenditure) }}</div>
+                        <div class="row small text-muted">
+                            <div class="col-6">Spare Qty: <strong>{{ weekly_spare_qty }} Pcs</strong></div>
+                            <div class="col-6">Spare Cost: <strong>ETB {{ "%.2f"|format(weekly_spare_cost) }}</strong></div>
+                            <div class="col-6">Lubricants: <strong>{{ "%.1f"|format(weekly_lube_vol) }} L</strong></div>
+                            <div class="col-6">Lube Cost: <strong>ETB {{ "%.2f"|format(weekly_lube_cost) }}</strong></div>
+                            <div class="col-6">Batteries Cost: <strong>ETB {{ "%.2f"|format(weekly_batt_cost) }}</strong></div>
+                            <div class="col-6">Tires Cost: <strong>ETB {{ "%.2f"|format(weekly_tire_cost) }}</strong></div>
+                        </div>
+                        <div class="mt-2 pt-2 border-top fw-bold text-dark">
+                            Total Expenditure: ETB {{ "%.2f"|format(weekly_total_exp) }}
+                        </div>
                     </div>
                 </div>
+            </div>
 
-                <div class="col-md-6">
-                    <div class="summary-card">
-                        <h6>MONTHLY SUMMARY (LAST 30 DAYS)</h6>
-                        <div class="stat-line">Total Jobs Executed: <strong>{{ monthly.total_jobs }}</strong></div>
-                        <div class="p-2 bg-light rounded mb-2 border">
-                            <div class="stat-line text-muted mb-1">• Preventive Maintenance (PM): <strong>{{ monthly.pm_jobs }}</strong></div>
-                            <div class="stat-line text-muted mb-1">• Corrective Maintenance (CM): <strong>{{ monthly.cm_jobs }}</strong></div>
-                            <div class="stat-line text-muted mb-0">• Inspection & Checkup: <strong>{{ monthly.inspection_jobs }}</strong></div>
-                        </div>
-                        <div class="stat-line text-primary fw-bold">Total Effective Work Time: <strong>{{ monthly.total_work_hours }} hrs</strong></div>
+            <div class="col-xl-6 mb-2">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-primary text-white py-2">
+                        <h5 class="mb-0 fs-6">MONTHLY SUMMARY (LAST 30 DAYS)</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="fw-bold mb-2">Total Jobs Executed: <span class="text-primary">{{ monthly_jobs }}</span></p>
+                        <ul class="list-unstyled ms-3 mb-2 small">
+                            <li>• Preventive Maintenance (PM): <strong>{{ monthly_pm }}</strong></li>
+                            <li>• Corrective Maintenance (CM): <strong>{{ monthly_cm }}</strong></li>
+                            <li>• Inspection & Checkup: <strong>{{ monthly_insp }}</strong></li>
+                        </ul>
+                        <p class="fw-bold mb-2 text-primary">Total Effective Work Time: {{ "%.1f"|format(monthly_hours) }} hrs</p>
                         <hr class="my-2">
-                        <div class="stat-line">Spare Parts Quantity: <strong>{{ monthly.total_spare_qty }} Pcs</strong></div>
-                        <div class="stat-line">Spare Parts Cost: <strong>ETB {{ "{:,.2f}".format(monthly.total_spares_cost) }}</strong></div>
-                        <div class="stat-line">Lubricants Volume: <strong>{{ monthly.total_lubrication_qty }} Liters</strong></div>
-                        <div class="stat-line">Lubricants Cost: <strong>ETB {{ "{:,.2f}".format(monthly.total_lubrication_cost) }}</strong></div>
-                        <div class="stat-line">Batteries Cost: <strong>ETB {{ "{:,.2f}".format(monthly.total_battery_cost) }}</strong></div>
-                        <div class="stat-line">Tires Cost: <strong>ETB {{ "{:,.2f}".format(monthly.total_tire_cost) }}</strong></div>
-                        <div class="cost-line w-100 text-center">Total Expenditure: ETB {{ "{:,.2f}".format(monthly.total_expenditure) }}</div>
+                        <div class="row small text-muted">
+                            <div class="col-6">Spare Qty: <strong>{{ monthly_spare_qty }} Pcs</strong></div>
+                            <div class="col-6">Spare Cost: <strong>ETB {{ "%.2f"|format(monthly_spare_cost) }}</strong></div>
+                            <div class="col-6">Lubricants: <strong>{{ "%.1f"|format(monthly_lube_vol) }} L</strong></div>
+                            <div class="col-6">Lube Cost: <strong>ETB {{ "%.2f"|format(monthly_lube_cost) }}</strong></div>
+                            <div class="col-6">Batteries Cost: <strong>ETB {{ "%.2f"|format(monthly_batt_cost) }}</strong></div>
+                            <div class="col-6">Tires Cost: <strong>ETB {{ "%.2f"|format(monthly_tire_cost) }}</strong></div>
+                        </div>
+                        <div class="mt-2 pt-2 border-top fw-bold text-success">
+                            Total Expenditure: ETB {{ "%.2f"|format(monthly_total_exp) }}
+                        </div>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Date Range Filter & Reset Bar -->
-            <div class="summary-card mb-4 bg-white border shadow-sm">
-                <form method="GET" action="/" class="row g-3 align-items-end">
-                    <div class="col-md-3">
-                        <label class="form-label small fw-bold text-dark">📅 Filter From Date:</label>
-                        <input type="date" name="start_date" class="form-control form-control-sm" value="{{ request.args.get('start_date', '') }}">
+        <!-- 2. Store Spare Inventory እና ሌሎች ክፍሎች ጎን ለጎን እንዲቀመጡ በ Row የተደረገ -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-secondary text-white py-2 d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fs-6">Store Spare Inventory</h5>
+                        <button class="btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Add Item</button>
                     </div>
-                    <div class="col-md-3">
-                        <label class="form-label small fw-bold text-dark">📅 Filter To Date:</label>
-                        <input type="date" name="end_date" class="form-control form-control-sm" value="{{ request.args.get('end_date', '') }}">
-                    </div>
-                    <div class="col-md-3">
-                        <button type="submit" class="btn btn-primary btn-sm fw-bold px-4 shadow-sm">🔍 Filter Report</button>
-                        <a href="/" class="btn btn-outline-secondary btn-sm ms-2 px-3">Reset Filter</a>
-                    </div>
-                    <div class="col-md-3 text-end">
-                        <a href="/reset_all_logs" class="btn btn-outline-danger btn-sm fw-bold shadow-sm" onclick="return confirm('Are you sure you want to reset/clear all execution logs?');">🔄 Reset All Logs</a>
-                    </div>
-                </form>
-            </div>
-
-            <!-- Form: Create New Work Order -->
-            <div class="summary-card mb-4" id="create-wo-section">
-                <div class="form-section-title text-primary fw-bold mb-3 fs-5">
-                    📄 Create New Work Order
-                </div>
-                <form action="/add_work_order" method="POST" id="wo-form">
-                    <div class="row g-3">
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold">Serial Number (S/N):</label>
-                            <input type="text" name="sn" class="form-control form-control-sm" placeholder="e.g. SN-002" required>
+                    <div class="card-body p-2">
+                        <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                            <table class="table table-bordered table-hover align-middle mb-0 small">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Part Name</th>
+                                        <th>Specification (Spec)</th>
+                                        <th>Available Quantity</th>
+                                        <th>Location</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in inventory_items %}
+                                    <tr>
+                                        <td>{{ item.id }}</td>
+                                        <td>{{ item.part_name }}</td>
+                                        <td>{{ item.spec }}</td>
+                                        <td class="fw-bold {% if item.quantity < 5 %}text-danger{% else %}text-success{% endif %}">{{ item.quantity }}</td>
+                                        <td>{{ item.location }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
                         </div>
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold">Work Order No:</label>
-                            <input type="text" name="wo_no" class="form-control form-control-sm" placeholder="e.g. WO-2026-002" required>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold">Vehicle Plate Number:</label>
-                            <input type="text" name="vehicle" class="form-control form-control-sm" placeholder="e.g. AA-3-12345" required>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold">Vehicle Type / Model:</label>
-                            <input type="text" name="model" class="form-control form-control-sm" placeholder="e.g. Sino Truck 371">
-                        </div>
-                        
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold text-danger">Current Reading:</label>
-                            <input type="number" name="reading_value" class="form-control form-control-sm border-danger" placeholder="e.g. 125000" required>
-                        </div>
-                        <div class="col-md-2">
-                            <label class="form-label small fw-bold text-danger">Reading Unit:</label>
-                            <select name="reading_unit" class="form-select form-select-sm border-danger" required>
-                                <option value="KM">KM (+5000)</option>
-                                <option value="Hour">Hour (+250)</option>
-                            </select>
-                        </div>
-
-                        <!-- Maintenance Type Selection Box (PM, CM, Inspection) -->
-                        <div class="col-md-3">
-                            <label class="form-label small fw-bold text-primary">🔧 Maintenance Type:</label>
-                            <select name="maintenance_type" class="form-select form-select-sm border-primary fw-bold" required>
-                                <option value="PM">PM (Preventive Maintenance)</option>
-                                <option value="CM">CM (Corrective Maintenance)</option>
-                                <option value="Inspection">Inspection (Checkup)</option>
-                            </select>
-                        </div>
-
-                        <div class="col-md-3">
-                            <label class="form-label small fw-bold">Job Status:</label>
-                            <select name="work_status" class="form-select form-select-sm" required>
-                                <option value="Completed">Completed</option>
-                                <option value="In Progress">In Progress</option>
-                                <option value="Pending">Pending</option>
-                            </select>
-                        </div>
-                        <div class="col-md-3">
-                            <label class="form-label small fw-bold">Driver Name:</label>
-                            <input type="text" name="driver" class="form-control form-control-sm" placeholder="e.g. አበበ ከ.">
-                        </div>
-                        
-                        <!-- Assigned Technicians / Mechanics -->
-                        <div class="col-md-3">
-                            <label class="form-label small fw-bold text-primary">Assigned Technicians:</label>
-                            <input type="text" name="technicians" class="form-control form-control-sm" placeholder="e.g., Ato Mihret" required>
-                        </div>
-
-                        <!-- Start Date & Time and End Date & Time -->
-                        <div class="col-md-3">
-                            <label class="form-label small fw-bold text-primary">🗓️ Start Date & Time:</label>
-                            <input type="datetime-local" name="start_time" class="form-control form-control-sm border-primary" required>
-                        </div>
-
-                        <div class="col-md-3">
-                            <label class="form-label small fw-bold text-primary">🏁 End Date & Time:</label>
-                            <input type="datetime-local" name="finish_time" class="form-control form-control-sm border-primary" required>
-                        </div>
-
-                        <div class="col-md-12">
-                            <label class="form-label small fw-bold">Work Description:</label>
-                            <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. Maintenance details and diagnostics note" required>
-                        </div>
-
-                        <!-- Dynamic Replaced Spare Parts Section -->
-                        <div class="col-md-12">
-                            <div class="p-3 border rounded bg-light shadow-sm">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <h6 class="fw-bold text-dark m-0">⚙️ Replaced Spare Parts (Auto Total Calculation)</h6>
-                                    <button type="button" class="btn btn-outline-primary btn-sm fw-bold" onclick="addSpareRow()">+ Add Spare Part Row</button>
-                                </div>
-                                <div id="spare-rows-container">
-                                    <div class="row g-2 spare-row mb-2 align-items-center">
-                                        <div class="col-md-3">
-                                            <input type="text" name="spare_name[]" class="form-control form-control-sm" placeholder="Spare Part Name" required>
-                                        </div>
-                                        <div class="col-md-3">
-                                            <input type="text" name="spare_spec[]" class="form-control form-control-sm" placeholder="Specification" required>
-                                        </div>
-                                        <div class="col-md-1">
-                                            <input type="number" name="spare_qty[]" class="form-control form-control-sm spare-qty" placeholder="Qty" value="1" min="1" required oninput="calculateRowTotal(this)">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <input type="number" step="0.01" name="spare_price[]" class="form-control form-control-sm spare-price" placeholder="Unit Price (ETB)" value="0.00" required oninput="calculateRowTotal(this)">
-                                        </div>
-                                        <div class="col-md-2">
-                                            <span class="small fw-bold text-success row-total-text">0.00 ETB</span>
-                                        </div>
-                                        <div class="col-md-1">
-                                            <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removeSpareRow(this)">✕</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Separate Consumables Inputs -->
-                        <div class="col-md-12">
-                            <div class="p-3 border rounded bg-light shadow-sm">
-                                <h6 class="fw-bold text-dark mb-3">🔋 Separate Consumables Tracking (Battery, Lubrication, Tire)</h6>
-                                <div class="row g-3 align-items-center">
-                                    <div class="col-md-4 border-end">
-                                        <label class="form-label small fw-bold text-primary">Battery:</label>
-                                        <div class="input-group input-group-sm mb-1">
-                                            <span class="input-group-text">Qty</span>
-                                            <input type="number" name="battery_qty" class="form-control" value="0">
-                                        </div>
-                                        <div class="input-group input-group-sm">
-                                            <span class="input-group-text">Cost (ETB)</span>
-                                            <input type="number" step="0.01" name="battery_cost" class="form-control" value="0.00">
-                                        </div>
-                                    </div>
-
-                                    <div class="col-md-4 border-end">
-                                        <label class="form-label small fw-bold text-primary">Lubrication (Oil/Grease):</label>
-                                        <div class="input-group input-group-sm mb-1">
-                                            <span class="input-group-text">Qty (L)</span>
-                                            <input type="number" step="0.1" name="lubrication_qty" class="form-control" value="0.0">
-                                        </div>
-                                        <div class="input-group input-group-sm">
-                                            <span class="input-group-text">Cost (ETB)</span>
-                                            <input type="number" step="0.01" name="lubrication_cost" class="form-control" value="0.00">
-                                        </div>
-                                    </div>
-
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold text-primary">Tire:</label>
-                                        <div class="input-group input-group-sm mb-1">
-                                            <span class="input-group-text">Qty</span>
-                                            <input type="number" name="tire_qty" class="form-control" value="0">
-                                        </div>
-                                        <div class="input-group input-group-sm">
-                                            <span class="input-group-text">Cost (ETB)</span>
-                                            <input type="number" step="0.01" name="tire_cost" class="form-control" value="0.00">
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="col-md-12 text-end mt-3">
-                            <button type="submit" class="btn btn-success btn-sm px-5 fw-bold shadow-sm">💾 Save Work Order</button>
-                        </div>
-                    </div>
-                </form>
-            </div>
-
-            <!-- Table 1: Execution & Work Time Log -->
-            <div class="summary-card mb-4" id="execution-log-section">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="fw-bold text-dark m-0">🛠️ Maintenance Execution & Work Time Log</h5>
-                    <div class="d-flex gap-2">
-                        <a href="/export/execution_excel" class="btn btn-success btn-sm fw-bold shadow-sm">📥 Save Report (Excel)</a>
-                        <a href="/reset_all_logs" class="btn btn-outline-danger btn-sm fw-bold shadow-sm" onclick="return confirm('Are you sure you want to clear/reset all logs?');">🔄 Reset All Data</a>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- 3. Maintenance Execution & Work Time Log -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+                <h5 class="mb-0 fs-6">Maintenance Execution & Work Time Log</h5>
+                <a href="/export/maintenance_execution" class="btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;">📥 Export Execution Log</a>
+            </div>
+            <div class="card-body p-2">
                 <div class="table-responsive">
-                    <table class="table table-bordered table-hover align-middle table-sm">
-                        <thead class="table-water-blue">
+                    <table class="table table-bordered table-hover align-middle mb-0 small">
+                        <thead class="table-secondary">
                             <tr>
-                                <th>Serial No (S/N)</th>
-                                <th>WO #</th>
-                                <th>Plate No</th>
+                                <th>ID / S/N</th>
+                                <th>Work Order No</th>
+                                <th>Vehicle Model & Plate</th>
                                 <th>Current Reading</th>
-                                <th>🔔 Next Service Alert</th>
-                                <th>Maint. Type</th>
-                                <th>Status</th>
-                                <th>Assigned Technicians</th>
-                                <th>Start Time</th>
-                                <th>End Time</th>
-                                <th>Effective Hours</th>
-                                <th>⚙️ Replaced Spares</th>
-                                <th>Battery Cost</th>
-                                <th>Lubrication Cost</th>
-                                <th>Tire Cost</th>
-                                <th class="text-center text-white">Action (Delete)</th>
+                                <th>Next Due (+5k KM / +250 Hrs)</th>
+                                <th>Job Status</th>
+                                <th>Maintenance Type</th>
+                                <th>Work Category</th>
+                                <th>Technicians</th>
+                                <th>Total Cost (ETB)</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for log in logs %}
+                            {% for wo in work_orders %}
                             <tr>
-                                <td class="fw-bold text-primary">{{ log.sn }}</td>
-                                <td class="fw-bold">{{ log.wo_no }}</td>
-                                <td><span class="badge bg-secondary">{{ log.vehicle }}</span></td>
-                                <td class="small fw-bold">{{ "{:,}".format(log.reading_value) }} {{ log.reading_unit }}</td>
-                                <td><span class="badge bg-info text-dark fw-bold">{{ log.next_service }}</span></td>
+                                <td>{{ wo.serial_number }}</td>
+                                <td>{{ wo.work_order_no }}</td>
+                                <td>{{ wo.vehicle_model }} ({{ wo.vehicle_plate }})</td>
+                                <td>{{ wo.current_reading }} {{ wo.reading_unit }}</td>
+                                <td class="fw-bold text-danger">{{ wo.next_due_reading }} {{ wo.reading_unit }}</td>
                                 <td>
-                                    {% if log.maintenance_type == 'PM' %}
-                                        <span class="badge bg-primary">PM</span>
-                                    {% elif log.maintenance_type == 'CM' %}
-                                        <span class="badge bg-danger">CM</span>
-                                    {% else %}
-                                        <span class="badge bg-warning text-dark">Inspection</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if log.work_status == 'Completed' %}
+                                    {% if wo.job_status == 'Completed' %}
                                         <span class="badge bg-success">Completed</span>
-                                    {% elif log.work_status == 'In Progress' %}
-                                        <span class="badge bg-warning text-dark">In Progress</span>
                                     {% else %}
-                                        <span class="badge bg-secondary">Pending</span>
+                                        <span class="badge bg-warning text-dark">{{ wo.job_status }}</span>
                                     {% endif %}
                                 </td>
-                                <td class="small fw-bold text-primary">{{ log.technicians }}</td>
-                                <td class="small text-muted">{{ log.start_time }}</td>
-                                <td class="small text-muted">{{ log.finish_time }}</td>
-                                <td class="fw-bold text-center text-success bg-light">{{ log.effective_hours }} hrs</td>
-                                <td class="small">
-                                    {% if log.replaced_spares %}
-                                        {% for sp in log.replaced_spares %}
-                                            <div>• <strong>{{ sp.part_name }}</strong> ({{ sp.spec }}) x{{ sp.qty }} ({{ "{:,.2f}".format(sp.total_cost) }} ETB)</div>
-                                        {% endfor %}
-                                    {% else %}
-                                        <span class="text-muted">None</span>
-                                    {% endif %}
-                                </td>
-                                <td class="fw-bold text-success">{{ "{:,.2f}".format(log.battery_cost) }} ETB</td>
-                                <td class="fw-bold text-success">{{ "{:,.2f}".format(log.lubrication_cost) }} ETB</td>
-                                <td class="fw-bold text-success">{{ "{:,.2f}".format(log.tire_cost) }} ETB</td>
-                                <td class="text-center">
-                                    <a href="/delete_log/{{ log.id }}" class="btn btn-outline-danger btn-sm px-2 py-0 fw-bold" onclick="return confirm('Delete this specific log row?');">🗑️ Delete Row</a>
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="16" class="text-center text-muted py-3">No maintenance logs found.</td>
+                                <td><span class="badge bg-info text-dark">{{ wo.maintenance_type }}</span></td>
+                                <td>{{ wo.work_category }}</td>
+                                <td>{{ wo.assigned_technicians }}</td>
+                                <td class="fw-bold text-success">{{ wo.total_expenditure }} ETB</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
             </div>
-
         </div>
     </div>
-</div>
 
-<!-- Spare Parts Inventory Modal -->
-<div class="modal fade" id="inventoryModal" tabindex="-1" aria-labelledby="inventoryModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header bg-primary text-white">
-                <h5 class="modal-title fw-bold" id="inventoryModalLabel">⚙️ Spare Parts Store Inventory</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <table class="table table-striped table-bordered table-sm align-middle">
-                    <thead class="table-dark">
-                        <tr>
-                            <th>ID</th>
-                            <th>Part Name</th>
-                            <th>Specification</th>
-                            <th>Vehicle Model</th>
-                            <th>Qty Stock</th>
-                            <th>Unit Price (ETB)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for part in spare_inventory %}
-                        <tr>
-                            <td>{{ part.id }}</td>
-                            <td class="fw-bold">{{ part.part_name }}</td>
-                            <td>{{ part.spec }}</td>
-                            <td>{{ part.for_vehicle }}</td>
-                            <td><span class="badge bg-success">{{ part.qty }} Pcs</span></td>
-                            <td>{{ "{:,.2f}".format(part.unit_price) }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+    <!-- Modals -->
+    <div class="modal fade" id="addWorkOrderModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <form method="POST" action="/add_work_order">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title">Create New Work Order (+5000 KM / +250 Hours Auto Due)</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Serial Number (S/N)</label>
+                                <input type="text" class="form-control" name="serial_number" required value="SN-001">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Work Order No</label>
+                                <input type="text" class="form-control" name="work_order_no" required value="WO-2026-01">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Vehicle Plate Number</label>
+                                <input type="text" class="form-control" name="vehicle_plate" required placeholder="e.g. AA-3-12345">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Vehicle Type / Model</label>
+                                <input type="text" class="form-control" name="vehicle_model" required placeholder="e.g. Sino Truck 371">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Current Reading</label>
+                                <input type="number" step="any" class="form-control" name="current_reading" required placeholder="e.g. 125000">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-primary">Reading Unit (+5k KM / +250h)</label>
+                                <select class="form-select border-primary fw-bold" name="reading_unit" required>
+                                    <option value="KM">KM (+5000 Next Due)</option>
+                                    <option value="Hours">Hours (+250 Next Due)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Job Status</label>
+                                <select class="form-select" name="job_status">
+                                    <option value="Completed">Completed</option>
+                                    <option value="In Progress">In Progress</option>
+                                    <option value="Pending">Pending</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Driver Name</label>
+                                <input type="text" class="form-control" name="driver_name" required placeholder="Driver Name">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Assigned Technicians / Mechanics</label>
+                                <input type="text" class="form-control" name="assigned_technicians" required value="Ato Mihret, Dinberu Tefera">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Start Date & Time</label>
+                                <input type="datetime-local" class="form-control" name="start_datetime" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">End Date & Time</label>
+                                <input type="datetime-local" class="form-control" name="end_datetime" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-danger">Maintenance Type</label>
+                                <select class="form-select border-danger fw-bold text-primary" name="maintenance_type" required>
+                                    <option value="CM">CM (Corrective Maintenance)</option>
+                                    <option value="PM">PM (Preventive Maintenance)</option>
+                                    <option value="Inspection & Check">Inspection & Check</option>
+                                </select>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label fw-bold">Work Category & Description</label>
+                                <input type="text" class="form-control mb-1" name="work_category" required placeholder="e.g. Engine Maintenance">
+                            </div>
+                            <div class="col-12">
+                                <textarea class="form-control" name="description" rows="2" placeholder="Detailed work description or notes..."></textarea>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Spare Parts Qty (Pcs)</label>
+                                <input type="number" class="form-control" name="spare_parts_qty" value="0" min="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Spare Parts Cost (ETB)</label>
+                                <input type="number" step="0.01" class="form-control" name="spare_parts_cost" value="0.00" min="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Lubricants Volume (Liters)</label>
+                                <input type="number" step="0.1" class="form-control" name="lubricants_volume" value="0.0" min="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Lubricants Cost (ETB)</label>
+                                <input type="number" step="0.01" class="form-control" name="lubricants_cost" value="0.00" min="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Batteries Cost (ETB)</label>
+                                <input type="number" step="0.01" class="form-control" name="batteries_cost" value="0.00" min="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Tires Cost (ETB)</label>
+                                <input type="number" step="0.01" class="form-control" name="tires_cost" value="0.00" min="0">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary">Save Work Order</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
-</div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<script>
-    function addSpareRow() {
-        const container = document.getElementById('spare-rows-container');
-        const newRow = document.createElement('div');
-        newRow.className = 'row g-2 spare-row mb-2 align-items-center';
-        newRow.innerHTML = `
-            <div class="col-md-3">
-                <input type="text" name="spare_name[]" class="form-control form-control-sm" placeholder="Spare Part Name" required>
+    <div class="modal fade" id="addSpareModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="POST" action="/add_spare">
+                    <div class="modal-header bg-dark text-white">
+                        <h5 class="modal-title">Add Store Spare Inventory</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Part Name</label>
+                            <input type="text" class="form-control" name="part_name" required placeholder="Part Name">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Specification (Spec)</label>
+                            <input type="text" class="form-control" name="spec" required placeholder="Specification">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Quantity</label>
+                            <input type="number" class="form-control" name="quantity" required min="1" value="10">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Location</label>
+                            <input type="text" class="form-control" name="location" required value="Main Store">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-dark">Save Spare</button>
+                    </div>
+                </form>
             </div>
-            <div class="col-md-3">
-                <input type="text" name="spare_spec[]" class="form-control form-control-sm" placeholder="Specification" required>
-            </div>
-            <div class="col-md-1">
-                <input type="number" name="spare_qty[]" class="form-control form-control-sm spare-qty" placeholder="Qty" value="1" min="1" required oninput="calculateRowTotal(this)">
-            </div>
-            <div class="col-md-2">
-                <input type="number" step="0.01" name="spare_price[]" class="form-control form-control-sm spare-price" placeholder="Unit Price (ETB)" value="0.00" required oninput="calculateRowTotal(this)">
-            </div>
-            <div class="col-md-2">
-                <span class="small fw-bold text-success row-total-text">0.00 ETB</span>
-            </div>
-            <div class="col-md-1">
-                <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removeSpareRow(this)">✕</button>
-            </div>
-        `;
-        container.appendChild(newRow);
-    }
+        </div>
+    </div>
 
-    function removeSpareRow(button) {
-        const row = button.closest('.spare-row');
-        if (document.querySelectorAll('.spare-row').length > 1) {
-            row.remove();
-        } else {
-            alert("At least one spare row placeholder required (or leave blank descriptions).");
-        }
-    }
-
-    function calculateRowTotal(element) {
-        const row = element.closest('.spare-row');
-        const qty = parseFloat(row.querySelector('.spare-qty').value) || 0;
-        const price = parseFloat(row.querySelector('.spare-price').value) || 0;
-        const total = qty * price;
-        row.querySelector('.row-total-text').innerText = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ETB';
-    }
-</script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
 """
 
-# --- Flask Routes ---
-
-@app.route("/")
+@app.route('/')
 def index():
-    user = {"name": "Dinberu Tefera", "role": "Head of Mechanical Workshop and Garage"}
+    if session.get('logged_in'):
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('login'))
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        if username == 'admin' and password == 'steely2026':
+            session.clear()
+            session['logged_in'] = True
+            return redirect(url_for('dashboard'))
+        else:
+            error = 'Invalid username or password!'
+    return render_template_string(LOGIN_HTML, error=error)
+
+@app.route('/dashboard')
+def dashboard():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
     
-    start_date = request.args.get("start_date")
-    end_date = request.args.get("end_date")
-    
-    logs = garage_data["maintenance_logs"]
-    
-    filtered_logs = logs
-    if start_date and end_date:
-        try:
-            sd = datetime.strptime(start_date, "%Y-%m-%d")
-            ed = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
-            filtered_logs = [
-                log for log in logs 
-                if sd <= datetime.strptime(log["start_time"][:10], "%Y-%m-%d") < ed
-            ]
-        except:
-            pass
+    work_orders = WorkOrder.query.all()
+    inventory_items = SpareInventory.query.all()
 
     now = datetime.now()
-    
-    def compute_summary(days_limit):
-        cutoff = now - timedelta(days=days_limit)
-        matched = []
-        for l in logs:
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+
+    weekly_jobs = weekly_pm = weekly_cm = weekly_insp = 0
+    weekly_hours = weekly_spare_qty = weekly_spare_cost = 0.0
+    weekly_lube_vol = weekly_lube_cost = weekly_batt_cost = weekly_tire_cost = weekly_total_exp = 0.0
+
+    monthly_jobs = monthly_pm = monthly_cm = monthly_insp = 0
+    monthly_hours = monthly_spare_qty = monthly_spare_cost = 0.0
+    monthly_lube_vol = monthly_lube_cost = monthly_batt_cost = monthly_tire_cost = monthly_total_exp = 0.0
+
+    for wo in work_orders:
+        try:
+            wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
+        except:
             try:
-                dt = datetime.strptime(l["start_time"][:10], "%Y-%m-%d")
-                if dt >= cutoff:
-                    matched.append(l)
+                wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%d %H:%M')
             except:
-                pass
-        
-        total_jobs = len(matched)
-        pm_jobs = sum(1 for m in matched if m.get("maintenance_type") == "PM")
-        cm_jobs = sum(1 for m in matched if m.get("maintenance_type") == "CM")
-        inspection_jobs = sum(1 for m in matched if m.get("maintenance_type") == "Inspection")
-        
-        total_work_hours = sum(m.get("effective_hours", 0) for m in matched)
-        total_spare_qty = sum(sum(sp.get("qty", 0) for sp in m.get("replaced_spares", [])) for m in matched)
-        total_spares_cost = sum(sum(sp.get("total_cost", 0) for sp in m.get("replaced_spares", [])) for m in matched)
-        
-        total_lubrication_qty = sum(m.get("lubrication_qty", 0) for m in matched)
-        total_lubrication_cost = sum(m.get("lubrication_cost", 0) for m in matched)
-        total_battery_cost = sum(m.get("battery_cost", 0) for m in matched)
-        total_tire_cost = sum(m.get("tire_cost", 0) for m in matched)
-        
-        total_expenditure = total_spares_cost + total_lubrication_cost + total_battery_cost + total_tire_cost
-        
-        return {
-            "total_jobs": total_jobs,
-            "pm_jobs": pm_jobs,
-            "cm_jobs": cm_jobs,
-            "inspection_jobs": inspection_jobs,
-            "total_work_hours": round(total_work_hours, 2),
-            "total_spare_qty": total_spare_qty,
-            "total_spares_cost": total_spares_cost,
-            "total_lubrication_qty": total_lubrication_qty,
-            "total_lubrication_cost": total_lubrication_cost,
-            "total_battery_cost": total_battery_cost,
-            "total_tire_cost": total_tire_cost,
-            "total_expenditure": total_expenditure
-        }
+                wo_date = now
 
-    weekly_summary = compute_summary(7)
-    monthly_summary = compute_summary(30)
+        if wo_date >= month_ago:
+            monthly_jobs += 1
+            if wo.maintenance_type == 'PM': monthly_pm += 1
+            elif wo.maintenance_type == 'CM': monthly_cm += 1
+            else: monthly_insp += 1
+            monthly_hours += wo.effective_work_hours
+            monthly_spare_qty += wo.spare_parts_qty
+            monthly_spare_cost += wo.spare_parts_cost
+            monthly_lube_vol += wo.lubricants_volume
+            monthly_lube_cost += wo.lubricants_cost
+            monthly_batt_cost += wo.batteries_cost
+            monthly_tire_cost += wo.tires_cost
+            monthly_total_exp += wo.total_expenditure
 
-    return render_template_string(
-        HTML_TEMPLATE,
-        user=user,
-        logs=filtered_logs,
-        spare_inventory=garage_data["spare_parts"],
-        weekly=weekly_summary,
-        monthly=monthly_summary
-    )
+        if wo_date >= week_ago:
+            weekly_jobs += 1
+            if wo.maintenance_type == 'PM': weekly_pm += 1
+            elif wo.maintenance_type == 'CM': weekly_cm += 1
+            else: weekly_insp += 1
+            weekly_hours += wo.effective_work_hours
+            weekly_spare_qty += wo.spare_parts_qty
+            weekly_spare_cost += wo.spare_parts_cost
+            weekly_lube_vol += wo.lubricants_volume
+            weekly_lube_cost += wo.lubricants_cost
+            weekly_batt_cost += wo.batteries_cost
+            weekly_tire_cost += wo.tires_cost
+            weekly_total_exp += wo.total_expenditure
 
-@app.route("/add_work_order", methods=["POST"])
-def add_work_order():
-    sn = request.form.get("sn")
-    wo_no = request.form.get("wo_no")
-    vehicle = request.form.get("vehicle")
-    model = request.form.get("model")
-    reading_value = int(request.form.get("reading_value", 0))
-    reading_unit = request.form.get("reading_unit", "KM")
-    maintenance_type = request.form.get("maintenance_type", "PM")
-    work_status = request.form.get("work_status", "Completed")
-    driver = request.form.get("driver")
-    technicians = request.form.get("technicians")
-    start_time = request.form.get("start_time").replace("T", " ")
-    finish_time = request.form.get("finish_time").replace("T", " ")
-    description = request.form.get("description")
+    response = make_response(render_template_string(
+        DASHBOARD_HTML, 
+        work_orders=work_orders, 
+        inventory_items=inventory_items,
+        weekly_jobs=weekly_jobs, weekly_pm=weekly_pm, weekly_cm=weekly_cm, weekly_insp=weekly_insp,
+        weekly_hours=weekly_hours, weekly_spare_qty=weekly_spare_qty, weekly_spare_cost=weekly_spare_cost,
+        weekly_lube_vol=weekly_lube_vol, weekly_lube_cost=weekly_lube_cost, weekly_batt_cost=weekly_batt_cost,
+        weekly_tire_cost=weekly_tire_cost, weekly_total_exp=weekly_total_exp,
+        monthly_jobs=monthly_jobs, monthly_pm=monthly_pm, monthly_cm=monthly_cm, monthly_insp=monthly_insp,
+        monthly_hours=monthly_hours, monthly_spare_qty=monthly_spare_qty, monthly_spare_cost=monthly_spare_cost,
+        monthly_lube_vol=monthly_lube_vol, monthly_lube_cost=monthly_lube_cost, monthly_batt_cost=monthly_batt_cost,
+        monthly_tire_cost=monthly_tire_cost, monthly_total_exp=monthly_total_exp
+    ))
     
-    effective_hours = calculate_effective_hours(request.form.get("start_time"), request.form.get("finish_time"))
-    next_service = calculate_next_service(reading_value, reading_unit)
-    
-    spare_names = request.form.getlist("spare_name[]")
-    spare_specs = request.form.getlist("spare_spec[]")
-    spare_qtys = request.form.getlist("spare_qty[]")
-    spare_prices = request.form.getlist("spare_price[]")
-    
-    replaced_spares = []
-    for i in range(len(spare_names)):
-        if spare_names[i].strip():
-            q = int(spare_qtys[i]) if i < len(spare_qtys) and spare_qtys[i] else 1
-            p = float(spare_prices[i]) if i < len(spare_prices) and spare_prices[i] else 0.0
-            replaced_spares.append({
-                "part_name": spare_names[i],
-                "spec": spare_specs[i] if i < len(spare_specs) else "",
-                "qty": q,
-                "unit_price": p,
-                "total_cost": q * p
-            })
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
 
-    battery_qty = int(request.form.get("battery_qty", 0))
-    battery_cost = float(request.form.get("battery_cost", 0.0))
-    lubrication_qty = float(request.form.get("lubrication_qty", 0.0))
-    lubrication_cost = float(request.form.get("lubrication_cost", 0.0))
-    tire_qty = int(request.form.get("tire_qty", 0))
-    tire_cost = float(request.form.get("tire_cost", 0.0))
-
-    new_entry = {
-        "id": len(garage_data["maintenance_logs"]) + 1,
-        "sn": sn,
-        "wo_no": wo_no,
-        "vehicle": vehicle,
-        "model": model,
-        "reading_value": reading_value,
-        "reading_unit": reading_unit,
-        "next_service": next_service,
-        "driver": driver,
-        "technicians": technicians,
-        "maintenance_type": maintenance_type,
-        "work_status": work_status,
-        "start_time": start_time,
-        "finish_time": finish_time,
-        "effective_hours": effective_hours,
-        "description": description,
-        "replaced_spares": replaced_spares,
-        "battery_qty": battery_qty,
-        "battery_cost": battery_cost,
-        "lubrication_qty": lubrication_qty,
-        "lubrication_cost": lubrication_cost,
-        "tire_qty": tire_qty,
-        "tire_cost": tire_cost
-    }
-
-    garage_data["maintenance_logs"].append(new_entry)
-    return redirect(url_for("index"))
-
-@app.route("/delete_log/<int:log_id>")
-def delete_log(log_id):
-    garage_data["maintenance_logs"] = [l for l in garage_data["maintenance_logs"] if l["id"] != log_id]
-    return redirect(url_for("index"))
-
-@app.route("/reset_all_logs")
-def reset_all_logs():
-    garage_data["maintenance_logs"] = []
-    return redirect(url_for("index"))
-
-@app.route("/export/execution_excel")
-@app.route("/export/master_excel")
-def export_excel():
-    logs = garage_data["maintenance_logs"]
-    flat_data = []
-    for l in logs:
-        flat_data.append({
-            "Serial No": l["sn"],
-            "Work Order": l["wo_no"],
-            "Vehicle Plate": l["vehicle"],
-            "Model": l["model"],
-            "Reading": f"{l['reading_value']} {l['reading_unit']}",
-            "Next Service": l["next_service"],
-            "Maintenance Type": l["maintenance_type"],
-            "Status": l["work_status"],
-            "Technicians": l["technicians"],
-            "Start Time": l["start_time"],
-            "End Time": l["finish_time"],
-            "Effective Hours": l["effective_hours"],
-            "Battery Cost (ETB)": l["battery_cost"],
-            "Lubrication Cost (ETB)": l["lubrication_cost"],
-            "Tire Cost (ETB)": l["tire_cost"]
-        })
-    
-    df = pd.DataFrame(flat_data)
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name="Garage_Execution_Logs")
-    output.seek(0)
-    
-    return send_file(
-        output,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        as_attachment=True,
-        download_name="SteelY_Garage_Master_Report.xlsx"
-    )
-
-@app.route("/logout")
+@app.route('/logout')
 def logout():
-    return redirect(url_for("index"))
+    session.clear()
+    return redirect(url_for('login'))
 
-if __name__ == "__main__":
-    app.run(debug=True)
+@app.route('/add_spare', methods=['POST'])
+def add_spare():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    part_name = request.form.get('part_name')
+    spec = request.form.get('spec')
+    quantity = int(request.form.get('quantity'))
+    location = request.form.get('location')
+    
+    new_spare = SpareInventory(part_name=part_name, spec=spec, quantity=quantity, location=location)
+    db.session.add(new_spare)
+    db.session.commit()
+    return redirect(url_for('dashboard'))
+
+@app.route('/add_work_order', methods=['POST'])
+def add_work_order():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    
+    serial_number = request.form.get('serial_number')
+    work_order_no = request.form.get('work_order_no')
+    vehicle_plate = request.form.get('vehicle_plate')
+    vehicle_model = request.form.get('vehicle_model')
+    current_reading = float(request.form.get('current_reading', 0.0))
+    reading_unit = request.form.get('reading_unit', 'KM')
+    
+    increment_value = 5000.0 if reading_unit == 'KM' else 250.0
+    next_due_reading = current_reading + increment_value
+
+    job_status = request.form.get('job_status')
+    driver_name = request.form.get('driver_name')
+    assigned_technicians = request.form.get('assigned_technicians')
+    start_datetime = request.form.get('start_datetime')
+    end_datetime = request.form.get('end_datetime')
+    maintenance_type = request.form.get('maintenance_type')
+    work_category = request.form.get('work_category')
+    description = request.form.get('description')
+    
+    spare_parts_qty = int(request.form.get('spare_parts_qty', 0))
+    spare_parts_cost = float(request.form.get('spare_parts_cost', 0.0))
+    lubricants_volume = float(request.form.get('lubricants_volume', 0.0))
+    lubricants_cost = float(request.form.get('lubricants_cost', 0.0))
+    batteries_cost = float(request.form.get('batteries_cost', 0.0))
+    tires_cost = float(request.form.get('tires_cost', 0.0))
+    
+    effective_hours = 0.0
+    try:
+        s_dt = datetime.strptime(start_datetime, '%Y-%m-%dT%H:%M')
+        e_dt = datetime.strptime(end_datetime, '%Y-%m-%dT%H:%M')
+        diff = (e_dt - s_dt).total_seconds() / 3600.0
+        effective_hours = max(0.0, diff)
+    except:
+        effective_hours = 2.0
+
+    total_expenditure = spare_parts_cost + lubricants_cost + batteries_cost + tires_cost
+    
+    new_wo = WorkOrder(
+        serial_number=serial_number,
+        work_order_no=work_order_no,
+        vehicle_plate=vehicle_plate,
+        vehicle_model=vehicle_model,
+        current_reading=current_reading,
+        reading_unit=reading_unit,
+        next_due_reading=next_due_reading,
+        job_status=job_status,
+        driver_name=driver_name,
+        assigned_technicians=assigned_technicians,
+        start_datetime=start_datetime,
+        end_datetime=end_datetime,
+        maintenance_type=maintenance_type,
+        work_category=work_category,
+        description=description,
+        spare_parts_qty=spare_parts_qty,
+        spare_parts_cost=spare_parts_cost,
+        lubricants_volume=lubricants_volume,
+        lubricants_cost=lubricants_cost,
+        batteries_cost=batteries_cost,
+        tires_cost=tires_cost,
+        effective_work_hours=effective_hours,
+        total_expenditure=total_expenditure
+    )
+    db.session.add(new_wo)
+    db.session.commit()
+    return redirect(url_for('dashboard'))
+
+@app.route('/export/master_report')
+def export_master_report():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    try:
+        work_orders = WorkOrder.query.all()
+        inventory_items = SpareInventory.query.all()
+        
+        si = io.StringIO()
+        cw = csv.writer(si)
+        
+        cw.writerow(['=== SECTION 1: WORK ORDERS & MAINTENANCE LOGS ==='])
+        cw.writerow([
+            'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
+            'Current Reading', 'Reading Unit', 'Next Due Reading', 'Job Status', 'Driver Name', 
+            'Assigned Technicians', 'Start Time', 'End Time', 
+            'Maintenance Type', 'Work Category', 'Description', 
+            'Spare Qty', 'Spare Cost', 'Lube Vol', 'Lube Cost', 'Batt Cost', 'Tire Cost', 'Effective Hours (hrs)', 'Total Expenditure (ETB)'
+        ])
+        for wo in work_orders:
+            cw.writerow([
+                wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
+                wo.current_reading, wo.reading_unit, wo.next_due_reading, wo.job_status, wo.driver_name, 
+                wo.assigned_technicians, wo.start_datetime, wo.end_datetime, 
+                wo.maintenance_type, wo.work_category, wo.description, 
+                wo.spare_parts_qty, wo.spare_parts_cost, wo.lubricants_volume, wo.lubricants_cost, wo.batteries_cost, wo.tires_cost, wo.effective_work_hours, wo.total_expenditure
+            ])
+        
+        cw.writerow([])
+        cw.writerow([])
+        
+        cw.writerow(['=== SECTION 2: STORE SPARE INVENTORY ==='])
+        cw.writerow(['Part ID', 'Part Name', 'Specification (Spec)', 'Available Quantity', 'Location'])
+        for item in inventory_items:
+            cw.writerow([
+                item.id, item.part_name, item.spec, item.quantity, item.location
+            ])
+            
+        output = make_response(si.getvalue())
+        output.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_All_In_One_Master_Report.csv"
+        output.headers["Content-type"] = "text/csv"
+        return output
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+
+@app.route('/export/maintenance_execution')
+def export_maintenance_execution():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    try:
+        work_orders = WorkOrder.query.all()
+        si = io.StringIO()
+        cw = csv.writer(si)
+        
+        cw.writerow(['STEELY R.M.I GARAGE - MAINTENANCE EXECUTION & WORK TIME LOG'])
+        cw.writerow([
+            'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
+            'Current Reading', 'Reading Unit', 'Next Due Reading', 'Job Status', 'Driver Name', 
+            'Assigned Technicians', 'Start Time', 'End Time', 
+            'Maintenance Type', 'Work Category', 'Description', 
+            'Spare Qty', 'Spare Cost (ETB)', 'Lube Vol (L)', 'Lube Cost (ETB)', 'Batt Cost (ETB)', 'Tire Cost (ETB)', 'Effective Hours (hrs)', 'Total Expenditure (ETB)'
+        ])
+        for wo in work_orders:
+            cw.writerow([
+                wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
+                wo.current_reading, wo.reading_unit, wo.next_due_reading, wo.job_status, wo.driver_name, 
+                wo.assigned_technicians, wo.start_datetime, wo.end_datetime, 
+                wo.maintenance_type, wo.work_category, wo.description, 
+                wo.spare_parts_qty, wo.spare_parts_cost, wo.lubricants_volume, wo.lubricants_cost, wo.batteries_cost, wo.tires_cost, wo.effective_work_hours, wo.total_expenditure
+            ])
+            
+        output = make_response(si.getvalue())
+        output.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Maintenance_Execution_Report.csv"
+        output.headers["Content-type"] = "text/csv"
+        return output
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
