@@ -6,7 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v10.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v11.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -106,7 +106,7 @@ DASHBOARD_HTML = """
             </div>
         </div>
         
-        <div class="mb-3 d-flex gap-2">
+        <div class="mb-3 d-flex gap-2 flex-wrap">
             <button class="btn btn-primary btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">+ Create New Work Order</button>
             <button class="btn btn-dark btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Store Spare Inventory</button>
         </div>
@@ -202,8 +202,9 @@ DASHBOARD_HTML = """
         </div>
 
         <div class="card shadow-sm">
-            <div class="card-header bg-primary text-white py-2">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
                 <h5 class="mb-0 fs-6">Maintenance Execution & Work Time Log</h5>
+                <a href="/export/maintenance_execution" class="export-btn btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;">📥 Maintenance Execution to Excel</a>
             </div>
             <div class="card-body p-2">
                 <table class="table table-bordered table-hover align-middle mb-0 small">
@@ -528,7 +529,6 @@ def add_work_order():
     current_reading = float(request.form.get('current_reading', 0.0))
     reading_unit = request.form.get('reading_unit', 'KM')
     
-    # 5000 KM ወይም 250 Hours በራስ ሰር መጨመር
     increment_value = 5000.0 if reading_unit == 'KM' else 250.0
     next_due_reading = current_reading + increment_value
 
@@ -632,6 +632,40 @@ def export_master_report():
         return output
     except Exception as e:
         return f"Error exporting master report: {str(e)}", 500
+
+@app.route('/export/maintenance_execution')
+def export_maintenance_execution():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    try:
+        work_orders = WorkOrder.query.all()
+        
+        si = io.StringIO()
+        cw = csv.writer(si)
+        
+        cw.writerow(['STEELY R.M.I GARAGE - MAINTENANCE EXECUTION & WORK TIME LOG'])
+        cw.writerow([
+            'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
+            'Current Reading', 'Reading Unit', 'Next Due Reading', 'Job Status', 'Driver Name', 
+            'Assigned Technicians', 'Start Time', 'End Time', 
+            'Maintenance Type', 'Work Category', 'Description', 
+            'Spare Qty', 'Spare Cost (ETB)', 'Lube Vol (L)', 'Lube Cost (ETB)', 'Batt Cost (ETB)', 'Tire Cost (ETB)', 'Effective Hours (hrs)', 'Total Expenditure (ETB)'
+        ])
+        for wo in work_orders:
+            cw.writerow([
+                wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
+                wo.current_reading, wo.reading_unit, wo.next_due_reading, wo.job_status, wo.driver_name, 
+                wo.assigned_technicians, wo.start_datetime, wo.end_datetime, 
+                wo.maintenance_type, wo.work_category, wo.description, 
+                wo.spare_parts_qty, wo.spare_parts_cost, wo.lubricants_volume, wo.lubricants_cost, wo.batteries_cost, wo.tires_cost, wo.effective_work_hours, wo.total_expenditure
+            ])
+            
+        output = make_response(si.getvalue())
+        output.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Maintenance_Execution_Report.csv"
+        output.headers["Content-type"] = "text/csv"
+        return output
+    except Exception as e:
+        return f"Error exporting maintenance execution: {str(e)}", 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
