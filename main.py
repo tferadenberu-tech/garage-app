@@ -6,7 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v13.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v14.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -84,12 +84,11 @@ DASHBOARD_HTML = """
     <title>SteelY R.M.I Garage Maintnace dash Bord</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        /* በግራ በኩል ቋሚ የሳይድባር ክፍት ቦታ (Spacing) ማስተካከያ */
         body {
             background-color: #f4f6f9;
         }
         .main-layout-container {
-            margin-left: 240px; /* በግራ በኩል ክፍት ቦታ ፈጥሯል */
+            margin-left: 240px;
             padding: 20px;
             max-width: calc(100% - 240px);
             transition: all 0.3s ease;
@@ -117,7 +116,6 @@ DASHBOARD_HTML = """
     </style>
 </head>
 <body>
-    <!-- በግራ በኩል የሚታይ ቋሚ የክፍት ቦታ / Sidebar เมนู -->
     <div class="sidebar-space d-none d-lg-block">
         <h5 class="text-primary fw-bold mb-4">SteelY Garage</h5>
         <ul class="nav flex-column gap-2">
@@ -128,7 +126,6 @@ DASHBOARD_HTML = """
         </ul>
     </div>
 
-    <!-- ዋናው የድስፕሌይ ይዘት በግራ በኩል ክፍት ቦታ ተሰጥቶታል -->
     <div class="main-layout-container">
         
         <!-- Header Section -->
@@ -154,12 +151,13 @@ DASHBOARD_HTML = """
             <button class="btn btn-dark btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Store Spare Inventory</button>
         </div>
 
-        <!-- 1. Weekly & Monthly Summaries Row -->
+        <!-- Weekly & Monthly Summaries Row with Report Generation Buttons -->
         <div class="row mb-3">
             <div class="col-xl-6 mb-2">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-secondary text-white py-2">
+                    <div class="card-header bg-secondary text-white py-2 d-flex justify-content-between align-items-center">
                         <h5 class="mb-0 fs-6">WEEKLY SUMMARY (LAST 7 DAYS)</h5>
+                        <a href="/export/weekly_report" class="btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;">📥 Export Weekly Report</a>
                     </div>
                     <div class="card-body">
                         <p class="fw-bold mb-2">Total Jobs Executed: <span class="text-primary">{{ weekly_jobs }}</span></p>
@@ -187,8 +185,9 @@ DASHBOARD_HTML = """
 
             <div class="col-xl-6 mb-2">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-primary text-white py-2">
+                    <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
                         <h5 class="mb-0 fs-6">MONTHLY SUMMARY (LAST 30 DAYS)</h5>
+                        <a href="/export/monthly_report" class="btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;">📥 Export Monthly Report</a>
                     </div>
                     <div class="card-body">
                         <p class="fw-bold mb-2">Total Jobs Executed: <span class="text-primary">{{ monthly_jobs }}</span></p>
@@ -215,7 +214,7 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
-        <!-- 2. Store Spare Inventory እና ሌሎች ክፍሎች ጎን ለጎን እንዲቀመጡ በ Row የተደረገ -->
+        <!-- Store Spare Inventory -->
         <div class="row mb-3">
             <div class="col-12">
                 <div class="card shadow-sm">
@@ -253,7 +252,7 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
-        <!-- 3. Maintenance Execution & Work Time Log -->
+        <!-- Maintenance Execution & Work Time Log -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
                 <h5 class="mb-0 fs-6">Maintenance Execution & Work Time Log</h5>
@@ -637,6 +636,94 @@ def add_work_order():
     db.session.add(new_wo)
     db.session.commit()
     return redirect(url_for('dashboard'))
+
+@app.route('/export/weekly_report')
+def export_weekly_report():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    try:
+        now = datetime.now()
+        week_ago = now - timedelta(days=7)
+        work_orders = WorkOrder.query.all()
+        
+        si = io.StringIO()
+        cw = csv.writer(si)
+        
+        cw.writerow(['STEELY R.M.I GARAGE - WEEKLY SUMMARY REPORT (LAST 7 DAYS)'])
+        cw.writerow([
+            'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
+            'Job Status', 'Maintenance Type', 'Work Category', 'Start Time', 
+            'Spare Qty', 'Spare Cost (ETB)', 'Lube Vol (L)', 'Lube Cost (ETB)', 
+            'Batt Cost (ETB)', 'Tire Cost (ETB)', 'Effective Hours (hrs)', 'Total Expenditure (ETB)'
+        ])
+        
+        for wo in work_orders:
+            try:
+                wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
+            except:
+                try:
+                    wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%d %H:%M')
+                except:
+                    wo_date = now
+
+            if wo_date >= week_ago:
+                cw.writerow([
+                    wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
+                    wo.job_status, wo.maintenance_type, wo.work_category, wo.start_datetime, 
+                    wo.spare_parts_qty, wo.spare_parts_cost, wo.lubricants_volume, wo.lubricants_cost, 
+                    wo.batteries_cost, wo.tires_cost, wo.effective_work_hours, wo.total_expenditure
+                ])
+                
+        output = make_response(si.getvalue())
+        output.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Weekly_Summary_Report.csv"
+        output.headers["Content-type"] = "text/csv"
+        return output
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+
+@app.route('/export/monthly_report')
+def export_monthly_report():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    try:
+        now = datetime.now()
+        month_ago = now - timedelta(days=30)
+        work_orders = WorkOrder.query.all()
+        
+        si = io.StringIO()
+        cw = csv.writer(si)
+        
+        cw.writerow(['STEELY R.M.I GARAGE - MONTHLY SUMMARY REPORT (LAST 30 DAYS)'])
+        cw.writerow([
+            'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
+            'Job Status', 'Maintenance Type', 'Work Category', 'Start Time', 
+            'Spare Qty', 'Spare Cost (ETB)', 'Lube Vol (L)', 'Lube Cost (ETB)', 
+            'Batt Cost (ETB)', 'Tire Cost (ETB)', 'Effective Hours (hrs)', 'Total Expenditure (ETB)'
+        ])
+        
+        for wo in work_orders:
+            try:
+                wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
+            except:
+                try:
+                    wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%d %H:%M')
+                except:
+                    wo_date = now
+
+            if wo_date >= month_ago:
+                cw.writerow([
+                    wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
+                    wo.job_status, wo.maintenance_type, wo.work_category, wo.start_datetime, 
+                    wo.spare_parts_qty, wo.spare_parts_cost, wo.lubricants_volume, wo.lubricants_cost, 
+                    wo.batteries_cost, wo.tires_cost, wo.effective_work_hours, wo.total_expenditure
+                ])
+                
+        output = make_response(si.getvalue())
+        output.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Monthly_Summary_Report.csv"
+        output.headers["Content-type"] = "text/csv"
+        return output
+    except Exception as e:
+        return f"Error: {str(e)}", 500
 
 @app.route('/export/master_report')
 def export_master_report():
