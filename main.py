@@ -28,7 +28,6 @@ class WorkOrder(db.Model):
     work_category = db.Column(db.String(100), nullable=False) 
     description = db.Column(db.Text, nullable=True)
     
-    # Replaced Spare Parts Summary fields
     replaced_spare_name = db.Column(db.String(300), nullable=True, default='-')
     spare_parts_qty = db.Column(db.Integer, nullable=False, default=0)
     spare_parts_cost = db.Column(db.Float, nullable=False, default=0.0)
@@ -184,13 +183,29 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
-        <!-- Maintenance Execution & Work Time Log -->
+        <!-- Maintenance Execution & Work Time Log with Date Filter -->
         <div class="card shadow-sm mb-4">
-            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2 flex-wrap gap-2">
                 <h5 class="mb-0 fs-6">Maintenance Execution & Work Time Log</h5>
                 <a href="/export/maintenance_execution" class="btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;">📥 Export Execution Log</a>
             </div>
-            <div class="card-body p-2">
+            <div class="card-body p-3">
+                <!-- From Day to Day Filter Form -->
+                <form method="GET" action="/dashboard" class="row g-2 align-items-center mb-3 bg-light p-2 rounded border">
+                    <div class="col-md-auto">
+                        <label class="form-label mb-0 fw-bold fs-7">From Date:</label>
+                        <input type="date" name="from_date" class="form-control form-control-sm" value="{{ request.args.get('from_date', '') }}">
+                    </div>
+                    <div class="col-md-auto">
+                        <label class="form-label mb-0 fw-bold fs-7">To Date:</label>
+                        <input type="date" name="to_date" class="form-control form-control-sm" value="{{ request.args.get('to_date', '') }}">
+                    </div>
+                    <div class="col-md-auto d-flex align-items-end gap-1 mt-2 mt-md-0">
+                        <button type="submit" class="btn btn-primary btn-sm fw-bold">🔍 Filter</button>
+                        <a href="/dashboard" class="btn btn-outline-secondary btn-sm fw-bold">Reset</a>
+                    </div>
+                </form>
+
                 <div class="table-responsive">
                     <table class="table table-bordered table-hover align-middle mb-0 small">
                         <thead class="table-secondary">
@@ -217,6 +232,10 @@ DASHBOARD_HTML = """
                                 <td>{{ "%.2f"|format(wo.spare_parts_cost) }}</td>
                                 <td class="fw-bold text-success">{{ "%.2f"|format(wo.total_expenditure) }} ETB</td>
                             </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="8" class="text-center text-muted">No records found for the selected date range.</td>
+                            </tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -225,7 +244,7 @@ DASHBOARD_HTML = """
         </div>
     </div>
 
-    <!-- Modal for Work Order with Dynamic Multi-Row Spares & Auto Calculation -->
+    <!-- Modal for Work Order -->
     <div class="modal fade" id="addWorkOrderModal" tabindex="-1">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
@@ -300,7 +319,6 @@ DASHBOARD_HTML = """
                                 <input type="text" class="form-control" name="work_category" required placeholder="e.g. Engine Maintenance">
                             </div>
 
-                            <!-- Dynamic Replaced Spare Parts Section with Add Row & Auto Calculation -->
                             <div class="col-12 mt-3">
                                 <label class="form-label fw-bold text-primary fs-6">Replaced Spare Parts List (Multi-Row & Auto Cost)</label>
                                 <div class="table-responsive">
@@ -330,7 +348,6 @@ DASHBOARD_HTML = """
                                 <button type="button" class="btn btn-success btn-sm fw-bold mt-1" onclick="addWoSpareRow()">+ Add Row Spare Part</button>
                             </div>
 
-                            <!-- Summary Cost Outputs -->
                             <div class="col-md-4">
                                 <label class="form-label fw-bold text-success">Total Spare Parts Cost (ETB)</label>
                                 <input type="text" class="form-control fw-bold text-success bg-light" id="totalSparePartsCostDisplay" readonly value="0.00">
@@ -362,9 +379,6 @@ DASHBOARD_HTML = """
             </div>
         </div>
     </div>
-
-    <!-- Store Inventory HTML -->
-    <!-- (Included in code structure) -->
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
@@ -462,7 +476,6 @@ INVENTORY_HTML = """
     </div>
 
     <div class="main-layout-container">
-        <!-- Header -->
         <div class="card shadow-sm p-3 mb-3 bg-white">
             <div class="row align-items-center">
                 <div class="col-md-6">
@@ -476,7 +489,6 @@ INVENTORY_HTML = """
             </div>
         </div>
 
-        <!-- Inventory Table Card -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-secondary text-white py-2">
                 <h5 class="mb-0 fs-6">Complete Store Spare Inventory</h5>
@@ -516,7 +528,6 @@ INVENTORY_HTML = """
         </div>
     </div>
 
-    <!-- Add Multi-Row Spare Modal -->
     <div class="modal fade" id="addSpareModal" tabindex="-1">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
@@ -620,7 +631,28 @@ def dashboard():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
     
-    work_orders = WorkOrder.query.all()
+    work_orders_query = WorkOrder.query
+
+    # From Date to To Date Filter Logic
+    from_date = request.args.get('from_date')
+    to_date = request.args.get('to_date')
+
+    if from_date and to_date:
+        work_orders_query = work_orders_query.filter(
+            WorkOrder.start_datetime >= f"{from_date}T00:00",
+            WorkOrder.start_datetime <= f"{to_date}T23:59"
+        )
+    elif from_date:
+        work_orders_query = work_orders_query.filter(
+            WorkOrder.start_datetime >= f"{from_date}T00:00"
+        )
+    elif to_date:
+        work_orders_query = work_orders_query.filter(
+            WorkOrder.start_datetime <= f"{to_date}T23:59"
+        )
+
+    work_orders = work_orders_query.all()
+    
     now = datetime.now()
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
@@ -631,7 +663,8 @@ def dashboard():
     monthly_jobs = monthly_hours = monthly_spare_qty = monthly_spare_cost = 0.0
     monthly_lube_vol = monthly_lube_cost = monthly_total_exp = 0.0
 
-    for wo in work_orders:
+    all_orders = WorkOrder.query.all()
+    for wo in all_orders:
         try:
             wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
         except:
