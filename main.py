@@ -6,7 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v14.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v15.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -120,6 +120,7 @@ DASHBOARD_HTML = """
         <h5 class="text-primary fw-bold mb-4">SteelY Garage</h5>
         <ul class="nav flex-column gap-2">
             <li class="nav-item"><a href="/dashboard" class="nav-link text-white active bg-primary rounded">🏠 Dashboard</a></li>
+            <li class="nav-item"><a href="/inventory" class="nav-link text-white">📦 Store Inventory</a></li>
             <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 Master Report</a></li>
             <li class="nav-item"><a href="/export/maintenance_execution" class="nav-link text-white">📥 Execution Log</a></li>
             <li class="nav-item mt-5"><a href="/logout" class="nav-link text-danger">🚪 Logout</a></li>
@@ -148,7 +149,7 @@ DASHBOARD_HTML = """
         
         <div class="mb-3 d-flex gap-2 flex-wrap">
             <button class="btn btn-primary btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">+ Create New Work Order</button>
-            <button class="btn btn-dark btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Store Spare Inventory</button>
+            <a href="/inventory" class="btn btn-dark btn-sm fw-bold">📦 View Store Inventory</a>
         </div>
 
         <!-- Weekly & Monthly Summaries Row with Report Generation Buttons -->
@@ -208,44 +209,6 @@ DASHBOARD_HTML = """
                         </div>
                         <div class="mt-2 pt-2 border-top fw-bold text-success">
                             Total Expenditure: ETB {{ "%.2f"|format(monthly_total_exp) }}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Store Spare Inventory -->
-        <div class="row mb-3">
-            <div class="col-12">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-secondary text-white py-2 d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0 fs-6">Store Spare Inventory</h5>
-                        <button class="btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Add Item</button>
-                    </div>
-                    <div class="card-body p-2">
-                        <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
-                            <table class="table table-bordered table-hover align-middle mb-0 small">
-                                <thead class="table-light sticky-top">
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Part Name</th>
-                                        <th>Specification (Spec)</th>
-                                        <th>Available Quantity</th>
-                                        <th>Location</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for item in inventory_items %}
-                                    <tr>
-                                        <td>{{ item.id }}</td>
-                                        <td>{{ item.part_name }}</td>
-                                        <td>{{ item.spec }}</td>
-                                        <td class="fw-bold {% if item.quantity < 5 %}text-danger{% else %}text-success{% endif %}">{{ item.quantity }}</td>
-                                        <td>{{ item.location }}</td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
                         </div>
                     </div>
                 </div>
@@ -414,6 +377,116 @@ DASHBOARD_HTML = """
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+"""
+
+INVENTORY_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SteelY R.M.I - Store Inventory</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f4f6f9;
+        }
+        .main-layout-container {
+            margin-left: 240px;
+            padding: 20px;
+            max-width: calc(100% - 240px);
+            transition: all 0.3s ease;
+        }
+        .sidebar-space {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 220px;
+            height: 100%;
+            background: #212529;
+            color: white;
+            padding: 20px;
+            z-index: 1000;
+        }
+        @media (max-width: 992px) {
+            .main-layout-container {
+                margin-left: 0;
+                max-width: 100%;
+            }
+            .sidebar-space {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar-space d-none d-lg-block">
+        <h5 class="text-primary fw-bold mb-4">SteelY Garage</h5>
+        <ul class="nav flex-column gap-2">
+            <li class="nav-item"><a href="/dashboard" class="nav-link text-white">🏠 Dashboard</a></li>
+            <li class="nav-item"><a href="/inventory" class="nav-link text-white active bg-primary rounded">📦 Store Inventory</a></li>
+            <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 Master Report</a></li>
+            <li class="nav-item"><a href="/export/maintenance_execution" class="nav-link text-white">📥 Execution Log</a></li>
+            <li class="nav-item mt-5"><a href="/logout" class="nav-link text-danger">🚪 Logout</a></li>
+        </ul>
+    </div>
+
+    <div class="main-layout-container">
+        <!-- Header -->
+        <div class="card shadow-sm p-3 mb-3 bg-white">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h4 class="text-primary fw-bold mb-0">Store Spare Inventory Management</h4>
+                    <small class="text-muted">Manage all workshop spare parts and stock levels</small>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <button class="btn btn-dark btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Add New Spare Item</button>
+                    <a href="/dashboard" class="btn btn-secondary btn-sm fw-bold">← Back to Dashboard</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Inventory Table Card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-secondary text-white py-2">
+                <h5 class="mb-0 fs-6">Complete Store Spare Inventory</h5>
+            </div>
+            <div class="card-body p-3">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Part Name</th>
+                                <th>Specification (Spec)</th>
+                                <th>Available Quantity</th>
+                                <th>Location</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in inventory_items %}
+                            <tr>
+                                <td>{{ item.id }}</td>
+                                <td class="fw-bold">{{ item.part_name }}</td>
+                                <td>{{ item.spec }}</td>
+                                <td>
+                                    <span class="badge {% if item.quantity < 5 %}bg-danger{% else %}bg-success{% endif %} fs-6">
+                                        {{ item.quantity }} Pcs
+                                    </span>
+                                </td>
+                                <td>{{ item.location }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Spare Modal -->
     <div class="modal fade" id="addSpareModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -479,7 +552,6 @@ def dashboard():
         return redirect(url_for('login'))
     
     work_orders = WorkOrder.query.all()
-    inventory_items = SpareInventory.query.all()
 
     now = datetime.now()
     week_ago = now - timedelta(days=7)
@@ -533,7 +605,6 @@ def dashboard():
     response = make_response(render_template_string(
         DASHBOARD_HTML, 
         work_orders=work_orders, 
-        inventory_items=inventory_items,
         weekly_jobs=weekly_jobs, weekly_pm=weekly_pm, weekly_cm=weekly_cm, weekly_insp=weekly_insp,
         weekly_hours=weekly_hours, weekly_spare_qty=weekly_spare_qty, weekly_spare_cost=weekly_spare_cost,
         weekly_lube_vol=weekly_lube_vol, weekly_lube_cost=weekly_lube_cost, weekly_batt_cost=weekly_batt_cost,
@@ -544,6 +615,15 @@ def dashboard():
         monthly_tire_cost=monthly_tire_cost, monthly_total_exp=monthly_total_exp
     ))
     
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
+@app.route('/inventory')
+def inventory():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    inventory_items = SpareInventory.query.all()
+    response = make_response(render_template_string(INVENTORY_HTML, inventory_items=inventory_items))
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
 
@@ -564,7 +644,7 @@ def add_spare():
     new_spare = SpareInventory(part_name=part_name, spec=spec, quantity=quantity, location=location)
     db.session.add(new_spare)
     db.session.commit()
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('inventory'))
 
 @app.route('/add_work_order', methods=['POST'])
 def add_work_order():
