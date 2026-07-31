@@ -6,7 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v15.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v16.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -442,7 +442,7 @@ INVENTORY_HTML = """
                     <small class="text-muted">Manage all workshop spare parts and stock levels</small>
                 </div>
                 <div class="col-md-6 text-md-end">
-                    <button class="btn btn-dark btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Add New Spare Item</button>
+                    <button class="btn btn-dark btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Add New Spare Items (Multi-Row)</button>
                     <a href="/dashboard" class="btn btn-secondary btn-sm fw-bold">← Back to Dashboard</a>
                 </div>
             </div>
@@ -486,35 +486,45 @@ INVENTORY_HTML = """
         </div>
     </div>
 
-    <!-- Add Spare Modal -->
+    <!-- Add Multi-Row Spare Modal -->
     <div class="modal fade" id="addSpareModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
-                <form method="POST" action="/add_spare">
+                <form method="POST" action="/add_spare_multiple">
                     <div class="modal-header bg-dark text-white">
-                        <h5 class="modal-title">Add Store Spare Inventory</h5>
+                        <h5 class="modal-title">Add Multiple Store Spare Items</h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label">Part Name</label>
-                            <input type="text" class="form-control" name="part_name" required placeholder="Part Name">
+                        <div class="table-responsive">
+                            <table class="table table-bordered align-middle" id="spareTable">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Part Name</th>
+                                        <th>Specification (Spec)</th>
+                                        <th>Quantity</th>
+                                        <th>Location</th>
+                                        <th style="width: 80px; text-align: center;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="spareTableBody">
+                                    <tr>
+                                        <td><input type="text" class="form-control" name="part_name[]" required placeholder="e.g. Bearing"></td>
+                                        <td><input type="text" class="form-control" name="spec[]" required placeholder="e.g. 6204ZZ"></td>
+                                        <td><input type="number" class="form-control" name="quantity[]" required min="1" value="10"></td>
+                                        <td><input type="text" class="form-control" name="location[]" required value="Main Store"></td>
+                                        <td class="text-center">
+                                            <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">X</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Specification (Spec)</label>
-                            <input type="text" class="form-control" name="spec" required placeholder="Specification">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Quantity</label>
-                            <input type="number" class="form-control" name="quantity" required min="1" value="10">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Location</label>
-                            <input type="text" class="form-control" name="location" required value="Main Store">
-                        </div>
+                        <button type="button" class="btn btn-success btn-sm fw-bold mt-2" onclick="addRow()">+ Add Another Row</button>
                     </div>
                     <div class="modal-footer">
-                        <button type="submit" class="btn btn-dark">Save Spare</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-dark fw-bold">Save All Inventory Items</button>
                     </div>
                 </form>
             </div>
@@ -522,6 +532,32 @@ INVENTORY_HTML = """
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function addRow() {
+            let tbody = document.getElementById('spareTableBody');
+            let newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td><input type="text" class="form-control" name="part_name[]" required placeholder="e.g. Bearing"></td>
+                <td><input type="text" class="form-control" name="spec[]" required placeholder="e.g. 6204ZZ"></td>
+                <td><input type="number" class="form-control" name="quantity[]" required min="1" value="10"></td>
+                <td><input type="text" class="form-control" name="location[]" required value="Main Store"></td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">X</button>
+                </td>
+            `;
+            tbody.appendChild(newRow);
+        }
+
+        function removeRow(btn) {
+            let tbody = document.getElementById('spareTableBody');
+            if (tbody.rows.length > 1) {
+                let row = btn.closest('tr');
+                row.remove();
+            } else {
+                alert('At least one row is required!');
+            }
+        }
+    </script>
 </body>
 </html>
 """
@@ -632,17 +668,26 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-@app.route('/add_spare', methods=['POST'])
-def add_spare():
+@app.route('/add_spare_multiple', methods=['POST'])
+def add_spare_multiple():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
-    part_name = request.form.get('part_name')
-    spec = request.form.get('spec')
-    quantity = int(request.form.get('quantity'))
-    location = request.form.get('location')
     
-    new_spare = SpareInventory(part_name=part_name, spec=spec, quantity=quantity, location=location)
-    db.session.add(new_spare)
+    part_names = request.form.getlist('part_name[]')
+    specs = request.form.getlist('spec[]')
+    quantities = request.form.getlist('quantity[]')
+    locations = request.form.getlist('location[]')
+    
+    for i in range(len(part_names)):
+        if part_names[i].strip():
+            new_spare = SpareInventory(
+                part_name=part_names[i],
+                spec=specs[i],
+                quantity=int(quantities[i]),
+                location=locations[i]
+            )
+            db.session.add(new_spare)
+            
     db.session.commit()
     return redirect(url_for('inventory'))
 
