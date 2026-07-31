@@ -6,7 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v11.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v12.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -20,8 +20,8 @@ class WorkOrder(db.Model):
     vehicle_plate = db.Column(db.String(50), nullable=False)
     vehicle_model = db.Column(db.String(100), nullable=False)
     current_reading = db.Column(db.Float, nullable=False, default=0.0)
-    reading_unit = db.Column(db.String(20), nullable=False) # KM ወይም Hours
-    next_due_reading = db.Column(db.Float, nullable=False, default=0.0) # +5000 KM ወይም +250 Hrs
+    reading_unit = db.Column(db.String(20), nullable=False)
+    next_due_reading = db.Column(db.Float, nullable=False, default=0.0)
     job_status = db.Column(db.String(50), nullable=False)
     driver_name = db.Column(db.String(100), nullable=False)
     assigned_technicians = db.Column(db.String(200), nullable=False)
@@ -88,7 +88,10 @@ DASHBOARD_HTML = """
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light p-3">
-    <div class="container-fluid px-3">
+    <!-- የግራ ሳይድ ክፍት ቦታ እንዲኖር በ Bootstrap container ላይ margin-left ተሰጥቷል -->
+    <div class="container-fluid px-4" style="margin-left: 60px; max-width: 95%;">
+        
+        <!-- Header Section -->
         <div class="card shadow-sm p-3 mb-3 bg-white">
             <div class="row align-items-center g-2">
                 <div class="col-md-4">
@@ -108,11 +111,12 @@ DASHBOARD_HTML = """
         
         <div class="mb-3 d-flex gap-2 flex-wrap">
             <button class="btn btn-primary btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">+ Create New Work Order</button>
-            <button class="btn btn-dark btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Store Spare Inventory</button>
+            <button class="btn dark-btn btn-dark btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Store Spare Inventory</button>
         </div>
 
+        <!-- Weekly & Monthly Summaries Row -->
         <div class="row mb-3">
-            <div class="col-md-6 mb-2">
+            <div class="col-xl-6 mb-2">
                 <div class="card shadow-sm h-100">
                     <div class="card-header bg-secondary text-white py-2">
                         <h5 class="mb-0 fs-6">WEEKLY SUMMARY (LAST 7 DAYS)</h5>
@@ -141,7 +145,7 @@ DASHBOARD_HTML = """
                 </div>
             </div>
 
-            <div class="col-md-6 mb-2">
+            <div class="col-xl-6 mb-2">
                 <div class="card shadow-sm h-100">
                     <div class="card-header bg-primary text-white py-2">
                         <h5 class="mb-0 fs-6">MONTHLY SUMMARY (LAST 30 DAYS)</h5>
@@ -171,84 +175,91 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
+        <!-- Store Spare Inventory (በጎን በኩል እንዲታይ የተደረገ) -->
         <div class="card shadow-sm mb-3">
             <div class="card-header bg-secondary text-white py-2">
                 <h5 class="mb-0 fs-6">Store Spare Inventory</h5>
             </div>
             <div class="card-body p-2">
-                <table class="table table-bordered table-hover align-middle mb-0 small">
-                    <thead class="table-light">
-                        <tr>
-                            <th>ID</th>
-                            <th>Part Name</th>
-                            <th>Specification (Spec)</th>
-                            <th>Available Quantity</th>
-                            <th>Location</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in inventory_items %}
-                        <tr>
-                            <td>{{ item.id }}</td>
-                            <td>{{ item.part_name }}</td>
-                            <td>{{ item.spec }}</td>
-                            <td class="fw-bold {% if item.quantity < 5 %}text-danger{% else %}text-success{% endif %}">{{ item.quantity }}</td>
-                            <td>{{ item.location }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover align-middle mb-0 small">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Part Name</th>
+                                <th>Specification (Spec)</th>
+                                <th>Available Quantity</th>
+                                <th>Location</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in inventory_items %}
+                            <tr>
+                                <td>{{ item.id }}</td>
+                                <td>{{ item.part_name }}</td>
+                                <td>{{ item.spec }}</td>
+                                <td class="fw-bold {% if item.quantity < 5 %}text-danger{% else %}text-success{% endif %}">{{ item.quantity }}</td>
+                                <td>{{ item.location }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
-        <div class="card shadow-sm">
+        <!-- Maintenance Execution & Work Time Log -->
+        <div class="card shadow-sm mb-4">
             <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
                 <h5 class="mb-0 fs-6">Maintenance Execution & Work Time Log</h5>
                 <a href="/export/maintenance_execution" class="export-btn btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;">📥 Maintenance Execution to Excel</a>
             </div>
             <div class="card-body p-2">
-                <table class="table table-bordered table-hover align-middle mb-0 small">
-                    <thead class="table-secondary">
-                        <tr>
-                            <th>ID / S/N</th>
-                            <th>Work Order No</th>
-                            <th>Vehicle Model & Plate</th>
-                            <th>Current Reading</th>
-                            <th>Next Due (+5k KM / +250 Hrs)</th>
-                            <th>Job Status</th>
-                            <th>Maintenance Type</th>
-                            <th>Work Category</th>
-                            <th>Technicians</th>
-                            <th>Total Cost (ETB)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for wo in work_orders %}
-                        <tr>
-                            <td>{{ wo.serial_number }}</td>
-                            <td>{{ wo.work_order_no }}</td>
-                            <td>{{ wo.vehicle_model }} ({{ wo.vehicle_plate }})</td>
-                            <td>{{ wo.current_reading }} {{ wo.reading_unit }}</td>
-                            <td class="fw-bold text-danger">{{ wo.next_due_reading }} {{ wo.reading_unit }}</td>
-                            <td>
-                                {% if wo.job_status == 'Completed' %}
-                                    <span class="badge bg-success">Completed</span>
-                                {% else %}
-                                    <span class="badge bg-warning text-dark">{{ wo.job_status }}</span>
-                                {% endif %}
-                            </td>
-                            <td><span class="badge bg-info text-dark">{{ wo.maintenance_type }}</span></td>
-                            <td>{{ wo.work_category }}</td>
-                            <td>{{ wo.assigned_technicians }}</td>
-                            <td class="fw-bold text-success">{{ wo.total_expenditure }} ETB</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover align-middle mb-0 small">
+                        <thead class="table-secondary">
+                            <tr>
+                                <th>ID / S/N</th>
+                                <th>Work Order No</th>
+                                <th>Vehicle Model & Plate</th>
+                                <th>Current Reading</th>
+                                <th>Next Due (+5k KM / +250 Hrs)</th>
+                                <th>Job Status</th>
+                                <th>Maintenance Type</th>
+                                <th>Work Category</th>
+                                <th>Technicians</th>
+                                <th>Total Cost (ETB)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for wo in work_orders %}
+                            <tr>
+                                <td>{{ wo.serial_number }}</td>
+                                <td>{{ wo.work_order_no }}</td>
+                                <td>{{ wo.vehicle_model }} ({{ wo.vehicle_plate }})</td>
+                                <td>{{ wo.current_reading }} {{ wo.reading_unit }}</td>
+                                <td class="fw-bold text-danger">{{ wo.next_due_reading }} {{ wo.reading_unit }}</td>
+                                <td>
+                                    {% if wo.job_status == 'Completed' %}
+                                        <span class="badge bg-success">Completed</span>
+                                    {% else %}
+                                        <span class="badge bg-warning text-dark">{{ wo.job_status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td><span class="badge bg-info text-dark">{{ wo.maintenance_type }}</span></td>
+                                <td>{{ wo.work_category }}</td>
+                                <td>{{ wo.assigned_technicians }}</td>
+                                <td class="fw-bold text-success">{{ wo.total_expenditure }} ETB</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
 
+    <!-- Modals -->
     <div class="modal fade" id="addWorkOrderModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
