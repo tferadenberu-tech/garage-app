@@ -6,7 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v18.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v19.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -80,6 +80,206 @@ LOGIN_HTML = """
 </html>
 """
 
+SHARED_MODAL_HTML = """
+    <!-- Modal for Work Order -->
+    <div class="modal fade" id="addWorkOrderModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <form method="POST" action="/add_work_order">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title">Create New Work Order (+5000 KM / +250 Hours Auto Due)</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Serial Number (S/N)</label>
+                                <input type="text" class="form-control" name="serial_number" required value="SN-001">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Work Order No</label>
+                                <input type="text" class="form-control" name="work_order_no" required value="WO-2026-01">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Vehicle Plate Number</label>
+                                <input type="text" class="form-control" name="vehicle_plate" required placeholder="e.g. AA-3-12345">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Vehicle Type / Model</label>
+                                <input type="text" class="form-control" name="vehicle_model" required placeholder="e.g. Sino Truck 371">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Current Reading</label>
+                                <input type="number" step="any" class="form-control" name="current_reading" required placeholder="e.g. 125000">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold text-primary">Reading Unit</label>
+                                <select class="form-select border-primary fw-bold" name="reading_unit" required>
+                                    <option value="KM">KM (+5000 Next Due)</option>
+                                    <option value="Hours">Hours (+250 Next Due)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Job Status</label>
+                                <select class="form-select" name="job_status">
+                                    <option value="Completed">Completed</option>
+                                    <option value="In Progress">In Progress</option>
+                                    <option value="Pending">Pending</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Driver Name</label>
+                                <input type="text" class="form-control" name="driver_name" required placeholder="Driver Name">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Assigned Technicians</label>
+                                <input type="text" class="form-control" name="assigned_technicians" required value="Ato Mihret, Dinberu Tefera">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Start Date & Time</label>
+                                <input type="datetime-local" class="form-control" name="start_datetime" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">End Date & Time</label>
+                                <input type="datetime-local" class="form-control" name="end_datetime" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-danger">Maintenance Type</label>
+                                <select class="form-select border-danger fw-bold text-primary" name="maintenance_type" required>
+                                    <option value="CM">CM (Corrective Maintenance)</option>
+                                    <option value="PM">PM (Preventive Maintenance)</option>
+                                    <option value="Inspection & Check">Inspection & Check</option>
+                                </select>
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label fw-bold">Work Category</label>
+                                <input type="text" class="form-control" name="work_category" required placeholder="e.g. Engine Maintenance">
+                            </div>
+
+                            <div class="col-12 mt-3">
+                                <label class="form-label fw-bold text-primary fs-6">Replaced Spare Parts List (Multi-Row & Auto Cost)</label>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered align-middle" id="woSpareTable">
+                                        <thead class="table-dark">
+                                            <tr>
+                                                <th>Spare Part Name</th>
+                                                <th style="width: 130px;">Quantity (Pcs)</th>
+                                                <th style="width: 150px;">Unit Cost (ETB)</th>
+                                                <th style="width: 150px;">Total Cost (ETB)</th>
+                                                <th style="width: 80px; text-align: center;">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="woSpareTableBody">
+                                            <tr>
+                                                <td><input type="text" class="form-control" name="spare_name[]" required placeholder="e.g. Oil Filter / Brake Pad"></td>
+                                                <td><input type="number" class="form-control spare-qty" name="spare_qty[]" required min="1" value="1" oninput="calculateRowAndTotal(this)"></td>
+                                                <td><input type="number" step="0.01" class="form-control spare-cost" name="spare_unit_cost[]" required min="0" value="0.00" oninput="calculateRowAndTotal(this)"></td>
+                                                <td><input type="text" class="form-control bg-light row-total" readonly value="0.00"></td>
+                                                <td class="text-center">
+                                                    <button type="button" class="btn btn-danger btn-sm" onclick="removeWoSpareRow(this)">X</button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <button type="button" class="btn btn-success btn-sm fw-bold mt-1" onclick="addWoSpareRow()">+ Add Row Spare Part</button>
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-success">Total Spare Parts Cost (ETB)</label>
+                                <input type="text" class="form-control fw-bold text-success bg-light" id="totalSparePartsCostDisplay" readonly value="0.00">
+                                <input type="hidden" name="spare_parts_cost" id="spare_parts_cost_hidden" value="0.00">
+                                <input type="hidden" name="spare_parts_qty" id="spare_parts_qty_hidden" value="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Lubricants Cost (ETB)</label>
+                                <input type="number" step="0.01" class="form-control other-cost" name="lubricants_cost" id="lubricants_cost" value="0.00" min="0" oninput="calculateGrandTotal()">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Batteries Cost (ETB)</label>
+                                <input type="number" step="0.01" class="form-control other-cost" name="batteries_cost" id="batteries_cost" value="0.00" min="0" oninput="calculateGrandTotal()">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Tires Cost (ETB)</label>
+                                <input type="number" step="0.01" class="form-control other-cost" name="tires_cost" id="tires_cost" value="0.00" min="0" oninput="calculateGrandTotal()">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold text-danger">Grand Total Expenditure (ETB)</label>
+                                <input type="text" class="form-control fw-bold text-danger bg-light fs-5" id="grandTotalDisplay" readonly value="0.00">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-primary fw-bold">Save Work Order</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function addWoSpareRow() {
+            let tbody = document.getElementById('woSpareTableBody');
+            let newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td><input type="text" class="form-control" name="spare_name[]" required placeholder="e.g. Bearing"></td>
+                <td><input type="number" class="form-control spare-qty" name="spare_qty[]" required min="1" value="1" oninput="calculateRowAndTotal(this)"></td>
+                <td><input type="number" step="0.01" class="form-control spare-cost" name="spare_unit_cost[]" required min="0" value="0.00" oninput="calculateRowAndTotal(this)"></td>
+                <td><input type="text" class="form-control bg-light row-total" readonly value="0.00"></td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-danger btn-sm" onclick="removeWoSpareRow(this)">X</button>
+                </td>
+            `;
+            tbody.appendChild(newRow);
+            calculateGrandTotal();
+        }
+
+        function removeWoSpareRow(btn) {
+            let tbody = document.getElementById('woSpareTableBody');
+            if (tbody.rows.length > 1) {
+                let row = btn.closest('tr');
+                row.remove();
+                calculateGrandTotal();
+            } else {
+                alert('At least one spare part row is required!');
+            }
+        }
+
+        function calculateRowAndTotal(element) {
+            let row = element.closest('tr');
+            let qty = parseFloat(row.querySelector('.spare-qty').value) || 0;
+            let unitCost = parseFloat(row.querySelector('.spare-cost').value) || 0;
+            let rowTotal = qty * unitCost;
+            row.querySelector('.row-total').value = rowTotal.toFixed(2);
+            calculateGrandTotal();
+        }
+
+        function calculateGrandTotal() {
+            let rows = document.querySelectorAll('#woSpareTableBody tr');
+            let totalSpareCost = 0;
+            let totalSpareQty = 0;
+
+            rows.forEach(row => {
+                let qty = parseFloat(row.querySelector('.spare-qty').value) || 0;
+                let unitCost = parseFloat(row.querySelector('.spare-cost').value) || 0;
+                totalSpareCost += (qty * unitCost);
+                totalSpareQty += qty;
+            });
+
+            document.getElementById('totalSparePartsCostDisplay').value = totalSpareCost.toFixed(2);
+            document.getElementById('spare_parts_cost_hidden').value = totalSpareCost.toFixed(2);
+            document.getElementById('spare_parts_qty_hidden').value = totalSpareQty;
+
+            let lubeCost = parseFloat(document.getElementById('lubricants_cost').value) || 0;
+            let battCost = parseFloat(document.getElementById('batteries_cost').value) || 0;
+            let tireCost = parseFloat(document.getElementById('tires_cost').value) || 0;
+
+            let grandTotal = totalSpareCost + lubeCost + battCost + tireCost;
+            document.getElementById('grandTotalDisplay').value = grandTotal.toFixed(2);
+        }
+    </script>
+"""
+
 DASHBOARD_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -103,6 +303,7 @@ DASHBOARD_HTML = """
         <ul class="nav flex-column gap-2">
             <li class="nav-item"><a href="/dashboard" class="nav-link text-white active bg-primary rounded">🏠 Dashboard</a></li>
             <li class="nav-item"><a href="/inventory" class="nav-link text-white">📦 Store Inventory</a></li>
+            <li class="nav-item"><a href="#" class="nav-link text-success fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">➕ New Work Order</a></li>
             <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 Master Report</a></li>
             <li class="nav-item"><a href="/export/maintenance_execution" class="nav-link text-white">📥 Execution Log</a></li>
             <li class="nav-item mt-5"><a href="/logout" class="nav-link text-danger">🚪 Logout</a></li>
@@ -256,204 +457,9 @@ DASHBOARD_HTML = """
         </div>
     </div>
 
-    <!-- Modal for Work Order -->
-    <div class="modal fade" id="addWorkOrderModal" tabindex="-1">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <form method="POST" action="/add_work_order">
-                    <div class="modal-header bg-primary text-white">
-                        <h5 class="modal-title">Create New Work Order (+5000 KM / +250 Hours Auto Due)</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="row g-3">
-                            <div class="col-md-3">
-                                <label class="form-label">Serial Number (S/N)</label>
-                                <input type="text" class="form-control" name="serial_number" required value="SN-001">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Work Order No</label>
-                                <input type="text" class="form-control" name="work_order_no" required value="WO-2026-01">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Vehicle Plate Number</label>
-                                <input type="text" class="form-control" name="vehicle_plate" required placeholder="e.g. AA-3-12345">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Vehicle Type / Model</label>
-                                <input type="text" class="form-control" name="vehicle_model" required placeholder="e.g. Sino Truck 371">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Current Reading</label>
-                                <input type="number" step="any" class="form-control" name="current_reading" required placeholder="e.g. 125000">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label fw-bold text-primary">Reading Unit</label>
-                                <select class="form-select border-primary fw-bold" name="reading_unit" required>
-                                    <option value="KM">KM (+5000 Next Due)</option>
-                                    <option value="Hours">Hours (+250 Next Due)</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Job Status</label>
-                                <select class="form-select" name="job_status">
-                                    <option value="Completed">Completed</option>
-                                    <option value="In Progress">In Progress</option>
-                                    <option value="Pending">Pending</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Driver Name</label>
-                                <input type="text" class="form-control" name="driver_name" required placeholder="Driver Name">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Assigned Technicians</label>
-                                <input type="text" class="form-control" name="assigned_technicians" required value="Ato Mihret, Dinberu Tefera">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Start Date & Time</label>
-                                <input type="datetime-local" class="form-control" name="start_datetime" required>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">End Date & Time</label>
-                                <input type="datetime-local" class="form-control" name="end_datetime" required>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold text-danger">Maintenance Type</label>
-                                <select class="form-select border-danger fw-bold text-primary" name="maintenance_type" required>
-                                    <option value="CM">CM (Corrective Maintenance)</option>
-                                    <option value="PM">PM (Preventive Maintenance)</option>
-                                    <option value="Inspection & Check">Inspection & Check</option>
-                                </select>
-                            </div>
-                            <div class="col-md-8">
-                                <label class="form-label fw-bold">Work Category</label>
-                                <input type="text" class="form-control" name="work_category" required placeholder="e.g. Engine Maintenance">
-                            </div>
-
-                            <div class="col-12 mt-3">
-                                <label class="form-label fw-bold text-primary fs-6">Replaced Spare Parts List (Multi-Row & Auto Cost)</label>
-                                <div class="table-responsive">
-                                    <table class="table table-bordered align-middle" id="woSpareTable">
-                                        <thead class="table-dark">
-                                            <tr>
-                                                <th>Spare Part Name</th>
-                                                <th style="width: 130px;">Quantity (Pcs)</th>
-                                                <th style="width: 150px;">Unit Cost (ETB)</th>
-                                                <th style="width: 150px;">Total Cost (ETB)</th>
-                                                <th style="width: 80px; text-align: center;">Action</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="woSpareTableBody">
-                                            <tr>
-                                                <td><input type="text" class="form-control" name="spare_name[]" required placeholder="e.g. Oil Filter / Brake Pad"></td>
-                                                <td><input type="number" class="form-control spare-qty" name="spare_qty[]" required min="1" value="1" oninput="calculateRowAndTotal(this)"></td>
-                                                <td><input type="number" step="0.01" class="form-control spare-cost" name="spare_unit_cost[]" required min="0" value="0.00" oninput="calculateRowAndTotal(this)"></td>
-                                                <td><input type="text" class="form-control bg-light row-total" readonly value="0.00"></td>
-                                                <td class="text-center">
-                                                    <button type="button" class="btn btn-danger btn-sm" onclick="removeWoSpareRow(this)">X</button>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <button type="button" class="btn btn-success btn-sm fw-bold mt-1" onclick="addWoSpareRow()">+ Add Row Spare Part</button>
-                            </div>
-
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold text-success">Total Spare Parts Cost (ETB)</label>
-                                <input type="text" class="form-control fw-bold text-success bg-light" id="totalSparePartsCostDisplay" readonly value="0.00">
-                                <input type="hidden" name="spare_parts_cost" id="spare_parts_cost_hidden" value="0.00">
-                                <input type="hidden" name="spare_parts_qty" id="spare_parts_qty_hidden" value="0">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Lubricants Cost (ETB)</label>
-                                <input type="number" step="0.01" class="form-control other-cost" name="lubricants_cost" id="lubricants_cost" value="0.00" min="0" oninput="calculateGrandTotal()">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Batteries Cost (ETB)</label>
-                                <input type="number" step="0.01" class="form-control other-cost" name="batteries_cost" id="batteries_cost" value="0.00" min="0" oninput="calculateGrandTotal()">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Tires Cost (ETB)</label>
-                                <input type="number" step="0.01" class="form-control other-cost" name="tires_cost" id="tires_cost" value="0.00" min="0" oninput="calculateGrandTotal()">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-bold text-danger">Grand Total Expenditure (ETB)</label>
-                                <input type="text" class="form-control fw-bold text-danger bg-light fs-5" id="grandTotalDisplay" readonly value="0.00">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="submit" class="btn btn-primary fw-bold">Save Work Order</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
+    {{ shared_modal | safe }}
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        function addWoSpareRow() {
-            let tbody = document.getElementById('woSpareTableBody');
-            let newRow = document.createElement('tr');
-            newRow.innerHTML = `
-                <td><input type="text" class="form-control" name="spare_name[]" required placeholder="e.g. Bearing"></td>
-                <td><input type="number" class="form-control spare-qty" name="spare_qty[]" required min="1" value="1" oninput="calculateRowAndTotal(this)"></td>
-                <td><input type="number" step="0.01" class="form-control spare-cost" name="spare_unit_cost[]" required min="0" value="0.00" oninput="calculateRowAndTotal(this)"></td>
-                <td><input type="text" class="form-control bg-light row-total" readonly value="0.00"></td>
-                <td class="text-center">
-                    <button type="button" class="btn btn-danger btn-sm" onclick="removeWoSpareRow(this)">X</button>
-                </td>
-            `;
-            tbody.appendChild(newRow);
-            calculateGrandTotal();
-        }
-
-        function removeWoSpareRow(btn) {
-            let tbody = document.getElementById('woSpareTableBody');
-            if (tbody.rows.length > 1) {
-                let row = btn.closest('tr');
-                row.remove();
-                calculateGrandTotal();
-            } else {
-                alert('At least one spare part row is required!');
-            }
-        }
-
-        function calculateRowAndTotal(element) {
-            let row = element.closest('tr');
-            let qty = parseFloat(row.querySelector('.spare-qty').value) || 0;
-            let unitCost = parseFloat(row.querySelector('.spare-cost').value) || 0;
-            let rowTotal = qty * unitCost;
-            row.querySelector('.row-total').value = rowTotal.toFixed(2);
-            calculateGrandTotal();
-        }
-
-        function calculateGrandTotal() {
-            let rows = document.querySelectorAll('#woSpareTableBody tr');
-            let totalSpareCost = 0;
-            let totalSpareQty = 0;
-
-            rows.forEach(row => {
-                let qty = parseFloat(row.querySelector('.spare-qty').value) || 0;
-                let unitCost = parseFloat(row.querySelector('.spare-cost').value) || 0;
-                totalSpareCost += (qty * unitCost);
-                totalSpareQty += qty;
-            });
-
-            document.getElementById('totalSparePartsCostDisplay').value = totalSpareCost.toFixed(2);
-            document.getElementById('spare_parts_cost_hidden').value = totalSpareCost.toFixed(2);
-            document.getElementById('spare_parts_qty_hidden').value = totalSpareQty;
-
-            let lubeCost = parseFloat(document.getElementById('lubricants_cost').value) || 0;
-            let battCost = parseFloat(document.getElementById('batteries_cost').value) || 0;
-            let tireCost = parseFloat(document.getElementById('tires_cost').value) || 0;
-
-            let grandTotal = totalSpareCost + lubeCost + battCost + tireCost;
-            document.getElementById('grandTotalDisplay').value = grandTotal.toFixed(2);
-        }
-    </script>
 </body>
 </html>
 """
@@ -481,6 +487,7 @@ INVENTORY_HTML = """
         <ul class="nav flex-column gap-2">
             <li class="nav-item"><a href="/dashboard" class="nav-link text-white">🏠 Dashboard</a></li>
             <li class="nav-item"><a href="/inventory" class="nav-link text-white active bg-primary rounded">📦 Store Inventory</a></li>
+            <li class="nav-item"><a href="#" class="nav-link text-success fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">➕ New Work Order</a></li>
             <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 Master Report</a></li>
             <li class="nav-item"><a href="/export/maintenance_execution" class="nav-link text-white">📥 Execution Log</a></li>
             <li class="nav-item mt-5"><a href="/logout" class="nav-link text-danger">🚪 Logout</a></li>
@@ -586,6 +593,8 @@ INVENTORY_HTML = """
         </div>
     </div>
 
+    {{ shared_modal | safe }}
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         function addRow() {
@@ -645,7 +654,6 @@ def dashboard():
     
     work_orders_query = WorkOrder.query
 
-    # From Date to To Date Filter Logic
     from_date = request.args.get('from_date')
     to_date = request.args.get('to_date')
 
@@ -726,7 +734,8 @@ def dashboard():
         weekly_cm=weekly_cm, weekly_pm=weekly_pm, weekly_insp=weekly_insp,
         monthly_jobs=int(monthly_jobs), monthly_hours=monthly_hours, monthly_spare_qty=int(monthly_spare_qty), monthly_spare_cost=monthly_spare_cost,
         monthly_lube_vol=monthly_lube_vol, monthly_lube_cost=monthly_lube_cost, monthly_total_exp=monthly_total_exp,
-        monthly_cm=monthly_cm, monthly_pm=monthly_pm, monthly_insp=monthly_insp
+        monthly_cm=monthly_cm, monthly_pm=monthly_pm, monthly_insp=monthly_insp,
+        shared_modal=SHARED_MODAL_HTML
     ))
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
@@ -736,7 +745,11 @@ def inventory():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
     inventory_items = SpareInventory.query.all()
-    response = make_response(render_template_string(INVENTORY_HTML, inventory_items=inventory_items))
+    response = make_response(render_template_string(
+        INVENTORY_HTML, 
+        inventory_items=inventory_items,
+        shared_modal=SHARED_MODAL_HTML
+    ))
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
 
