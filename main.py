@@ -303,8 +303,8 @@ DASHBOARD_HTML = """
         <ul class="nav flex-column gap-2">
             <li class="nav-item"><a href="/dashboard" class="nav-link text-white active bg-primary rounded">🏠 Dashboard</a></li>
             <li class="nav-item"><a href="/inventory" class="nav-link text-white">📦 Store Inventory</a></li>
-            <li class="nav-item"><a href="#" class="nav-link text-success fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">➕ New Work Order</a></li>
-            <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 Master Report</a></li>
+            <li class="nav-item"><a href="#" class="nav-link text-success fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">➕ Create New Work Order</a></li>
+            <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 All-In-One-Master Report to Excel</a></li>
             <li class="nav-item"><a href="/export/maintenance_execution" class="nav-link text-white">📥 Execution Log</a></li>
             <li class="nav-item mt-5"><a href="/logout" class="nav-link text-danger">🚪 Logout</a></li>
         </ul>
@@ -324,7 +324,7 @@ DASHBOARD_HTML = """
                         <span class="badge bg-secondary">Dinberu Tefera</span><br>
                         <small class="text-muted fw-bold" style="font-size: 9px;">HEAD OF MECHANICAL WORKSHOP AND GARAGE</small>
                     </div>
-                    <a href="/export/master_report" class="btn btn-success btn-sm fw-bold">📊 Master Report Excel</a>
+                    <a href="/export/master_report" class="btn btn-success btn-sm fw-bold">📊 All-In-One-Master Report to Excel</a>
                     <a href="/logout" class="btn btn-danger btn-sm fw-bold d-lg-none">🚪 Logout</a>
                 </div>
             </div>
@@ -487,8 +487,8 @@ INVENTORY_HTML = """
         <ul class="nav flex-column gap-2">
             <li class="nav-item"><a href="/dashboard" class="nav-link text-white">🏠 Dashboard</a></li>
             <li class="nav-item"><a href="/inventory" class="nav-link text-white active bg-primary rounded">📦 Store Inventory</a></li>
-            <li class="nav-item"><a href="#" class="nav-link text-success fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">➕ New Work Order</a></li>
-            <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 Master Report</a></li>
+            <li class="nav-item"><a href="#" class="nav-link text-success fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">➕ Create New Work Order</a></li>
+            <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 All-In-One-Master Report to Excel</a></li>
             <li class="nav-item"><a href="/export/maintenance_execution" class="nav-link text-white">📥 Execution Log</a></li>
             <li class="nav-item mt-5"><a href="/logout" class="nav-link text-danger">🚪 Logout</a></li>
         </ul>
@@ -961,7 +961,7 @@ def export_master_report():
         si = io.StringIO()
         cw = csv.writer(si)
         
-        cw.writerow(['=== SECTION 1: WORK ORDERS & MAINTENANCE LOGS ==='])
+        cw.writerow(['=== SECTION 1: ALL WORK ORDERS & MAINTENANCE LOGS ==='])
         cw.writerow([
             'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
             'Current Reading', 'Reading Unit', 'Next Due Reading', 'Job Status', 'Driver Name', 
