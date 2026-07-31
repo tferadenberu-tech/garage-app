@@ -1,227 +1,135 @@
-<!DOCTYPE html>
-<html lang="am">
-<head>
-    <meta charset="UTF-8">
-    <title>Steely RMI - Garage Maintenance Dashboard</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <style>
-        .card { border-radius: 10px; }
-        .form-label { font-size: 0.8rem; font-weight: 600; color: #333; }
-        .section-title { font-size: 0.95rem; font-weight: bold; color: #0d6efd; margin-bottom: 10px; }
-        .sub-box { background-color: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 12px; margin-bottom: 15px; }
-    </style>
-</head>
-<body class="bg-secondary bg-opacity-10">
-    <nav class="navbar navbar-dark bg-dark px-4 mb-4">
-        <span class="navbar-brand mb-0 h1">Steely RMI Garage Maintenance Dashboard</span>
-        <a href="/logout" class="btn btn-outline-light btn-sm">ውጣ (Logout)</a>
-    </nav>
+import os
+import io
+import pandas as pd
+from flask import Flask, render_template_string, request, redirect, url_for, session, send_file
 
-    <div class="container-fluid px-4">
-        
-        <!-- 1. Weekly & Monthly Report / Filter Section -->
-        <div class="card shadow mb-4 p-3">
-            <div class="row g-3 align-items-center">
-                <div class="col-md-3">
-                    <label class="form-label">Filter From Date:</label>
-                    <input type="date" class="form-control form-control-sm">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Filter To Date:</label>
-                    <input type="date" class="form-control form-control-sm">
-                </div>
-                <div class="col-md-6 d-flex align-items-end gap-2 pt-2">
-                    <button class="btn btn-primary btn-sm">🔍 Filter Report</button>
-                    <button class="btn btn-outline-secondary btn-sm">Reset Filter</button>
-                    <button class="btn btn-outline-danger btn-sm ms-auto">🔄 Reset All Logs</button>
-                </div>
-            </div>
-        </div>
+app = Flask(__name__)
+app.secret_key = 'steely_garage_secret_key'
 
-        <!-- 2. Create New Work Order Section -->
-        <div class="card shadow mb-4 p-4">
-            <h4 class="text-primary mb-3">Create New Work Order</h4>
-            <form action="/add" method="POST">
-                <!-- 1ኛ ረድፍ: Serial Number, Work Order No, Plate No, Vehicle Type, Current Reading, Reading Unit -->
-                <div class="row g-2 mb-3">
-                    <div class="col-md-2">
-                        <label class="form-label">Serial Number (S/N):</label>
-                        <input type="text" name="serial_number" class="form-control form-control-sm" placeholder="e.g. SN-002">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Work Order No:</label>
-                        <input type="text" name="work_order_no" class="form-control form-control-sm" placeholder="e.g. WO-202">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Vehicle Plate Number:</label>
-                        <input type="text" name="vehicle_or_machine" class="form-control form-control-sm" placeholder="e.g. AA-3-12" required>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Vehicle Type / Model:</label>
-                        <input type="text" name="vehicle_type" class="form-control form-control-sm" placeholder="e.g. Sino Truck">
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">Current Reading:</label>
-                        <input type="number" step="0.1" name="current_km" class="form-control form-control-sm" value="0" required>
-                    </div>
-                    <div class="col-md-1">
-                        <label class="form-label">Reading Unit:</label>
-                        <input type="text" class="form-control form-control-sm bg-light text-center" value="KM (+5000)" readonly>
-                    </div>
-                </div>
+# ለጊዜው የሚያገለግል የናሙና መረጃ (Data) እና የይለፍ ቃል
+USER_CREDENTIALS = {'admin': 'steely123'}
 
-                <!-- 2ኛ ረድፍ: Maintenance Type, Job Status, Driver Name, Assigned Technicians -->
-                <div class="row g-2 mb-3">
-                    <div class="col-md-3">
-                        <label class="form-label">Maintenance Type:</label>
-                        <select name="maintenance_type" class="form-select form-select-sm" required>
-                            <option value="Preventive">PM (Preventive Maint.)</option>
-                            <option value="Corrective">Corrective</option>
-                            <option value="Breakdown">Breakdown</option>
-                            <option value="Routine Service">Routine Service</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Job Status:</label>
-                        <select name="job_status" class="form-select form-select-sm">
-                            <option value="Completed">Completed</option>
-                            <option value="Pending">Pending</option>
-                            <option value="In Progress">In Progress</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Driver Name:</label>
-                        <input type="text" name="driver_name" class="form-control form-control-sm" placeholder="e.g. Driver Name">
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label">Assigned Technicians:</label>
-                        <input type="text" name="technicians" class="form-control form-control-sm" placeholder="e.g., Ato Mihret">
-                    </div>
-                </div>
+# የናሙና የጋራዥ መረጃዎች (Executive Report Data)
+garage_data = [
+    {"ID": 1, "Vehicle": "Genlyon (3-A66865)", "Maintenance_Type": "Engine Overhaul", "Status": "Completed", "Date": "2026-05-11"},
+    {"ID": 2, "Vehicle": "Generator 24V", "Maintenance_Type": "Solenoid Replacement", "Status": "Completed", "Date": "2026-06-17"},
+    {"ID": 3, "Vehicle": "Rolling Mill Stand", "Maintenance_Type": "Bearing Check", "Status": "Pending", "Date": "2026-07-28"}
+]
 
-                <!-- 3ኛ ረድፍ: Start Date & Time, End Date & Time -->
-                <div class="row g-2 mb-3">
-                    <div class="col-md-6">
-                        <label class="form-label">Start Date & Time:</label>
-                        <input type="datetime-local" name="start_date" class="form-control form-control-sm">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label">End Date & Time:</label>
-                        <input type="datetime-local" name="end_date" class="form-control form-control-sm">
-                    </div>
-                </div>
-
-                <!-- Work Description -->
-                <div class="mb-3">
-                    <label class="form-label">Work Description:</label>
-                    <textarea name="description" class="form-control form-control-sm" rows="2" placeholder="e.g. Maintenance details and diagnostics note"></textarea>
-                </div>
-
-                <!-- Replaced Spare Parts Section -->
-                <div class="sub-box">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="section-title mb-0">⚙ REPLACED SPARE PARTS (AUTO TOTAL CALCULATION)</span>
-                        <button type="button" class="btn btn-outline-primary btn-sm">+ Add Spare Part Row</button>
-                    </div>
-                    <div class="row g-2 align-items-center">
-                        <div class="col-md-4">
-                            <input type="text" name="spare_name[]" class="form-control form-control-sm" placeholder="Spare Part Name">
-                        </div>
-                        <div class="col-md-4">
-                            <input type="text" name="spare_spec[]" class="form-control form-control-sm" placeholder="Specification">
-                        </div>
-                        <div class="col-md-1">
-                            <input type="number" name="spare_qty[]" class="form-control form-control-sm" value="1" placeholder="Qty">
-                        </div>
-                        <div class="col-md-2">
-                            <input type="number" step="0.01" name="spare_cost[]" class="form-control form-control-sm" value="0.00" placeholder="Unit Cost">
-                        </div>
-                        <div class="col-md-1 text-end">
-                            <button type="button" class="btn btn-outline-danger btn-sm">✕</button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Separate Consumables Tracking Section -->
-                <div class="sub-box">
-                    <span class="section-title">🔋 SEPARATE CONSUMABLES TRACKING (BATTERY, LUBRICATION, TIRE)</span>
-                    <div class="row g-3">
-                        <div class="col-md-4 border-end">
-                            <span class="fw-bold text-secondary" style="font-size: 0.85rem;">Battery:</span>
-                            <div class="row g-1 mt-1">
-                                <div class="col-6"><input type="number" name="battery_qty" class="form-control form-control-sm" placeholder="Qty"></div>
-                                <div class="col-6"><input type="number" step="0.01" name="battery_cost" class="form-control form-control-sm" placeholder="Cost (ETB)"></div>
-                            </div>
-                        </div>
-                        <div class="col-md-4 border-end">
-                            <span class="fw-bold text-secondary" style="font-size: 0.85rem;">Lubrication (Oil/Grease):</span>
-                            <div class="row g-1 mt-1">
-                                <div class="col-6"><input type="number" step="0.1" name="lube_qty" class="form-control form-control-sm" placeholder="Qty (L)"></div>
-                                <div class="col-6"><input type="number" step="0.01" name="lube_cost" class="form-control form-control-sm" placeholder="Cost (ETB)"></div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <span class="fw-bold text-secondary" style="font-size: 0.85rem;">Tire:</span>
-                            <div class="row g-1 mt-1">
-                                <div class="col-6"><input type="number" name="tire_qty" class="form-control form-control-sm" placeholder="Qty"></div>
-                                <div class="col-6"><input type="number" step="0.01" name="tire_cost" class="form-control form-control-sm" placeholder="Cost (ETB)"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Save Button -->
-                <div class="text-end">
-                    <button type="submit" class="btn btn-success btn-sm px-4">💾 Save Work Order</button>
-                </div>
+@app.route('/', methods=['GET', 'POST'])
+def login():
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        if username in USER_CREDENTIALS and USER_CREDENTIALS[username] == password:
+            session['user'] = username
+            return redirect(url_for('dashboard'))
+        else:
+            error = 'የተሳሳተ መግቢያ ስም ወይም የይለፍ ቃል። እባክዎ እንደገና ይሞክሩ።'
+    
+    return render_template_string('''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Steely R.M.I - Login</title>
+        <style>
+            body { font-family: Arial, sans-serif; background-color: #121212; color: #ffffff; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+            .login-box { background: #1e1e1e; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); width: 300px; text-align: center; }
+            input { width: 100%; padding: 10px; margin: 10px 0; background: #2a2a2a; border: 1px solid #444; color: #fff; border-radius: 4px; }
+            button { width: 100%; padding: 10px; background: #4CAF50; border: none; color: white; font-weight: bold; border-radius: 4px; cursor: pointer; }
+            button:hover { background: #45a049; }
+            .error { color: #ff5252; font-size: 14px; }
+        </style>
+    </head>
+    <body>
+        <div class="login-box">
+            <h2>Steely R.M.I Garage</h2>
+            <p>እባክዎ ይግቡ</p>
+            {% if error %}<p class="error">{{ error }}</p>{% endif %}
+            <form method="POST">
+                <input type="text" name="username" placeholder="የተጠቃሚ ስም (Username)" required>
+                <input type="password" name="password" placeholder="የይለፍ ቃል (Password)" required>
+                <button type="submit">ግባ (Login)</button>
             </form>
         </div>
+    </body>
+    </html>
+    ''', error=error)
 
-        <!-- 3. Maintenance Execution & Work Time Log -->
-        <div class="card shadow p-4">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4 class="text-dark mb-0">Maintenance Execution & Work Time Log</h4>
-                <div>
-                    <button class="btn btn-success btn-sm">📥 Save Report (Excel)</button>
-                </div>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-striped table-bordered align-middle text-center" style="font-size: 0.85rem;">
-                    <thead class="table-dark">
-                        <tr>
-                            <th>Serial No (S/N)</th>
-                            <th>WO #</th>
-                            <th>Plate No</th>
-                            <th>Vehicle Type</th>
-                            <th>Maint. Type</th>
-                            <th>Status</th>
-                            <th>Assigned Technicians</th>
-                            <th>Start Time</th>
-                            <th>End Time</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for rec in records %}
-                        <tr>
-                            <td>{{ rec.id }}</td>
-                            <td>{{ rec.work_order_no | default('WO-001') }}</td>
-                            <td>{{ rec.vehicle_or_machine }}</td>
-                            <td>{{ rec.vehicle_type | default('-') }}</td>
-                            <td><span class="badge bg-info text-dark">{{ rec.maintenance_type }}</span></td>
-                            <td><span class="badge bg-success">Completed</span></td>
-                            <td>{{ rec.technicians | default('-') }}</td>
-                            <td>{{ rec.start_date | default('-') }}</td>
-                            <td>{{ rec.end_date | default('-') }}</td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="9" class="text-muted">ምንም የተመዘገበ መረጃ የለም።</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+@app.route('/dashboard')
+def dashboard():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    
+    return render_template_string('''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Steely R.M.I - Dashboard</title>
+        <style>
+            body { font-family: Arial, sans-serif; background-color: #121212; color: #ffffff; margin: 0; padding: 20px; }
+            .header { display: flex; justify-content: space-between; align-items: center; background: #1e1e1e; padding: 15px 20px; border-radius: 8px; }
+            .btn { background: #ff5252; color: white; padding: 8px 15px; text-decoration: none; border-radius: 4px; font-weight: bold; }
+            .btn-excel { background: #4CAF50; margin-right: 10px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #1e1e1e; }
+            th, td { padding: 12px; border: 1px solid #333; text-align: left; }
+            th { background: #2a2a2a; color: #4CAF50; }
+            .content { margin-top: 20px; }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h2>Steely R.M.I Garage & Workshop Dashboard</h2>
+            <div>
+                <a href="/download/excel" class="btn btn-excel">Excel ሪፖርት አውርድ</a>
+                <a href="/logout" class="btn">ውጣ (Logout)</a>
             </div>
         </div>
-    </div>
-</body>
-</html>
+        <div class="content">
+            <h3>የቅርብ ጊዜ የጥገና ሪፖርቶች (Executive Report)</h3>
+            <table>
+                <tr>
+                    <th>ተ.ቁ</th>
+                    <th>ተሽከርካሪ / ማሽን</th>
+                    <th>የጥገና ዓይነት</th>
+                    <th>ሁኔታ</th>
+                    <th>ቀን</th>
+                </tr>
+                {% for row in data %}
+                <tr>
+                    <td>{{ row.ID }}</td>
+                    <td>{{ row.Vehicle }}</td>
+                    <td>{{ row.Maintenance_Type }}</td>
+                    <td>{{ row.Status }}</td>
+                    <td>{{ row.Date }}</td>
+                </tr>
+                {% endfor %}
+            </table>
+        </div>
+    </body>
+    </html>
+    ''', data=garage_data)
+
+@app.route('/download/excel')
+def download_excel():
+    if 'user' not in session:
+        return redirect(url_for('login'))
+    
+    df = pd.DataFrame(garage_data)
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Garage_Report')
+    output.seek(0)
+    
+    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 
+                     as_attachment=True, download_name='Steely_Garage_Executive_Report.xlsx')
+
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    return redirect(url_for('login'))
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
