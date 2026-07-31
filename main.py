@@ -136,6 +136,7 @@ DASHBOARD_HTML = """
 
         <!-- Weekly & Monthly Summaries Row -->
         <div class="row mb-3">
+            <!-- Weekly Summary -->
             <div class="col-xl-6 mb-2">
                 <div class="card shadow-sm h-100">
                     <div class="card-header bg-secondary text-white py-2 d-flex justify-content-between align-items-center">
@@ -144,6 +145,11 @@ DASHBOARD_HTML = """
                     </div>
                     <div class="card-body">
                         <p class="fw-bold mb-2">Total Jobs Executed: <span class="text-primary">{{ weekly_jobs }}</span></p>
+                        <div class="mb-2 small text-muted bg-light p-2 rounded border">
+                            <div>CM (Corrective): <strong class="text-dark">{{ weekly_cm }}</strong></div>
+                            <div>PM (Preventive): <strong class="text-dark">{{ weekly_pm }}</strong></div>
+                            <div>Inspection & Check: <strong class="text-dark">{{ weekly_insp }}</strong></div>
+                        </div>
                         <p class="fw-bold mb-2 text-primary">Total Effective Work Time: {{ "%.1f"|format(weekly_hours) }} hrs</p>
                         <hr class="my-2">
                         <div class="row small text-muted">
@@ -159,6 +165,7 @@ DASHBOARD_HTML = """
                 </div>
             </div>
 
+            <!-- Monthly Summary -->
             <div class="col-xl-6 mb-2">
                 <div class="card shadow-sm h-100">
                     <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
@@ -167,6 +174,11 @@ DASHBOARD_HTML = """
                     </div>
                     <div class="card-body">
                         <p class="fw-bold mb-2">Total Jobs Executed: <span class="text-primary">{{ monthly_jobs }}</span></p>
+                        <div class="mb-2 small text-muted bg-light p-2 rounded border">
+                            <div>CM (Corrective): <strong class="text-dark">{{ monthly_cm }}</strong></div>
+                            <div>PM (Preventive): <strong class="text-dark">{{ monthly_pm }}</strong></div>
+                            <div>Inspection & Check: <strong class="text-dark">{{ monthly_insp }}</strong></div>
+                        </div>
                         <p class="fw-bold mb-2 text-primary">Total Effective Work Time: {{ "%.1f"|format(monthly_hours) }} hrs</p>
                         <hr class="my-2">
                         <div class="row small text-muted">
@@ -659,9 +671,11 @@ def dashboard():
 
     weekly_jobs = weekly_hours = weekly_spare_qty = weekly_spare_cost = 0.0
     weekly_lube_vol = weekly_lube_cost = weekly_total_exp = 0.0
+    weekly_cm = weekly_pm = weekly_insp = 0
 
     monthly_jobs = monthly_hours = monthly_spare_qty = monthly_spare_cost = 0.0
     monthly_lube_vol = monthly_lube_cost = monthly_total_exp = 0.0
+    monthly_cm = monthly_pm = monthly_insp = 0
 
     all_orders = WorkOrder.query.all()
     for wo in all_orders:
@@ -669,6 +683,8 @@ def dashboard():
             wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
         except:
             wo_date = now
+
+        m_type = str(wo.maintenance_type).strip()
 
         if wo_date >= month_ago:
             monthly_jobs += 1
@@ -678,6 +694,13 @@ def dashboard():
             monthly_lube_vol += wo.lubricants_volume
             monthly_lube_cost += wo.lubricants_cost
             monthly_total_exp += wo.total_expenditure
+            
+            if m_type == 'CM':
+                monthly_cm += 1
+            elif m_type == 'PM':
+                monthly_pm += 1
+            elif m_type == 'Inspection & Check':
+                monthly_insp += 1
 
         if wo_date >= week_ago:
             weekly_jobs += 1
@@ -688,13 +711,22 @@ def dashboard():
             weekly_lube_cost += wo.lubricants_cost
             weekly_total_exp += wo.total_expenditure
 
+            if m_type == 'CM':
+                weekly_cm += 1
+            elif m_type == 'PM':
+                weekly_pm += 1
+            elif m_type == 'Inspection & Check':
+                weekly_insp += 1
+
     response = make_response(render_template_string(
         DASHBOARD_HTML, 
         work_orders=work_orders, 
         weekly_jobs=int(weekly_jobs), weekly_hours=weekly_hours, weekly_spare_qty=int(weekly_spare_qty), weekly_spare_cost=weekly_spare_cost,
         weekly_lube_vol=weekly_lube_vol, weekly_lube_cost=weekly_lube_cost, weekly_total_exp=weekly_total_exp,
+        weekly_cm=weekly_cm, weekly_pm=weekly_pm, weekly_insp=weekly_insp,
         monthly_jobs=int(monthly_jobs), monthly_hours=monthly_hours, monthly_spare_qty=int(monthly_spare_qty), monthly_spare_cost=monthly_spare_cost,
-        monthly_lube_vol=monthly_lube_vol, monthly_lube_cost=monthly_lube_cost, monthly_total_exp=monthly_total_exp
+        monthly_lube_vol=monthly_lube_vol, monthly_lube_cost=monthly_lube_cost, monthly_total_exp=monthly_total_exp,
+        monthly_cm=monthly_cm, monthly_pm=monthly_pm, monthly_insp=monthly_insp
     ))
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
