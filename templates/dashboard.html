@@ -19,58 +19,31 @@
 
     <div class="container-fluid px-4">
         
-        <!-- 1. Summary Cards Section (Weekly & Monthly) -->
+        <!-- 1. Weekly & Monthly Summary Cards -->
         <div class="row mb-4">
             <div class="col-md-6 mb-3 mb-md-0">
                 <div class="card shadow p-3 h-100">
-                    <p class="mb-1" style="font-size: 0.85rem;">Spare Parts Quantity: 0 Pcs</p>
-                    <p class="mb-1" style="font-size: 0.85rem;">Spare Parts Cost: ETB 0.00</p>
-                    <p class="mb-1" style="font-size: 0.85rem;">Lubricants Volume: 0 Liters</p>
-                    <p class="mb-1" style="font-size: 0.85rem;">Lubricants Cost: ETB 0.00</p>
-                    <p class="mb-1" style="font-size: 0.85rem;">Batteries Cost: ETB 0.00</p>
-                    <p class="mb-2" style="font-size: 0.85rem;">Tires Cost: ETB 0.00</p>
-                    <div class="p-2 bg-light rounded text-success fw-bold text-center" style="font-size: 0.9rem;">
-                        Total Expenditure: ETB 0.00
-                    </div>
+                    <h6 class="text-primary fw-bold mb-2">WEEKLY SUMMARY (LAST 7 DAYS)</h6>
+                    <p class="mb-1" style="font-size: 0.85rem;">Total Jobs Executed: <strong>0</strong></p>
+                    <p class="mb-1" style="font-size: 0.85rem;">Total Effective Work Time: <strong>0.0 hrs</strong></p>
+                    <p class="mb-1" style="font-size: 0.85rem;">Spare Qty: 0 Pcs | Spare Cost: ETB 0.00</p>
+                    <p class="mb-0 fw-bold text-success" style="font-size: 0.9rem;">Total Expenditure: ETB 0.00</p>
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="card shadow p-3 h-100">
-                    <p class="mb-1" style="font-size: 0.85rem;">Spare Parts Quantity: 2 Pcs</p>
-                    <p class="mb-1" style="font-size: 0.85rem;">Spare Parts Cost: ETB 3,000.00</p>
-                    <p class="mb-1" style="font-size: 0.85rem;">Lubricants Volume: 20.0 Liters</p>
-                    <p class="mb-1" style="font-size: 0.85rem;">Lubricants Cost: ETB 4,500.00</p>
-                    <p class="mb-1" style="font-size: 0.85rem;">Batteries Cost: ETB 15,000.00</p>
-                    <p class="mb-2" style="font-size: 0.85rem;">Tires Cost: ETB 0.00</p>
-                    <div class="p-2 bg-light rounded text-success fw-bold text-center" style="font-size: 0.9rem;">
-                        Total Expenditure: ETB 22,500.00
-                    </div>
+                    <h6 class="text-primary fw-bold mb-2">MONTHLY SUMMARY (LAST 30 DAYS)</h6>
+                    <p class="mb-1" style="font-size: 0.85rem;">Total Jobs Executed: <strong>0</strong></p>
+                    <p class="mb-1" style="font-size: 0.85rem;">Total Effective Work Time: <strong>0.0 hrs</strong></p>
+                    <p class="mb-1" style="font-size: 0.85rem;">Spare Qty: 0 Pcs | Spare Cost: ETB 0.00</p>
+                    <p class="mb-0 fw-bold text-success" style="font-size: 0.9rem;">Total Expenditure: ETB 0.00</p>
                 </div>
             </div>
         </div>
 
-        <!-- 2. Filter Section -->
-        <div class="card shadow mb-4 p-3">
-            <div class="row g-3 align-items-center">
-                <div class="col-md-3">
-                    <label class="form-label">Filter From Date:</label>
-                    <input type="date" class="form-control form-control-sm">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">Filter To Date:</label>
-                    <input type="date" class="form-control form-control-sm">
-                </div>
-                <div class="col-md-6 d-flex align-items-end gap-2 pt-2">
-                    <button class="btn btn-primary btn-sm">🔍 Filter Report</button>
-                    <button class="btn btn-outline-secondary btn-sm">Reset Filter</button>
-                    <button class="btn btn-outline-danger btn-sm ms-auto">🔄 Reset All Logs</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 3. Create New Work Order Section -->
-        <div class="card shadow mb-4 p-4">
-            <h4 class="text-primary mb-3">Create New Work Order</h4>
+        <!-- 2. CREATE NEW WORK ORDER FORM (직접 ክፍት ሆኖ እንዲታይ የተደረገ) -->
+        <div class="card shadow mb-4 p-4 border-primary">
+            <h4 class="text-primary mb-3">📝 Create New Work Order</h4>
             <form action="/add" method="POST">
                 <div class="row g-2 mb-3">
                     <div class="col-md-2">
@@ -95,7 +68,7 @@
                     </div>
                     <div class="col-md-1">
                         <label class="form-label">Reading Unit:</label>
-                        <input type="text" class="form-control form-control-sm bg-light text-center" value="KM (+5000)" readonly>
+                        <input type="text" class="form-control form-control-sm bg-light text-center" value="KM" readonly>
                     </div>
                 </div>
 
@@ -146,7 +119,7 @@
                 <!-- Replaced Spare Parts Section -->
                 <div class="sub-box">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <span class="section-title mb-0">⚙ REPLACED SPARE PARTS (AUTO TOTAL CALCULATION)</span>
+                        <span class="section-title mb-0">⚙ REPLACED SPARE PARTS</span>
                         <button type="button" class="btn btn-outline-primary btn-sm">+ Add Spare Part Row</button>
                     </div>
                     <div class="row g-2 align-items-center">
@@ -202,13 +175,12 @@
             </form>
         </div>
 
-        <!-- 4. Maintenance Execution & Work Time Log -->
+        <!-- 3. Maintenance Execution & Work Time Log -->
         <div class="card shadow p-4">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h4 class="text-dark mb-0">Maintenance Execution & Work Time Log</h4>
                 <div>
                     <button class="btn btn-success btn-sm">📥 Save Report (Excel)</button>
-                    <button class="btn btn-outline-danger btn-sm">🔄 Reset All Data</button>
                 </div>
             </div>
             <div class="table-responsive">
