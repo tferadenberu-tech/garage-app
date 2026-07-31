@@ -1,5 +1,5 @@
 import io
-import csv
+import pandas as pd
 from datetime import datetime, timedelta
 from flask import Flask, render_template_string, request, redirect, url_for, make_response, session
 from flask_sqlalchemy import SQLAlchemy
@@ -431,6 +431,7 @@ DASHBOARD_HTML = """
                                 <th>Replaced Spare Parts & Qty</th>
                                 <th>Spare Cost (ETB)</th>
                                 <th>Total Cost (ETB)</th>
+                                <th style="text-align: center;">Action</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -444,10 +445,15 @@ DASHBOARD_HTML = """
                                 <td class="fw-bold text-primary">{{ wo.replaced_spare_name }}</td>
                                 <td>{{ "%.2f"|format(wo.spare_parts_cost) }}</td>
                                 <td class="fw-bold text-success">{{ "%.2f"|format(wo.total_expenditure) }} ETB</td>
+                                <td class="text-center">
+                                    <form method="POST" action="/delete_work_order/{{ wo.id }}" onsubmit="return confirm('Are you sure you want to delete this work order?');" style="margin: 0;">
+                                        <button type="submit" class="btn btn-danger btn-sm py-0 px-1" style="font-size: 11px;">Remove</button>
+                                    </form>
+                                </td>
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="8" class="text-center text-muted">No records found for the selected date range.</td>
+                                <td colspan="9" class="text-center text-muted">No records found for the selected date range.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -872,6 +878,15 @@ def add_work_order():
     db.session.commit()
     return redirect(url_for('dashboard'))
 
+@app.route('/delete_work_order/<int:wo_id>', methods=['POST'])
+def delete_work_order(wo_id):
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    wo = WorkOrder.query.get_or_404(wo_id)
+    db.session.delete(wo)
+    db.session.commit()
+    return redirect(url_for('dashboard'))
+
 @app.route('/export/weekly_report')
 def export_weekly_report():
     if not session.get('logged_in'):
@@ -881,16 +896,7 @@ def export_weekly_report():
         week_ago = now - timedelta(days=7)
         work_orders = WorkOrder.query.all()
         
-        si = io.StringIO()
-        cw = csv.writer(si)
-        
-        cw.writerow(['STEELY R.M.I GARAGE - WEEKLY SUMMARY REPORT (LAST 7 DAYS)'])
-        cw.writerow([
-            'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
-            'Job Status', 'Maintenance Type', 'Work Category', 'Start Time', 
-            'Replaced Spare Parts', 'Total Spare Qty', 'Spare Cost (ETB)', 'Total Expenditure (ETB)'
-        ])
-        
+        data = []
         for wo in work_orders:
             try:
                 wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
@@ -898,16 +904,31 @@ def export_weekly_report():
                 wo_date = now
 
             if wo_date >= week_ago:
-                cw.writerow([
-                    wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
-                    wo.job_status, wo.maintenance_type, wo.work_category, wo.start_datetime, 
-                    wo.replaced_spare_name, wo.spare_parts_qty, wo.spare_parts_cost, wo.total_expenditure
-                ])
+                data.append({
+                    'Serial Number': wo.serial_number,
+                    'Work Order No': wo.work_order_no,
+                    'Vehicle Plate': wo.vehicle_plate,
+                    'Vehicle Model': wo.vehicle_model,
+                    'Job Status': wo.job_status,
+                    'Maintenance Type': wo.maintenance_type,
+                    'Work Category': wo.work_category,
+                    'Start Time': wo.start_datetime,
+                    'Replaced Spare Parts': wo.replaced_spare_name,
+                    'Total Spare Qty': wo.spare_parts_qty,
+                    'Spare Cost (ETB)': wo.spare_parts_cost,
+                    'Total Expenditure (ETB)': wo.total_expenditure
+                })
                 
-        output = make_response(si.getvalue())
-        output.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Weekly_Summary_Report.csv"
-        output.headers["Content-type"] = "text/csv"
-        return output
+        df = pd.DataFrame(data)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='weekly summary report')
+        output.seek(0)
+
+        resp = make_response(output.read())
+        resp.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Weekly_Summary_Report.xlsx"
+        resp.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return resp
     except Exception as e:
         return f"Error: {str(e)}", 500
 
@@ -920,16 +941,7 @@ def export_monthly_report():
         month_ago = now - timedelta(days=30)
         work_orders = WorkOrder.query.all()
         
-        si = io.StringIO()
-        cw = csv.writer(si)
-        
-        cw.writerow(['STEELY R.M.I GARAGE - MONTHLY SUMMARY REPORT (LAST 30 DAYS)'])
-        cw.writerow([
-            'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
-            'Job Status', 'Maintenance Type', 'Work Category', 'Start Time', 
-            'Replaced Spare Parts', 'Total Spare Qty', 'Spare Cost (ETB)', 'Total Expenditure (ETB)'
-        ])
-        
+        data = []
         for wo in work_orders:
             try:
                 wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
@@ -937,16 +949,31 @@ def export_monthly_report():
                 wo_date = now
 
             if wo_date >= month_ago:
-                cw.writerow([
-                    wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
-                    wo.job_status, wo.maintenance_type, wo.work_category, wo.start_datetime, 
-                    wo.replaced_spare_name, wo.spare_parts_qty, wo.spare_parts_cost, wo.total_expenditure
-                ])
+                data.append({
+                    'Serial Number': wo.serial_number,
+                    'Work Order No': wo.work_order_no,
+                    'Vehicle Plate': wo.vehicle_plate,
+                    'Vehicle Model': wo.vehicle_model,
+                    'Job Status': wo.job_status,
+                    'Maintenance Type': wo.maintenance_type,
+                    'Work Category': wo.work_category,
+                    'Start Time': wo.start_datetime,
+                    'Replaced Spare Parts': wo.replaced_spare_name,
+                    'Total Spare Qty': wo.spare_parts_qty,
+                    'Spare Cost (ETB)': wo.spare_parts_cost,
+                    'Total Expenditure (ETB)': wo.total_expenditure
+                })
                 
-        output = make_response(si.getvalue())
-        output.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Monthly_Summary_Report.csv"
-        output.headers["Content-type"] = "text/csv"
-        return output
+        df = pd.DataFrame(data)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='monthly summary report')
+        output.seek(0)
+
+        resp = make_response(output.read())
+        resp.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Monthly_Summary_Report.xlsx"
+        resp.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return resp
     except Exception as e:
         return f"Error: {str(e)}", 500
 
@@ -955,41 +982,104 @@ def export_master_report():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
     try:
+        now = datetime.now()
+        week_ago = now - timedelta(days=7)
+        month_ago = now - timedelta(days=30)
+        
         work_orders = WorkOrder.query.all()
         inventory_items = SpareInventory.query.all()
         
-        si = io.StringIO()
-        cw = csv.writer(si)
-        
-        cw.writerow(['=== SECTION 1: ALL WORK ORDERS & MAINTENANCE LOGS ==='])
-        cw.writerow([
-            'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
-            'Current Reading', 'Reading Unit', 'Next Due Reading', 'Job Status', 'Driver Name', 
-            'Assigned Technicians', 'Start Time', 'End Time', 
-            'Maintenance Type', 'Work Category', 'Replaced Spare Parts', 
-            'Total Spare Qty', 'Spare Cost', 'Lube Vol', 'Lube Cost', 'Batt Cost', 'Tire Cost', 'Effective Hours (hrs)', 'Total Expenditure (ETB)'
-        ])
+        # 1. Weekly Summary Data
+        weekly_data = []
         for wo in work_orders:
-            cw.writerow([
-                wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
-                wo.current_reading, wo.reading_unit, wo.next_due_reading, wo.job_status, wo.driver_name, 
-                wo.assigned_technicians, wo.start_datetime, wo.end_datetime, 
-                wo.maintenance_type, wo.work_category, wo.replaced_spare_name, 
-                wo.spare_parts_qty, wo.spare_parts_cost, wo.lubricants_volume, wo.lubricants_cost, wo.batteries_cost, wo.tires_cost, wo.effective_work_hours, wo.total_expenditure
-            ])
-        
-        cw.writerow([])
-        cw.writerow(['=== SECTION 2: STORE SPARE INVENTORY ==='])
-        cw.writerow(['Part ID', 'Part Name', 'Specification (Spec)', 'Available Quantity', 'Unit Cost (ETB)', 'Location'])
-        for item in inventory_items:
-            cw.writerow([
-                item.id, item.part_name, item.spec, item.quantity, item.unit_cost, item.location
-            ])
+            try:
+                wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
+            except:
+                wo_date = now
+            if wo_date >= week_ago:
+                weekly_data.append({
+                    'Serial Number': wo.serial_number,
+                    'Work Order No': wo.work_order_no,
+                    'Vehicle Plate': wo.vehicle_plate,
+                    'Vehicle Model': wo.vehicle_model,
+                    'Job Status': wo.job_status,
+                    'Maintenance Type': wo.maintenance_type,
+                    'Work Category': wo.work_category,
+                    'Start Time': wo.start_datetime,
+                    'Replaced Spare Parts': wo.replaced_spare_name,
+                    'Total Spare Qty': wo.spare_parts_qty,
+                    'Spare Cost (ETB)': wo.spare_parts_cost,
+                    'Total Expenditure (ETB)': wo.total_expenditure
+                })
+        df_weekly = pd.DataFrame(weekly_data)
+
+        # 2. Monthly Summary Data
+        monthly_data = []
+        for wo in work_orders:
+            try:
+                wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
+            except:
+                wo_date = now
+            if wo_date >= month_ago:
+                monthly_data.append({
+                    'Serial Number': wo.serial_number,
+                    'Work Order No': wo.work_order_no,
+                    'Vehicle Plate': wo.vehicle_plate,
+                    'Vehicle Model': wo.vehicle_model,
+                    'Job Status': wo.job_status,
+                    'Maintenance Type': wo.maintenance_type,
+                    'Work Category': wo.work_category,
+                    'Start Time': wo.start_datetime,
+                    'Replaced Spare Parts': wo.replaced_spare_name,
+                    'Total Spare Qty': wo.spare_parts_qty,
+                    'Spare Cost (ETB)': wo.spare_parts_cost,
+                    'Total Expenditure (ETB)': wo.total_expenditure
+                })
+        df_monthly = pd.DataFrame(monthly_data)
+
+        # 3. Execution Log Data
+        exec_data = []
+        for wo in work_orders:
+            exec_data.append({
+                'Serial Number': wo.serial_number,
+                'Work Order No': wo.work_order_no,
+                'Vehicle Plate': wo.vehicle_plate,
+                'Vehicle Model': wo.vehicle_model,
+                'Current Reading': wo.current_reading,
+                'Reading Unit': wo.reading_unit,
+                'Next Due Reading': wo.next_due_reading,
+                'Job Status': wo.job_status,
+                'Driver Name': wo.driver_name,
+                'Assigned Technicians': wo.assigned_technicians,
+                'Start Time': wo.start_datetime,
+                'End Time': wo.end_datetime,
+                'Maintenance Type': wo.maintenance_type,
+                'Work Category': wo.work_category,
+                'Replaced Spare Parts': wo.replaced_spare_name,
+                'Total Spare Qty': wo.spare_parts_qty,
+                'Spare Cost (ETB)': wo.spare_parts_cost,
+                'Lube Vol (L)': wo.lubricants_volume,
+                'Lube Cost (ETB)': wo.lubricants_cost,
+                'Batt Cost (ETB)': wo.batteries_cost,
+                'Tire Cost (ETB)': wo.tires_cost,
+                'Effective Hours (hrs)': wo.effective_work_hours,
+                'Total Expenditure (ETB)': wo.total_expenditure
+            })
+        df_exec = pd.DataFrame(exec_data)
+
+        # Write to Multi-Sheet Excel using Pandas & Openpyxl
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_weekly.to_excel(writer, index=False, sheet_name='weekly summary report')
+            df_monthly.to_excel(writer, index=False, sheet_name='monthly summary report')
+            df_exec.to_excel(writer, index=False, sheet_name='excution log')
             
-        output = make_response(si.getvalue())
-        output.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_All_In_One_Master_Report.csv"
-        output.headers["Content-type"] = "text/csv"
-        return output
+        output.seek(0)
+        
+        response = make_response(output.read())
+        response.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_All_In_One_Master_Report.xlsx"
+        response.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return response
     except Exception as e:
         return f"Error: {str(e)}", 500
 
@@ -999,30 +1089,44 @@ def export_maintenance_execution():
         return redirect(url_for('login'))
     try:
         work_orders = WorkOrder.query.all()
-        si = io.StringIO()
-        cw = csv.writer(si)
-        
-        cw.writerow(['STEELY R.M.I GARAGE - MAINTENANCE EXECUTION & WORK TIME LOG'])
-        cw.writerow([
-            'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
-            'Current Reading', 'Reading Unit', 'Next Due Reading', 'Job Status', 'Driver Name', 
-            'Assigned Technicians', 'Start Time', 'End Time', 
-            'Maintenance Type', 'Work Category', 'Replaced Spare Parts', 
-            'Total Spare Qty', 'Spare Cost (ETB)', 'Lube Vol (L)', 'Lube Cost (ETB)', 'Batt Cost (ETB)', 'Tire Cost (ETB)', 'Effective Hours (hrs)', 'Total Expenditure (ETB)'
-        ])
+        data = []
         for wo in work_orders:
-            cw.writerow([
-                wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
-                wo.current_reading, wo.reading_unit, wo.next_due_reading, wo.job_status, wo.driver_name, 
-                wo.assigned_technicians, wo.start_datetime, wo.end_datetime, 
-                wo.maintenance_type, wo.work_category, wo.replaced_spare_name, 
-                wo.spare_parts_qty, wo.spare_parts_cost, wo.lubricants_volume, wo.lubricants_cost, wo.batteries_cost, wo.tires_cost, wo.effective_work_hours, wo.total_expenditure
-            ])
+            data.append({
+                'Serial Number': wo.serial_number,
+                'Work Order No': wo.work_order_no,
+                'Vehicle Plate': wo.vehicle_plate,
+                'Vehicle Model': wo.vehicle_model,
+                'Current Reading': wo.current_reading,
+                'Reading Unit': wo.reading_unit,
+                'Next Due Reading': wo.next_due_reading,
+                'Job Status': wo.job_status,
+                'Driver Name': wo.driver_name,
+                'Assigned Technicians': wo.assigned_technicians,
+                'Start Time': wo.start_datetime,
+                'End Time': wo.end_datetime,
+                'Maintenance Type': wo.maintenance_type,
+                'Work Category': wo.work_category,
+                'Replaced Spare Parts': wo.replaced_spare_name,
+                'Total Spare Qty': wo.spare_parts_qty,
+                'Spare Cost (ETB)': wo.spare_parts_cost,
+                'Lube Vol (L)': wo.lubricants_volume,
+                'Lube Cost (ETB)': wo.lubricants_cost,
+                'Batt Cost (ETB)': wo.batteries_cost,
+                'Tire Cost (ETB)': wo.tires_cost,
+                'Effective Hours (hrs)': wo.effective_work_hours,
+                'Total Expenditure (ETB)': wo.total_expenditure
+            })
             
-        output = make_response(si.getvalue())
-        output.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Maintenance_Execution_Report.csv"
-        output.headers["Content-type"] = "text/csv"
-        return output
+        df = pd.DataFrame(data)
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='excution log')
+        output.seek(0)
+
+        response = make_response(output.read())
+        response.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Maintenance_Execution_Report.xlsx"
+        response.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return response
     except Exception as e:
         return f"Error: {str(e)}", 500
 
