@@ -190,7 +190,7 @@ DASHBOARD_HTML = """
                 <a href="/export/maintenance_execution" class="btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;">📥 Export Execution Log</a>
             </div>
             <div class="card-body p-3">
-                <!-- From Day to Day Filter Form -->
+                <!-- From Date to To Date Filter Form -->
                 <form method="GET" action="/dashboard" class="row g-2 align-items-center mb-3 bg-light p-2 rounded border">
                     <div class="col-md-auto">
                         <label class="form-label mb-0 fw-bold fs-7">From Date:</label>
