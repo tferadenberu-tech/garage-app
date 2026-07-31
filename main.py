@@ -6,7 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v9.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v10.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SESSION_COOKIE_SECURE'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
@@ -19,8 +19,9 @@ class WorkOrder(db.Model):
     work_order_no = db.Column(db.String(50), nullable=False)
     vehicle_plate = db.Column(db.String(50), nullable=False)
     vehicle_model = db.Column(db.String(100), nullable=False)
-    current_reading = db.Column(db.String(50), nullable=False)
-    reading_unit = db.Column(db.String(20), nullable=False)
+    current_reading = db.Column(db.Float, nullable=False, default=0.0)
+    reading_unit = db.Column(db.String(20), nullable=False) # KM ወይም Hours
+    next_due_reading = db.Column(db.Float, nullable=False, default=0.0) # +5000 KM ወይም +250 Hrs
     job_status = db.Column(db.String(50), nullable=False)
     driver_name = db.Column(db.String(100), nullable=False)
     assigned_technicians = db.Column(db.String(200), nullable=False)
@@ -211,11 +212,12 @@ DASHBOARD_HTML = """
                             <th>ID / S/N</th>
                             <th>Work Order No</th>
                             <th>Vehicle Model & Plate</th>
+                            <th>Current Reading</th>
+                            <th>Next Due (+5k KM / +250 Hrs)</th>
                             <th>Job Status</th>
                             <th>Maintenance Type</th>
-                            <th>Work Category & Description</th>
-                            <th>Assigned Technicians</th>
-                            <th>Start / End Time</th>
+                            <th>Work Category</th>
+                            <th>Technicians</th>
                             <th>Total Cost (ETB)</th>
                         </tr>
                     </thead>
@@ -225,6 +227,8 @@ DASHBOARD_HTML = """
                             <td>{{ wo.serial_number }}</td>
                             <td>{{ wo.work_order_no }}</td>
                             <td>{{ wo.vehicle_model }} ({{ wo.vehicle_plate }})</td>
+                            <td>{{ wo.current_reading }} {{ wo.reading_unit }}</td>
+                            <td class="fw-bold text-danger">{{ wo.next_due_reading }} {{ wo.reading_unit }}</td>
                             <td>
                                 {% if wo.job_status == 'Completed' %}
                                     <span class="badge bg-success">Completed</span>
@@ -232,12 +236,9 @@ DASHBOARD_HTML = """
                                     <span class="badge bg-warning text-dark">{{ wo.job_status }}</span>
                                 {% endif %}
                             </td>
-                            <td>
-                                <span class="badge bg-info text-dark">{{ wo.maintenance_type }}</span>
-                            </td>
+                            <td><span class="badge bg-info text-dark">{{ wo.maintenance_type }}</span></td>
                             <td>{{ wo.work_category }}</td>
                             <td>{{ wo.assigned_technicians }}</td>
-                            <td><small>{{ wo.start_datetime }} to {{ wo.end_datetime }}</small></td>
                             <td class="fw-bold text-success">{{ wo.total_expenditure }} ETB</td>
                         </tr>
                         {% endfor %}
@@ -252,7 +253,7 @@ DASHBOARD_HTML = """
             <div class="modal-content">
                 <form method="POST" action="/add_work_order">
                     <div class="modal-header bg-primary text-white">
-                        <h5 class="modal-title">Create New Work Order</h5>
+                        <h5 class="modal-title">Create New Work Order (+5000 KM / +250 Hours Auto Due)</h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
@@ -275,11 +276,14 @@ DASHBOARD_HTML = """
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Current Reading</label>
-                                <input type="text" class="form-control" name="current_reading" required placeholder="e.g. 125000">
+                                <input type="number" step="any" class="form-control" name="current_reading" required placeholder="e.g. 125000">
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label">Reading Unit</label>
-                                <input type="text" class="form-control" name="reading_unit" required value="KM">
+                                <label class="form-label fw-bold text-primary">Reading Unit (+5k KM / +250h)</label>
+                                <select class="form-select border-primary fw-bold" name="reading_unit" required>
+                                    <option value="KM">KM (+5000 Next Due)</option>
+                                    <option value="Hours">Hours (+250 Next Due)</option>
+                                </select>
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Job Status</label>
@@ -520,8 +524,14 @@ def add_work_order():
     work_order_no = request.form.get('work_order_no')
     vehicle_plate = request.form.get('vehicle_plate')
     vehicle_model = request.form.get('vehicle_model')
-    current_reading = request.form.get('current_reading')
-    reading_unit = request.form.get('reading_unit')
+    
+    current_reading = float(request.form.get('current_reading', 0.0))
+    reading_unit = request.form.get('reading_unit', 'KM')
+    
+    # 5000 KM ወይም 250 Hours በራስ ሰር መጨመር
+    increment_value = 5000.0 if reading_unit == 'KM' else 250.0
+    next_due_reading = current_reading + increment_value
+
     job_status = request.form.get('job_status')
     driver_name = request.form.get('driver_name')
     assigned_technicians = request.form.get('assigned_technicians')
@@ -556,6 +566,7 @@ def add_work_order():
         vehicle_model=vehicle_model,
         current_reading=current_reading,
         reading_unit=reading_unit,
+        next_due_reading=next_due_reading,
         job_status=job_status,
         driver_name=driver_name,
         assigned_technicians=assigned_technicians,
@@ -591,7 +602,7 @@ def export_master_report():
         cw.writerow(['=== SECTION 1: WORK ORDERS & MAINTENANCE LOGS ==='])
         cw.writerow([
             'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
-            'Current Reading', 'Reading Unit', 'Job Status', 'Driver Name', 
+            'Current Reading', 'Reading Unit', 'Next Due Reading', 'Job Status', 'Driver Name', 
             'Assigned Technicians', 'Start Time', 'End Time', 
             'Maintenance Type', 'Work Category', 'Description', 
             'Spare Qty', 'Spare Cost', 'Lube Vol', 'Lube Cost', 'Batt Cost', 'Tire Cost', 'Effective Hours (hrs)', 'Total Expenditure (ETB)'
@@ -599,7 +610,7 @@ def export_master_report():
         for wo in work_orders:
             cw.writerow([
                 wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
-                wo.current_reading, wo.reading_unit, wo.job_status, wo.driver_name, 
+                wo.current_reading, wo.reading_unit, wo.next_due_reading, wo.job_status, wo.driver_name, 
                 wo.assigned_technicians, wo.start_datetime, wo.end_datetime, 
                 wo.maintenance_type, wo.work_category, wo.description, 
                 wo.spare_parts_qty, wo.spare_parts_cost, wo.lubricants_volume, wo.lubricants_cost, wo.batteries_cost, wo.tires_cost, wo.effective_work_hours, wo.total_expenditure
