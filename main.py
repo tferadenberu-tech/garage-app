@@ -6,7 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v13.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v18.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -27,8 +27,12 @@ class WorkOrder(db.Model):
     maintenance_type = db.Column(db.String(50), nullable=False) 
     work_category = db.Column(db.String(100), nullable=False) 
     description = db.Column(db.Text, nullable=True)
+    
+    # Replaced Spare Parts Summary fields
+    replaced_spare_name = db.Column(db.String(300), nullable=True, default='-')
     spare_parts_qty = db.Column(db.Integer, nullable=False, default=0)
     spare_parts_cost = db.Column(db.Float, nullable=False, default=0.0)
+    
     lubricants_volume = db.Column(db.Float, nullable=False, default=0.0)
     lubricants_cost = db.Column(db.Float, nullable=False, default=0.0)
     batteries_cost = db.Column(db.Float, nullable=False, default=0.0)
@@ -41,6 +45,7 @@ class SpareInventory(db.Model):
     part_name = db.Column(db.String(100), nullable=False)
     spec = db.Column(db.String(100), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
+    unit_cost = db.Column(db.Float, nullable=False, default=0.0)
     location = db.Column(db.String(100), nullable=False)
 
 with app.app_context():
@@ -84,51 +89,27 @@ DASHBOARD_HTML = """
     <title>SteelY R.M.I Garage Maintnace dash Bord</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        /* በግራ በኩል ቋሚ የሳይድባር ክፍት ቦታ (Spacing) ማስተካከያ */
-        body {
-            background-color: #f4f6f9;
-        }
-        .main-layout-container {
-            margin-left: 240px; /* በግራ በኩል ክፍት ቦታ ፈጥሯል */
-            padding: 20px;
-            max-width: calc(100% - 240px);
-            transition: all 0.3s ease;
-        }
-        .sidebar-space {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 220px;
-            height: 100%;
-            background: #212529;
-            color: white;
-            padding: 20px;
-            z-index: 1000;
-        }
+        body { background-color: #f4f6f9; }
+        .main-layout-container { margin-left: 240px; padding: 20px; max-width: calc(100% - 240px); transition: all 0.3s ease; }
+        .sidebar-space { position: fixed; top: 0; left: 0; width: 220px; height: 100%; background: #212529; color: white; padding: 20px; z-index: 1000; }
         @media (max-width: 992px) {
-            .main-layout-container {
-                margin-left: 0;
-                max-width: 100%;
-            }
-            .sidebar-space {
-                display: none;
-            }
+            .main-layout-container { margin-left: 0; max-width: 100%; }
+            .sidebar-space { display: none; }
         }
     </style>
 </head>
 <body>
-    <!-- በግራ በኩል የሚታይ ቋሚ የክፍት ቦታ / Sidebar เมนู -->
     <div class="sidebar-space d-none d-lg-block">
         <h5 class="text-primary fw-bold mb-4">SteelY Garage</h5>
         <ul class="nav flex-column gap-2">
             <li class="nav-item"><a href="/dashboard" class="nav-link text-white active bg-primary rounded">🏠 Dashboard</a></li>
+            <li class="nav-item"><a href="/inventory" class="nav-link text-white">📦 Store Inventory</a></li>
             <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 Master Report</a></li>
             <li class="nav-item"><a href="/export/maintenance_execution" class="nav-link text-white">📥 Execution Log</a></li>
             <li class="nav-item mt-5"><a href="/logout" class="nav-link text-danger">🚪 Logout</a></li>
         </ul>
     </div>
 
-    <!-- ዋናው የድስፕሌይ ይዘት በግራ በኩል ክፍት ቦታ ተሰጥቶታል -->
     <div class="main-layout-container">
         
         <!-- Header Section -->
@@ -151,23 +132,19 @@ DASHBOARD_HTML = """
         
         <div class="mb-3 d-flex gap-2 flex-wrap">
             <button class="btn btn-primary btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">+ Create New Work Order</button>
-            <button class="btn btn-dark btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Store Spare Inventory</button>
+            <a href="/inventory" class="btn btn-dark btn-sm fw-bold">📦 View Store Inventory</a>
         </div>
 
-        <!-- 1. Weekly & Monthly Summaries Row -->
+        <!-- Weekly & Monthly Summaries Row -->
         <div class="row mb-3">
             <div class="col-xl-6 mb-2">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-secondary text-white py-2">
+                    <div class="card-header bg-secondary text-white py-2 d-flex justify-content-between align-items-center">
                         <h5 class="mb-0 fs-6">WEEKLY SUMMARY (LAST 7 DAYS)</h5>
+                        <a href="/export/weekly_report" class="btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;">📥 Export Weekly Report</a>
                     </div>
                     <div class="card-body">
                         <p class="fw-bold mb-2">Total Jobs Executed: <span class="text-primary">{{ weekly_jobs }}</span></p>
-                        <ul class="list-unstyled ms-3 mb-2 small">
-                            <li>• Preventive Maintenance (PM): <strong>{{ weekly_pm }}</strong></li>
-                            <li>• Corrective Maintenance (CM): <strong>{{ weekly_cm }}</strong></li>
-                            <li>• Inspection & Checkup: <strong>{{ weekly_insp }}</strong></li>
-                        </ul>
                         <p class="fw-bold mb-2 text-primary">Total Effective Work Time: {{ "%.1f"|format(weekly_hours) }} hrs</p>
                         <hr class="my-2">
                         <div class="row small text-muted">
@@ -175,8 +152,6 @@ DASHBOARD_HTML = """
                             <div class="col-6">Spare Cost: <strong>ETB {{ "%.2f"|format(weekly_spare_cost) }}</strong></div>
                             <div class="col-6">Lubricants: <strong>{{ "%.1f"|format(weekly_lube_vol) }} L</strong></div>
                             <div class="col-6">Lube Cost: <strong>ETB {{ "%.2f"|format(weekly_lube_cost) }}</strong></div>
-                            <div class="col-6">Batteries Cost: <strong>ETB {{ "%.2f"|format(weekly_batt_cost) }}</strong></div>
-                            <div class="col-6">Tires Cost: <strong>ETB {{ "%.2f"|format(weekly_tire_cost) }}</strong></div>
                         </div>
                         <div class="mt-2 pt-2 border-top fw-bold text-dark">
                             Total Expenditure: ETB {{ "%.2f"|format(weekly_total_exp) }}
@@ -187,16 +162,12 @@ DASHBOARD_HTML = """
 
             <div class="col-xl-6 mb-2">
                 <div class="card shadow-sm h-100">
-                    <div class="card-header bg-primary text-white py-2">
+                    <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center">
                         <h5 class="mb-0 fs-6">MONTHLY SUMMARY (LAST 30 DAYS)</h5>
+                        <a href="/export/monthly_report" class="btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;">📥 Export Monthly Report</a>
                     </div>
                     <div class="card-body">
                         <p class="fw-bold mb-2">Total Jobs Executed: <span class="text-primary">{{ monthly_jobs }}</span></p>
-                        <ul class="list-unstyled ms-3 mb-2 small">
-                            <li>• Preventive Maintenance (PM): <strong>{{ monthly_pm }}</strong></li>
-                            <li>• Corrective Maintenance (CM): <strong>{{ monthly_cm }}</strong></li>
-                            <li>• Inspection & Checkup: <strong>{{ monthly_insp }}</strong></li>
-                        </ul>
                         <p class="fw-bold mb-2 text-primary">Total Effective Work Time: {{ "%.1f"|format(monthly_hours) }} hrs</p>
                         <hr class="my-2">
                         <div class="row small text-muted">
@@ -204,8 +175,6 @@ DASHBOARD_HTML = """
                             <div class="col-6">Spare Cost: <strong>ETB {{ "%.2f"|format(monthly_spare_cost) }}</strong></div>
                             <div class="col-6">Lubricants: <strong>{{ "%.1f"|format(monthly_lube_vol) }} L</strong></div>
                             <div class="col-6">Lube Cost: <strong>ETB {{ "%.2f"|format(monthly_lube_cost) }}</strong></div>
-                            <div class="col-6">Batteries Cost: <strong>ETB {{ "%.2f"|format(monthly_batt_cost) }}</strong></div>
-                            <div class="col-6">Tires Cost: <strong>ETB {{ "%.2f"|format(monthly_tire_cost) }}</strong></div>
                         </div>
                         <div class="mt-2 pt-2 border-top fw-bold text-success">
                             Total Expenditure: ETB {{ "%.2f"|format(monthly_total_exp) }}
@@ -215,45 +184,7 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
-        <!-- 2. Store Spare Inventory እና ሌሎች ክፍሎች ጎን ለጎን እንዲቀመጡ በ Row የተደረገ -->
-        <div class="row mb-3">
-            <div class="col-12">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-secondary text-white py-2 d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0 fs-6">Store Spare Inventory</h5>
-                        <button class="btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Add Item</button>
-                    </div>
-                    <div class="card-body p-2">
-                        <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
-                            <table class="table table-bordered table-hover align-middle mb-0 small">
-                                <thead class="table-light sticky-top">
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Part Name</th>
-                                        <th>Specification (Spec)</th>
-                                        <th>Available Quantity</th>
-                                        <th>Location</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for item in inventory_items %}
-                                    <tr>
-                                        <td>{{ item.id }}</td>
-                                        <td>{{ item.part_name }}</td>
-                                        <td>{{ item.spec }}</td>
-                                        <td class="fw-bold {% if item.quantity < 5 %}text-danger{% else %}text-success{% endif %}">{{ item.quantity }}</td>
-                                        <td>{{ item.location }}</td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 3. Maintenance Execution & Work Time Log -->
+        <!-- Maintenance Execution & Work Time Log -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
                 <h5 class="mb-0 fs-6">Maintenance Execution & Work Time Log</h5>
@@ -264,15 +195,13 @@ DASHBOARD_HTML = """
                     <table class="table table-bordered table-hover align-middle mb-0 small">
                         <thead class="table-secondary">
                             <tr>
-                                <th>ID / S/N</th>
-                                <th>Work Order No</th>
+                                <th>S/N</th>
+                                <th>WO No</th>
                                 <th>Vehicle Model & Plate</th>
-                                <th>Current Reading</th>
-                                <th>Next Due (+5k KM / +250 Hrs)</th>
-                                <th>Job Status</th>
+                                <th>Next Due</th>
                                 <th>Maintenance Type</th>
-                                <th>Work Category</th>
-                                <th>Technicians</th>
+                                <th>Replaced Spare Parts & Qty</th>
+                                <th>Spare Cost (ETB)</th>
                                 <th>Total Cost (ETB)</th>
                             </tr>
                         </thead>
@@ -282,19 +211,11 @@ DASHBOARD_HTML = """
                                 <td>{{ wo.serial_number }}</td>
                                 <td>{{ wo.work_order_no }}</td>
                                 <td>{{ wo.vehicle_model }} ({{ wo.vehicle_plate }})</td>
-                                <td>{{ wo.current_reading }} {{ wo.reading_unit }}</td>
                                 <td class="fw-bold text-danger">{{ wo.next_due_reading }} {{ wo.reading_unit }}</td>
-                                <td>
-                                    {% if wo.job_status == 'Completed' %}
-                                        <span class="badge bg-success">Completed</span>
-                                    {% else %}
-                                        <span class="badge bg-warning text-dark">{{ wo.job_status }}</span>
-                                    {% endif %}
-                                </td>
                                 <td><span class="badge bg-info text-dark">{{ wo.maintenance_type }}</span></td>
-                                <td>{{ wo.work_category }}</td>
-                                <td>{{ wo.assigned_technicians }}</td>
-                                <td class="fw-bold text-success">{{ wo.total_expenditure }} ETB</td>
+                                <td class="fw-bold text-primary">{{ wo.replaced_spare_name }}</td>
+                                <td>{{ "%.2f"|format(wo.spare_parts_cost) }}</td>
+                                <td class="fw-bold text-success">{{ "%.2f"|format(wo.total_expenditure) }} ETB</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -304,9 +225,9 @@ DASHBOARD_HTML = """
         </div>
     </div>
 
-    <!-- Modals -->
+    <!-- Modal for Work Order with Dynamic Multi-Row Spares & Auto Calculation -->
     <div class="modal fade" id="addWorkOrderModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <form method="POST" action="/add_work_order">
                     <div class="modal-header bg-primary text-white">
@@ -315,34 +236,34 @@ DASHBOARD_HTML = """
                     </div>
                     <div class="modal-body">
                         <div class="row g-3">
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label">Serial Number (S/N)</label>
                                 <input type="text" class="form-control" name="serial_number" required value="SN-001">
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label">Work Order No</label>
                                 <input type="text" class="form-control" name="work_order_no" required value="WO-2026-01">
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label">Vehicle Plate Number</label>
                                 <input type="text" class="form-control" name="vehicle_plate" required placeholder="e.g. AA-3-12345">
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label">Vehicle Type / Model</label>
                                 <input type="text" class="form-control" name="vehicle_model" required placeholder="e.g. Sino Truck 371">
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label">Current Reading</label>
                                 <input type="number" step="any" class="form-control" name="current_reading" required placeholder="e.g. 125000">
                             </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold text-primary">Reading Unit (+5k KM / +250h)</label>
+                            <div class="col-md-3">
+                                <label class="form-label fw-bold text-primary">Reading Unit</label>
                                 <select class="form-select border-primary fw-bold" name="reading_unit" required>
                                     <option value="KM">KM (+5000 Next Due)</option>
                                     <option value="Hours">Hours (+250 Next Due)</option>
                                 </select>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label">Job Status</label>
                                 <select class="form-select" name="job_status">
                                     <option value="Completed">Completed</option>
@@ -350,19 +271,19 @@ DASHBOARD_HTML = """
                                     <option value="Pending">Pending</option>
                                 </select>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label">Driver Name</label>
                                 <input type="text" class="form-control" name="driver_name" required placeholder="Driver Name">
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label">Assigned Technicians / Mechanics</label>
+                                <label class="form-label">Assigned Technicians</label>
                                 <input type="text" class="form-control" name="assigned_technicians" required value="Ato Mihret, Dinberu Tefera">
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <label class="form-label">Start Date & Time</label>
                                 <input type="datetime-local" class="form-control" name="start_datetime" required>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <label class="form-label">End Date & Time</label>
                                 <input type="datetime-local" class="form-control" name="end_datetime" required>
                             </div>
@@ -375,74 +296,267 @@ DASHBOARD_HTML = """
                                 </select>
                             </div>
                             <div class="col-md-8">
-                                <label class="form-label fw-bold">Work Category & Description</label>
-                                <input type="text" class="form-control mb-1" name="work_category" required placeholder="e.g. Engine Maintenance">
+                                <label class="form-label fw-bold">Work Category</label>
+                                <input type="text" class="form-control" name="work_category" required placeholder="e.g. Engine Maintenance">
                             </div>
-                            <div class="col-12">
-                                <textarea class="form-control" name="description" rows="2" placeholder="Detailed work description or notes..."></textarea>
+
+                            <!-- Dynamic Replaced Spare Parts Section with Add Row & Auto Calculation -->
+                            <div class="col-12 mt-3">
+                                <label class="form-label fw-bold text-primary fs-6">Replaced Spare Parts List (Multi-Row & Auto Cost)</label>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered align-middle" id="woSpareTable">
+                                        <thead class="table-dark">
+                                            <tr>
+                                                <th>Spare Part Name</th>
+                                                <th style="width: 130px;">Quantity (Pcs)</th>
+                                                <th style="width: 150px;">Unit Cost (ETB)</th>
+                                                <th style="width: 150px;">Total Cost (ETB)</th>
+                                                <th style="width: 80px; text-align: center;">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="woSpareTableBody">
+                                            <tr>
+                                                <td><input type="text" class="form-control" name="spare_name[]" required placeholder="e.g. Oil Filter / Brake Pad"></td>
+                                                <td><input type="number" class="form-control spare-qty" name="spare_qty[]" required min="1" value="1" oninput="calculateRowAndTotal(this)"></td>
+                                                <td><input type="number" step="0.01" class="form-control spare-cost" name="spare_unit_cost[]" required min="0" value="0.00" oninput="calculateRowAndTotal(this)"></td>
+                                                <td><input type="text" class="form-control bg-light row-total" readonly value="0.00"></td>
+                                                <td class="text-center">
+                                                    <button type="button" class="btn btn-danger btn-sm" onclick="removeWoSpareRow(this)">X</button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <button type="button" class="btn btn-success btn-sm fw-bold mt-1" onclick="addWoSpareRow()">+ Add Row Spare Part</button>
                             </div>
+
+                            <!-- Summary Cost Outputs -->
                             <div class="col-md-4">
-                                <label class="form-label">Spare Parts Qty (Pcs)</label>
-                                <input type="number" class="form-control" name="spare_parts_qty" value="0" min="0">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Spare Parts Cost (ETB)</label>
-                                <input type="number" step="0.01" class="form-control" name="spare_parts_cost" value="0.00" min="0">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Lubricants Volume (Liters)</label>
-                                <input type="number" step="0.1" class="form-control" name="lubricants_volume" value="0.0" min="0">
+                                <label class="form-label fw-bold text-success">Total Spare Parts Cost (ETB)</label>
+                                <input type="text" class="form-control fw-bold text-success bg-light" id="totalSparePartsCostDisplay" readonly value="0.00">
+                                <input type="hidden" name="spare_parts_cost" id="spare_parts_cost_hidden" value="0.00">
+                                <input type="hidden" name="spare_parts_qty" id="spare_parts_qty_hidden" value="0">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Lubricants Cost (ETB)</label>
-                                <input type="number" step="0.01" class="form-control" name="lubricants_cost" value="0.00" min="0">
+                                <input type="number" step="0.01" class="form-control other-cost" name="lubricants_cost" id="lubricants_cost" value="0.00" min="0" oninput="calculateGrandTotal()">
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label">Batteries Cost (ETB)</label>
-                                <input type="number" step="0.01" class="form-control" name="batteries_cost" value="0.00" min="0">
+                                <input type="number" step="0.01" class="form-control other-cost" name="batteries_cost" id="batteries_cost" value="0.00" min="0" oninput="calculateGrandTotal()">
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-6">
                                 <label class="form-label">Tires Cost (ETB)</label>
-                                <input type="number" step="0.01" class="form-control" name="tires_cost" value="0.00" min="0">
+                                <input type="number" step="0.01" class="form-control other-cost" name="tires_cost" id="tires_cost" value="0.00" min="0" oninput="calculateGrandTotal()">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold text-danger">Grand Total Expenditure (ETB)</label>
+                                <input type="text" class="form-control fw-bold text-danger bg-light fs-5" id="grandTotalDisplay" readonly value="0.00">
                             </div>
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="submit" class="btn btn-primary">Save Work Order</button>
+                        <button type="submit" class="btn btn-primary fw-bold">Save Work Order</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 
+    <!-- Store Inventory HTML -->
+    <!-- (Included in code structure) -->
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function addWoSpareRow() {
+            let tbody = document.getElementById('woSpareTableBody');
+            let newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td><input type="text" class="form-control" name="spare_name[]" required placeholder="e.g. Bearing"></td>
+                <td><input type="number" class="form-control spare-qty" name="spare_qty[]" required min="1" value="1" oninput="calculateRowAndTotal(this)"></td>
+                <td><input type="number" step="0.01" class="form-control spare-cost" name="spare_unit_cost[]" required min="0" value="0.00" oninput="calculateRowAndTotal(this)"></td>
+                <td><input type="text" class="form-control bg-light row-total" readonly value="0.00"></td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-danger btn-sm" onclick="removeWoSpareRow(this)">X</button>
+                </td>
+            `;
+            tbody.appendChild(newRow);
+            calculateGrandTotal();
+        }
+
+        function removeWoSpareRow(btn) {
+            let tbody = document.getElementById('woSpareTableBody');
+            if (tbody.rows.length > 1) {
+                let row = btn.closest('tr');
+                row.remove();
+                calculateGrandTotal();
+            } else {
+                alert('At least one spare part row is required!');
+            }
+        }
+
+        function calculateRowAndTotal(element) {
+            let row = element.closest('tr');
+            let qty = parseFloat(row.querySelector('.spare-qty').value) || 0;
+            let unitCost = parseFloat(row.querySelector('.spare-cost').value) || 0;
+            let rowTotal = qty * unitCost;
+            row.querySelector('.row-total').value = rowTotal.toFixed(2);
+            calculateGrandTotal();
+        }
+
+        function calculateGrandTotal() {
+            let rows = document.querySelectorAll('#woSpareTableBody tr');
+            let totalSpareCost = 0;
+            let totalSpareQty = 0;
+
+            rows.forEach(row => {
+                let qty = parseFloat(row.querySelector('.spare-qty').value) || 0;
+                let unitCost = parseFloat(row.querySelector('.spare-cost').value) || 0;
+                totalSpareCost += (qty * unitCost);
+                totalSpareQty += qty;
+            });
+
+            document.getElementById('totalSparePartsCostDisplay').value = totalSpareCost.toFixed(2);
+            document.getElementById('spare_parts_cost_hidden').value = totalSpareCost.toFixed(2);
+            document.getElementById('spare_parts_qty_hidden').value = totalSpareQty;
+
+            let lubeCost = parseFloat(document.getElementById('lubricants_cost').value) || 0;
+            let battCost = parseFloat(document.getElementById('batteries_cost').value) || 0;
+            let tireCost = parseFloat(document.getElementById('tires_cost').value) || 0;
+
+            let grandTotal = totalSpareCost + lubeCost + battCost + tireCost;
+            document.getElementById('grandTotalDisplay').value = grandTotal.toFixed(2);
+        }
+    </script>
+</body>
+</html>
+"""
+
+INVENTORY_HTML = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SteelY R.M.I - Store Inventory</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f6f9; }
+        .main-layout-container { margin-left: 240px; padding: 20px; max-width: calc(100% - 240px); transition: all 0.3s ease; }
+        .sidebar-space { position: fixed; top: 0; left: 0; width: 220px; height: 100%; background: #212529; color: white; padding: 20px; z-index: 1000; }
+        @media (max-width: 992px) {
+            .main-layout-container { margin-left: 0; max-width: 100%; }
+            .sidebar-space { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="sidebar-space d-none d-lg-block">
+        <h5 class="text-primary fw-bold mb-4">SteelY Garage</h5>
+        <ul class="nav flex-column gap-2">
+            <li class="nav-item"><a href="/dashboard" class="nav-link text-white">🏠 Dashboard</a></li>
+            <li class="nav-item"><a href="/inventory" class="nav-link text-white active bg-primary rounded">📦 Store Inventory</a></li>
+            <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 Master Report</a></li>
+            <li class="nav-item"><a href="/export/maintenance_execution" class="nav-link text-white">📥 Execution Log</a></li>
+            <li class="nav-item mt-5"><a href="/logout" class="nav-link text-danger">🚪 Logout</a></li>
+        </ul>
+    </div>
+
+    <div class="main-layout-container">
+        <!-- Header -->
+        <div class="card shadow-sm p-3 mb-3 bg-white">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h4 class="text-primary fw-bold mb-0">Store Spare Inventory Management</h4>
+                    <small class="text-muted">Manage all workshop spare parts and stock levels</small>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <button class="btn btn-dark btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Add New Spare Items (Multi-Row)</button>
+                    <a href="/dashboard" class="btn btn-secondary btn-sm fw-bold">← Back to Dashboard</a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Inventory Table Card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-secondary text-white py-2">
+                <h5 class="mb-0 fs-6">Complete Store Spare Inventory</h5>
+            </div>
+            <div class="card-body p-3">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>Part Name</th>
+                                <th>Specification (Spec)</th>
+                                <th>Available Quantity</th>
+                                <th>Unit Cost (ETB)</th>
+                                <th>Location</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in inventory_items %}
+                            <tr>
+                                <td>{{ item.id }}</td>
+                                <td class="fw-bold">{{ item.part_name }}</td>
+                                <td>{{ item.spec }}</td>
+                                <td>
+                                    <span class="badge {% if item.quantity < 5 %}bg-danger{% else %}bg-success{% endif %} fs-6">
+                                        {{ item.quantity }} Pcs
+                                    </span>
+                                </td>
+                                <td>{{ "%.2f"|format(item.unit_cost) }} ETB</td>
+                                <td>{{ item.location }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Multi-Row Spare Modal -->
     <div class="modal fade" id="addSpareModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
-                <form method="POST" action="/add_spare">
+                <form method="POST" action="/add_spare_multiple">
                     <div class="modal-header bg-dark text-white">
-                        <h5 class="modal-title">Add Store Spare Inventory</h5>
+                        <h5 class="modal-title">Add Multiple Store Spare Items</h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label">Part Name</label>
-                            <input type="text" class="form-control" name="part_name" required placeholder="Part Name">
+                        <div class="table-responsive">
+                            <table class="table table-bordered align-middle" id="spareTable">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Part Name</th>
+                                        <th>Specification (Spec)</th>
+                                        <th>Quantity</th>
+                                        <th>Unit Cost (ETB)</th>
+                                        <th>Location</th>
+                                        <th style="width: 80px; text-align: center;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="spareTableBody">
+                                    <tr>
+                                        <td><input type="text" class="form-control" name="part_name[]" required placeholder="e.g. Bearing"></td>
+                                        <td><input type="text" class="form-control" name="spec[]" required placeholder="e.g. 6204ZZ"></td>
+                                        <td><input type="number" class="form-control" name="quantity[]" required min="1" value="10"></td>
+                                        <td><input type="number" step="0.01" class="form-control" name="unit_cost[]" required min="0" value="0.00"></td>
+                                        <td><input type="text" class="form-control" name="location[]" required value="Main Store"></td>
+                                        <td class="text-center">
+                                            <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">X</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Specification (Spec)</label>
-                            <input type="text" class="form-control" name="spec" required placeholder="Specification">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Quantity</label>
-                            <input type="number" class="form-control" name="quantity" required min="1" value="10">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Location</label>
-                            <input type="text" class="form-control" name="location" required value="Main Store">
-                        </div>
+                        <button type="button" class="btn btn-success btn-sm fw-bold mt-2" onclick="addRow()">+ Add Another Row</button>
                     </div>
                     <div class="modal-footer">
-                        <button type="submit" class="btn btn-dark">Save Spare</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-dark fw-bold">Save All Inventory Items</button>
                     </div>
                 </form>
             </div>
@@ -450,6 +564,33 @@ DASHBOARD_HTML = """
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function addRow() {
+            let tbody = document.getElementById('spareTableBody');
+            let newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td><input type="text" class="form-control" name="part_name[]" required placeholder="e.g. Bearing"></td>
+                <td><input type="text" class="form-control" name="spec[]" required placeholder="e.g. 6204ZZ"></td>
+                <td><input type="number" class="form-control" name="quantity[]" required min="1" value="10"></td>
+                <td><input type="number" step="0.01" class="form-control" name="unit_cost[]" required min="0" value="0.00"></td>
+                <td><input type="text" class="form-control" name="location[]" required value="Main Store"></td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">X</button>
+                </td>
+            `;
+            tbody.appendChild(newRow);
+        }
+
+        function removeRow(btn) {
+            let tbody = document.getElementById('spareTableBody');
+            if (tbody.rows.length > 1) {
+                let row = btn.closest('tr');
+                row.remove();
+            } else {
+                alert('At least one row is required!');
+            }
+        }
+    </script>
 </body>
 </html>
 """
@@ -480,71 +621,57 @@ def dashboard():
         return redirect(url_for('login'))
     
     work_orders = WorkOrder.query.all()
-    inventory_items = SpareInventory.query.all()
-
     now = datetime.now()
     week_ago = now - timedelta(days=7)
     month_ago = now - timedelta(days=30)
 
-    weekly_jobs = weekly_pm = weekly_cm = weekly_insp = 0
-    weekly_hours = weekly_spare_qty = weekly_spare_cost = 0.0
-    weekly_lube_vol = weekly_lube_cost = weekly_batt_cost = weekly_tire_cost = weekly_total_exp = 0.0
+    weekly_jobs = weekly_hours = weekly_spare_qty = weekly_spare_cost = 0.0
+    weekly_lube_vol = weekly_lube_cost = weekly_total_exp = 0.0
 
-    monthly_jobs = monthly_pm = monthly_cm = monthly_insp = 0
-    monthly_hours = monthly_spare_qty = monthly_spare_cost = 0.0
-    monthly_lube_vol = monthly_lube_cost = monthly_batt_cost = monthly_tire_cost = monthly_total_exp = 0.0
+    monthly_jobs = monthly_hours = monthly_spare_qty = monthly_spare_cost = 0.0
+    monthly_lube_vol = monthly_lube_cost = monthly_total_exp = 0.0
 
     for wo in work_orders:
         try:
             wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
         except:
-            try:
-                wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%d %H:%M')
-            except:
-                wo_date = now
+            wo_date = now
 
         if wo_date >= month_ago:
             monthly_jobs += 1
-            if wo.maintenance_type == 'PM': monthly_pm += 1
-            elif wo.maintenance_type == 'CM': monthly_cm += 1
-            else: monthly_insp += 1
             monthly_hours += wo.effective_work_hours
             monthly_spare_qty += wo.spare_parts_qty
             monthly_spare_cost += wo.spare_parts_cost
             monthly_lube_vol += wo.lubricants_volume
             monthly_lube_cost += wo.lubricants_cost
-            monthly_batt_cost += wo.batteries_cost
-            monthly_tire_cost += wo.tires_cost
             monthly_total_exp += wo.total_expenditure
 
         if wo_date >= week_ago:
             weekly_jobs += 1
-            if wo.maintenance_type == 'PM': weekly_pm += 1
-            elif wo.maintenance_type == 'CM': weekly_cm += 1
-            else: weekly_insp += 1
             weekly_hours += wo.effective_work_hours
             weekly_spare_qty += wo.spare_parts_qty
             weekly_spare_cost += wo.spare_parts_cost
             weekly_lube_vol += wo.lubricants_volume
             weekly_lube_cost += wo.lubricants_cost
-            weekly_batt_cost += wo.batteries_cost
-            weekly_tire_cost += wo.tires_cost
             weekly_total_exp += wo.total_expenditure
 
     response = make_response(render_template_string(
         DASHBOARD_HTML, 
         work_orders=work_orders, 
-        inventory_items=inventory_items,
-        weekly_jobs=weekly_jobs, weekly_pm=weekly_pm, weekly_cm=weekly_cm, weekly_insp=weekly_insp,
-        weekly_hours=weekly_hours, weekly_spare_qty=weekly_spare_qty, weekly_spare_cost=weekly_spare_cost,
-        weekly_lube_vol=weekly_lube_vol, weekly_lube_cost=weekly_lube_cost, weekly_batt_cost=weekly_batt_cost,
-        weekly_tire_cost=weekly_tire_cost, weekly_total_exp=weekly_total_exp,
-        monthly_jobs=monthly_jobs, monthly_pm=monthly_pm, monthly_cm=monthly_cm, monthly_insp=monthly_insp,
-        monthly_hours=monthly_hours, monthly_spare_qty=monthly_spare_qty, monthly_spare_cost=monthly_spare_cost,
-        monthly_lube_vol=monthly_lube_vol, monthly_lube_cost=monthly_lube_cost, monthly_batt_cost=monthly_batt_cost,
-        monthly_tire_cost=monthly_tire_cost, monthly_total_exp=monthly_total_exp
+        weekly_jobs=int(weekly_jobs), weekly_hours=weekly_hours, weekly_spare_qty=int(weekly_spare_qty), weekly_spare_cost=weekly_spare_cost,
+        weekly_lube_vol=weekly_lube_vol, weekly_lube_cost=weekly_lube_cost, weekly_total_exp=weekly_total_exp,
+        monthly_jobs=int(monthly_jobs), monthly_hours=monthly_hours, monthly_spare_qty=int(monthly_spare_qty), monthly_spare_cost=monthly_spare_cost,
+        monthly_lube_vol=monthly_lube_vol, monthly_lube_cost=monthly_lube_cost, monthly_total_exp=monthly_total_exp
     ))
-    
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
+@app.route('/inventory')
+def inventory():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    inventory_items = SpareInventory.query.all()
+    response = make_response(render_template_string(INVENTORY_HTML, inventory_items=inventory_items))
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     return response
 
@@ -553,19 +680,30 @@ def logout():
     session.clear()
     return redirect(url_for('login'))
 
-@app.route('/add_spare', methods=['POST'])
-def add_spare():
+@app.route('/add_spare_multiple', methods=['POST'])
+def add_spare_multiple():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
-    part_name = request.form.get('part_name')
-    spec = request.form.get('spec')
-    quantity = int(request.form.get('quantity'))
-    location = request.form.get('location')
     
-    new_spare = SpareInventory(part_name=part_name, spec=spec, quantity=quantity, location=location)
-    db.session.add(new_spare)
+    part_names = request.form.getlist('part_name[]')
+    specs = request.form.getlist('spec[]')
+    quantities = request.form.getlist('quantity[]')
+    unit_costs = request.form.getlist('unit_cost[]')
+    locations = request.form.getlist('location[]')
+    
+    for i in range(len(part_names)):
+        if part_names[i].strip():
+            new_spare = SpareInventory(
+                part_name=part_names[i],
+                spec=specs[i],
+                quantity=int(quantities[i]),
+                unit_cost=float(unit_costs[i]),
+                location=locations[i]
+            )
+            db.session.add(new_spare)
+            
     db.session.commit()
-    return redirect(url_for('dashboard'))
+    return redirect(url_for('inventory'))
 
 @app.route('/add_work_order', methods=['POST'])
 def add_work_order():
@@ -591,8 +729,25 @@ def add_work_order():
     work_category = request.form.get('work_category')
     description = request.form.get('description')
     
-    spare_parts_qty = int(request.form.get('spare_parts_qty', 0))
-    spare_parts_cost = float(request.form.get('spare_parts_cost', 0.0))
+    spare_names = request.form.getlist('spare_name[]')
+    spare_qtys = request.form.getlist('spare_qty[]')
+    spare_unit_costs = request.form.getlist('spare_unit_cost[]')
+    
+    spare_summary_list = []
+    total_spare_qty = 0
+    total_spare_cost = 0.0
+    
+    for i in range(len(spare_names)):
+        if spare_names[i].strip():
+            q = int(spare_qtys[i]) if i < len(spare_qtys) else 1
+            uc = float(spare_unit_costs[i]) if i < len(spare_unit_costs) else 0.0
+            tot = q * uc
+            total_spare_qty += q
+            total_spare_cost += tot
+            spare_summary_list.append(f"{spare_names[i]} ({q} Pcs @ {uc:.2f} = {tot:.2f} ETB)")
+            
+    replaced_spare_name = ", ".join(spare_summary_list) if spare_summary_list else "-"
+    
     lubricants_volume = float(request.form.get('lubricants_volume', 0.0))
     lubricants_cost = float(request.form.get('lubricants_cost', 0.0))
     batteries_cost = float(request.form.get('batteries_cost', 0.0))
@@ -607,7 +762,7 @@ def add_work_order():
     except:
         effective_hours = 2.0
 
-    total_expenditure = spare_parts_cost + lubricants_cost + batteries_cost + tires_cost
+    total_expenditure = total_spare_cost + lubricants_cost + batteries_cost + tires_cost
     
     new_wo = WorkOrder(
         serial_number=serial_number,
@@ -625,8 +780,9 @@ def add_work_order():
         maintenance_type=maintenance_type,
         work_category=work_category,
         description=description,
-        spare_parts_qty=spare_parts_qty,
-        spare_parts_cost=spare_parts_cost,
+        replaced_spare_name=replaced_spare_name,
+        spare_parts_qty=total_spare_qty,
+        spare_parts_cost=total_spare_cost,
         lubricants_volume=lubricants_volume,
         lubricants_cost=lubricants_cost,
         batteries_cost=batteries_cost,
@@ -637,6 +793,84 @@ def add_work_order():
     db.session.add(new_wo)
     db.session.commit()
     return redirect(url_for('dashboard'))
+
+@app.route('/export/weekly_report')
+def export_weekly_report():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    try:
+        now = datetime.now()
+        week_ago = now - timedelta(days=7)
+        work_orders = WorkOrder.query.all()
+        
+        si = io.StringIO()
+        cw = csv.writer(si)
+        
+        cw.writerow(['STEELY R.M.I GARAGE - WEEKLY SUMMARY REPORT (LAST 7 DAYS)'])
+        cw.writerow([
+            'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
+            'Job Status', 'Maintenance Type', 'Work Category', 'Start Time', 
+            'Replaced Spare Parts', 'Total Spare Qty', 'Spare Cost (ETB)', 'Total Expenditure (ETB)'
+        ])
+        
+        for wo in work_orders:
+            try:
+                wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
+            except:
+                wo_date = now
+
+            if wo_date >= week_ago:
+                cw.writerow([
+                    wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
+                    wo.job_status, wo.maintenance_type, wo.work_category, wo.start_datetime, 
+                    wo.replaced_spare_name, wo.spare_parts_qty, wo.spare_parts_cost, wo.total_expenditure
+                ])
+                
+        output = make_response(si.getvalue())
+        output.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Weekly_Summary_Report.csv"
+        output.headers["Content-type"] = "text/csv"
+        return output
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+
+@app.route('/export/monthly_report')
+def export_monthly_report():
+    if not session.get('logged_in'):
+        return redirect(url_for('login'))
+    try:
+        now = datetime.now()
+        month_ago = now - timedelta(days=30)
+        work_orders = WorkOrder.query.all()
+        
+        si = io.StringIO()
+        cw = csv.writer(si)
+        
+        cw.writerow(['STEELY R.M.I GARAGE - MONTHLY SUMMARY REPORT (LAST 30 DAYS)'])
+        cw.writerow([
+            'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
+            'Job Status', 'Maintenance Type', 'Work Category', 'Start Time', 
+            'Replaced Spare Parts', 'Total Spare Qty', 'Spare Cost (ETB)', 'Total Expenditure (ETB)'
+        ])
+        
+        for wo in work_orders:
+            try:
+                wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
+            except:
+                wo_date = now
+
+            if wo_date >= month_ago:
+                cw.writerow([
+                    wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
+                    wo.job_status, wo.maintenance_type, wo.work_category, wo.start_datetime, 
+                    wo.replaced_spare_name, wo.spare_parts_qty, wo.spare_parts_cost, wo.total_expenditure
+                ])
+                
+        output = make_response(si.getvalue())
+        output.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Monthly_Summary_Report.csv"
+        output.headers["Content-type"] = "text/csv"
+        return output
+    except Exception as e:
+        return f"Error: {str(e)}", 500
 
 @app.route('/export/master_report')
 def export_master_report():
@@ -654,26 +888,24 @@ def export_master_report():
             'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
             'Current Reading', 'Reading Unit', 'Next Due Reading', 'Job Status', 'Driver Name', 
             'Assigned Technicians', 'Start Time', 'End Time', 
-            'Maintenance Type', 'Work Category', 'Description', 
-            'Spare Qty', 'Spare Cost', 'Lube Vol', 'Lube Cost', 'Batt Cost', 'Tire Cost', 'Effective Hours (hrs)', 'Total Expenditure (ETB)'
+            'Maintenance Type', 'Work Category', 'Replaced Spare Parts', 
+            'Total Spare Qty', 'Spare Cost', 'Lube Vol', 'Lube Cost', 'Batt Cost', 'Tire Cost', 'Effective Hours (hrs)', 'Total Expenditure (ETB)'
         ])
         for wo in work_orders:
             cw.writerow([
                 wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
                 wo.current_reading, wo.reading_unit, wo.next_due_reading, wo.job_status, wo.driver_name, 
                 wo.assigned_technicians, wo.start_datetime, wo.end_datetime, 
-                wo.maintenance_type, wo.work_category, wo.description, 
+                wo.maintenance_type, wo.work_category, wo.replaced_spare_name, 
                 wo.spare_parts_qty, wo.spare_parts_cost, wo.lubricants_volume, wo.lubricants_cost, wo.batteries_cost, wo.tires_cost, wo.effective_work_hours, wo.total_expenditure
             ])
         
         cw.writerow([])
-        cw.writerow([])
-        
         cw.writerow(['=== SECTION 2: STORE SPARE INVENTORY ==='])
-        cw.writerow(['Part ID', 'Part Name', 'Specification (Spec)', 'Available Quantity', 'Location'])
+        cw.writerow(['Part ID', 'Part Name', 'Specification (Spec)', 'Available Quantity', 'Unit Cost (ETB)', 'Location'])
         for item in inventory_items:
             cw.writerow([
-                item.id, item.part_name, item.spec, item.quantity, item.location
+                item.id, item.part_name, item.spec, item.quantity, item.unit_cost, item.location
             ])
             
         output = make_response(si.getvalue())
@@ -697,15 +929,15 @@ def export_maintenance_execution():
             'Serial Number', 'Work Order No', 'Vehicle Plate', 'Vehicle Model', 
             'Current Reading', 'Reading Unit', 'Next Due Reading', 'Job Status', 'Driver Name', 
             'Assigned Technicians', 'Start Time', 'End Time', 
-            'Maintenance Type', 'Work Category', 'Description', 
-            'Spare Qty', 'Spare Cost (ETB)', 'Lube Vol (L)', 'Lube Cost (ETB)', 'Batt Cost (ETB)', 'Tire Cost (ETB)', 'Effective Hours (hrs)', 'Total Expenditure (ETB)'
+            'Maintenance Type', 'Work Category', 'Replaced Spare Parts', 
+            'Total Spare Qty', 'Spare Cost (ETB)', 'Lube Vol (L)', 'Lube Cost (ETB)', 'Batt Cost (ETB)', 'Tire Cost (ETB)', 'Effective Hours (hrs)', 'Total Expenditure (ETB)'
         ])
         for wo in work_orders:
             cw.writerow([
                 wo.serial_number, wo.work_order_no, wo.vehicle_plate, wo.vehicle_model, 
                 wo.current_reading, wo.reading_unit, wo.next_due_reading, wo.job_status, wo.driver_name, 
                 wo.assigned_technicians, wo.start_datetime, wo.end_datetime, 
-                wo.maintenance_type, wo.work_category, wo.description, 
+                wo.maintenance_type, wo.work_category, wo.replaced_spare_name, 
                 wo.spare_parts_qty, wo.spare_parts_cost, wo.lubricants_volume, wo.lubricants_cost, wo.batteries_cost, wo.tires_cost, wo.effective_work_hours, wo.total_expenditure
             ])
             
