@@ -6,11 +6,8 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v12.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v13.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SESSION_COOKIE_SECURE'] = False
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 db = SQLAlchemy(app)
 
 class WorkOrder(db.Model):
@@ -86,35 +83,78 @@ DASHBOARD_HTML = """
     <meta charset="UTF-8">
     <title>SteelY R.M.I Garage Maintnace dash Bord</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        /* በግራ በኩል ቋሚ የሳይድባር ክፍት ቦታ (Spacing) ማስተካከያ */
+        body {
+            background-color: #f4f6f9;
+        }
+        .main-layout-container {
+            margin-left: 240px; /* በግራ በኩል ክፍት ቦታ ፈጥሯል */
+            padding: 20px;
+            max-width: calc(100% - 240px);
+            transition: all 0.3s ease;
+        }
+        .sidebar-space {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 220px;
+            height: 100%;
+            background: #212529;
+            color: white;
+            padding: 20px;
+            z-index: 1000;
+        }
+        @media (max-width: 992px) {
+            .main-layout-container {
+                margin-left: 0;
+                max-width: 100%;
+            }
+            .sidebar-space {
+                display: none;
+            }
+        }
+    </style>
 </head>
-<body class="bg-light p-3">
-    <!-- የግራ ሳይድ ክፍት ቦታ እንዲኖር በ Bootstrap container ላይ margin-left ተሰጥቷል -->
-    <div class="container-fluid px-4" style="margin-left: 60px; max-width: 95%;">
+<body>
+    <!-- በግራ በኩል የሚታይ ቋሚ የክፍት ቦታ / Sidebar เมนู -->
+    <div class="sidebar-space d-none d-lg-block">
+        <h5 class="text-primary fw-bold mb-4">SteelY Garage</h5>
+        <ul class="nav flex-column gap-2">
+            <li class="nav-item"><a href="/dashboard" class="nav-link text-white active bg-primary rounded">🏠 Dashboard</a></li>
+            <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 Master Report</a></li>
+            <li class="nav-item"><a href="/export/maintenance_execution" class="nav-link text-white">📥 Execution Log</a></li>
+            <li class="nav-item mt-5"><a href="/logout" class="nav-link text-danger">🚪 Logout</a></li>
+        </ul>
+    </div>
+
+    <!-- ዋናው የድስፕሌይ ይዘት በግራ በኩል ክፍት ቦታ ተሰጥቶታል -->
+    <div class="main-layout-container">
         
         <!-- Header Section -->
         <div class="card shadow-sm p-3 mb-3 bg-white">
             <div class="row align-items-center g-2">
-                <div class="col-md-4">
+                <div class="col-md-5">
                     <h4 class="text-primary fw-bold mb-0">SteelY R.M.I Garage Maintenance</h4>
                     <small class="text-muted">Integrated Work Time, Consumables & Maintenance Platform</small>
                 </div>
-                <div class="col-md-8 d-flex justify-content-md-end align-items-center gap-2 flex-wrap">
+                <div class="col-md-7 d-flex justify-content-md-end align-items-center gap-2 flex-wrap">
                     <div class="text-start text-md-end">
                         <span class="badge bg-secondary">Dinberu Tefera</span><br>
                         <small class="text-muted fw-bold" style="font-size: 9px;">HEAD OF MECHANICAL WORKSHOP AND GARAGE</small>
                     </div>
-                    <a href="/export/master_report" class="btn btn-success btn-sm fw-bold">📊 All-in-one-master report export to excel</a>
-                    <a href="/logout" class="btn btn-danger btn-sm fw-bold">🚪 Logout</a>
+                    <a href="/export/master_report" class="btn btn-success btn-sm fw-bold">📊 Master Report Excel</a>
+                    <a href="/logout" class="btn btn-danger btn-sm fw-bold d-lg-none">🚪 Logout</a>
                 </div>
             </div>
         </div>
         
         <div class="mb-3 d-flex gap-2 flex-wrap">
             <button class="btn btn-primary btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">+ Create New Work Order</button>
-            <button class="btn dark-btn btn-dark btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Store Spare Inventory</button>
+            <button class="btn btn-dark btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Store Spare Inventory</button>
         </div>
 
-        <!-- Weekly & Monthly Summaries Row -->
+        <!-- 1. Weekly & Monthly Summaries Row -->
         <div class="row mb-3">
             <div class="col-xl-6 mb-2">
                 <div class="card shadow-sm h-100">
@@ -175,44 +215,49 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
-        <!-- Store Spare Inventory (በጎን በኩል እንዲታይ የተደረገ) -->
-        <div class="card shadow-sm mb-3">
-            <div class="card-header bg-secondary text-white py-2">
-                <h5 class="mb-0 fs-6">Store Spare Inventory</h5>
-            </div>
-            <div class="card-body p-2">
-                <div class="table-responsive">
-                    <table class="table table-bordered table-hover align-middle mb-0 small">
-                        <thead class="table-light">
-                            <tr>
-                                <th>ID</th>
-                                <th>Part Name</th>
-                                <th>Specification (Spec)</th>
-                                <th>Available Quantity</th>
-                                <th>Location</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in inventory_items %}
-                            <tr>
-                                <td>{{ item.id }}</td>
-                                <td>{{ item.part_name }}</td>
-                                <td>{{ item.spec }}</td>
-                                <td class="fw-bold {% if item.quantity < 5 %}text-danger{% else %}text-success{% endif %}">{{ item.quantity }}</td>
-                                <td>{{ item.location }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+        <!-- 2. Store Spare Inventory እና ሌሎች ክፍሎች ጎን ለጎን እንዲቀመጡ በ Row የተደረገ -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-secondary text-white py-2 d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fs-6">Store Spare Inventory</h5>
+                        <button class="btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;" data-bs-toggle="modal" data-bs-target="#addSpareModal">+ Add Item</button>
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                            <table class="table table-bordered table-hover align-middle mb-0 small">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Part Name</th>
+                                        <th>Specification (Spec)</th>
+                                        <th>Available Quantity</th>
+                                        <th>Location</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in inventory_items %}
+                                    <tr>
+                                        <td>{{ item.id }}</td>
+                                        <td>{{ item.part_name }}</td>
+                                        <td>{{ item.spec }}</td>
+                                        <td class="fw-bold {% if item.quantity < 5 %}text-danger{% else %}text-success{% endif %}">{{ item.quantity }}</td>
+                                        <td>{{ item.location }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Maintenance Execution & Work Time Log -->
+        <!-- 3. Maintenance Execution & Work Time Log -->
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-2">
                 <h5 class="mb-0 fs-6">Maintenance Execution & Work Time Log</h5>
-                <a href="/export/maintenance_execution" class="export-btn btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;">📥 Maintenance Execution to Excel</a>
+                <a href="/export/maintenance_execution" class="btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;">📥 Export Execution Log</a>
             </div>
             <div class="card-body p-2">
                 <div class="table-responsive">
@@ -501,17 +546,12 @@ def dashboard():
     ))
     
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
     return response
 
 @app.route('/logout')
 def logout():
     session.clear()
-    response = make_response(redirect(url_for('login')))
-    response.delete_cookie('session')
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    return response
+    return redirect(url_for('login'))
 
 @app.route('/add_spare', methods=['POST'])
 def add_spare():
@@ -536,7 +576,6 @@ def add_work_order():
     work_order_no = request.form.get('work_order_no')
     vehicle_plate = request.form.get('vehicle_plate')
     vehicle_model = request.form.get('vehicle_model')
-    
     current_reading = float(request.form.get('current_reading', 0.0))
     reading_unit = request.form.get('reading_unit', 'KM')
     
@@ -642,7 +681,7 @@ def export_master_report():
         output.headers["Content-type"] = "text/csv"
         return output
     except Exception as e:
-        return f"Error exporting master report: {str(e)}", 500
+        return f"Error: {str(e)}", 500
 
 @app.route('/export/maintenance_execution')
 def export_maintenance_execution():
@@ -650,7 +689,6 @@ def export_maintenance_execution():
         return redirect(url_for('login'))
     try:
         work_orders = WorkOrder.query.all()
-        
         si = io.StringIO()
         cw = csv.writer(si)
         
@@ -676,7 +714,7 @@ def export_maintenance_execution():
         output.headers["Content-type"] = "text/csv"
         return output
     except Exception as e:
-        return f"Error exporting maintenance execution: {str(e)}", 500
+        return f"Error: {str(e)}", 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
