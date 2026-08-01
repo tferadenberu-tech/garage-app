@@ -28,14 +28,25 @@ class WorkOrder(db.Model):
     work_category = db.Column(db.String(100), nullable=False) 
     description = db.Column(db.Text, nullable=True)
     
-    replaced_spare_name = db.Column(db.String(500), nullable=True, default='-')
+    replaced_spare_name = db.Column(db.String(300), nullable=True, default='-')
     spare_parts_qty = db.Column(db.Integer, nullable=False, default=0)
     spare_parts_cost = db.Column(db.Float, nullable=False, default=0.0)
     
-    lubricants_volume = db.Column(db.Float, nullable=False, default=0.0)
-    lubricants_cost = db.Column(db.Float, nullable=False, default=0.0)
+    # Lubrication (ቅባት) - Separated Quantity & Unit Cost
+    lubrication_qty = db.Column(db.Float, nullable=False, default=0.0)
+    lubrication_unit_cost = db.Column(db.Float, nullable=False, default=0.0)
+    lubrication_cost = db.Column(db.Float, nullable=False, default=0.0)
+
+    # Battery (ባትሪ) - Separated Quantity & Unit Cost
+    battery_qty = db.Column(db.Integer, nullable=False, default=0)
+    battery_unit_cost = db.Column(db.Float, nullable=False, default=0.0)
     batteries_cost = db.Column(db.Float, nullable=False, default=0.0)
+
+    # Tire (ጎማ) - Separated Quantity & Unit Cost
+    tire_qty = db.Column(db.Integer, nullable=False, default=0)
+    tire_unit_cost = db.Column(db.Float, nullable=False, default=0.0)
     tires_cost = db.Column(db.Float, nullable=False, default=0.0)
+
     effective_work_hours = db.Column(db.Float, nullable=False, default=0.0)
     total_expenditure = db.Column(db.Float, nullable=False, default=0.0)
 
@@ -60,7 +71,7 @@ LOGIN_HTML = """
 </head>
 <body class="bg-dark d-flex align-items-center justify-content-center vh-100">
     <div class="card p-4 shadow-lg" style="width: 380px; background: #1e2124; color: white; border-radius: 12px;">
-        <h3 class="text-center mb-4 text-primary fw-bold">SteelY R.M.I Garage</h3>
+        <h3 class="text-center mb-4 text-primary fw-bold">SteelY R.M.I</h3>
         {% if error %}
             <div class="alert alert-danger py-2 text-center">{{ error }}</div>
         {% endif %}
@@ -185,31 +196,64 @@ SHARED_MODAL_HTML = """
                                 <button type="button" class="btn btn-success btn-sm fw-bold mt-1" onclick="addWoSpareRow()">+ Add Row Spare Part</button>
                             </div>
 
-                            <div class="col-md-3">
-                                <label class="form-label fw-bold text-success">Total Spare Cost (ETB)</label>
+                            <!-- Total Spare Parts Cost -->
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-success">Total Spare Parts Cost (ETB)</label>
                                 <input type="text" class="form-control fw-bold text-success bg-light" id="totalSparePartsCostDisplay" readonly value="0.00">
                                 <input type="hidden" name="spare_parts_cost" id="spare_parts_cost_hidden" value="0.00">
                                 <input type="hidden" name="spare_parts_qty" id="spare_parts_qty_hidden" value="0">
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Lubricants Vol (L)</label>
-                                <input type="number" step="0.01" class="form-control" name="lubricants_volume" value="0.00" min="0">
+
+                            <div class="col-12"><hr class="my-2"></div>
+
+                            <!-- Lubrication Section (ቅባት) -->
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Lubrication Qty (L/Kg)</label>
+                                <input type="number" step="0.01" class="form-control sub-calc" name="lubrication_qty" id="lubrication_qty" value="0.00" min="0" oninput="calculateSubCosts()">
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Lubricants Cost (ETB)</label>
-                                <input type="number" step="0.01" class="form-control other-cost" name="lubricants_cost" id="lubricants_cost" value="0.00" min="0" oninput="calculateGrandTotal()">
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Lubrication Unit Cost (ETB)</label>
+                                <input type="number" step="0.01" class="form-control sub-calc" name="lubrication_unit_cost" id="lubrication_unit_cost" value="0.00" min="0" oninput="calculateSubCosts()">
                             </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Batteries Cost (ETB)</label>
-                                <input type="number" step="0.01" class="form-control other-cost" name="batteries_cost" id="batteries_cost" value="0.00" min="0" oninput="calculateGrandTotal()">
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-secondary">Lubrication Total (ETB)</label>
+                                <input type="text" class="form-control bg-light fw-bold" id="lubrication_total_display" readonly value="0.00">
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Tires Cost (ETB)</label>
-                                <input type="number" step="0.01" class="form-control other-cost" name="tires_cost" id="tires_cost" value="0.00" min="0" oninput="calculateGrandTotal()">
+
+                            <!-- Battery Section (ባትሪ) -->
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Battery Qty (Pcs)</label>
+                                <input type="number" class="form-control sub-calc" name="battery_qty" id="battery_qty" value="0" min="0" oninput="calculateSubCosts()">
                             </div>
-                            <div class="col-md-6">
-                                <label class="form-label fw-bold text-danger">Grand Total Expenditure (ETB)</label>
-                                <input type="text" class="form-control fw-bold text-danger bg-light fs-5" id="grandTotalDisplay" readonly value="0.00">
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Battery Unit Cost (ETB)</label>
+                                <input type="number" step="0.01" class="form-control sub-calc" name="battery_unit_cost" id="battery_unit_cost" value="0.00" min="0" oninput="calculateSubCosts()">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-secondary">Battery Total (ETB)</label>
+                                <input type="text" class="form-control bg-light fw-bold" id="battery_total_display" readonly value="0.00">
+                            </div>
+
+                            <!-- Tire Section (ጎማ) -->
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Tire Qty (Pcs)</label>
+                                <input type="number" class="form-control sub-calc" name="tire_qty" id="tire_qty" value="0" min="0" oninput="calculateSubCosts()">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">Tire Unit Cost (ETB)</label>
+                                <input type="number" step="0.01" class="form-control sub-calc" name="tire_unit_cost" id="tire_unit_cost" value="0.00" min="0" oninput="calculateSubCosts()">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold text-secondary">Tire Total (ETB)</label>
+                                <input type="text" class="form-control bg-light fw-bold" id="tire_total_display" readonly value="0.00">
+                            </div>
+
+                            <div class="col-12"><hr class="my-2"></div>
+
+                            <!-- Grand Total Expenditure -->
+                            <div class="col-md-12 text-end">
+                                <label class="form-label fw-bold text-danger fs-5 me-2">Grand Total Expenditure (ETB):</label>
+                                <input type="text" class="form-control fw-bold text-danger bg-light fs-4 d-inline-block text-center" id="grandTotalDisplay" readonly value="0.00" style="width: 250px;">
                             </div>
                         </div>
                     </div>
@@ -258,6 +302,25 @@ SHARED_MODAL_HTML = """
             calculateGrandTotal();
         }
 
+        function calculateSubCosts() {
+            let lubeQty = parseFloat(document.getElementById('lubrication_qty').value) || 0;
+            let lubeUCost = parseFloat(document.getElementById('lubrication_unit_cost').value) || 0;
+            let lubeTot = lubeQty * lubeUCost;
+            document.getElementById('lubrication_total_display').value = lubeTot.toFixed(2);
+
+            let battQty = parseFloat(document.getElementById('battery_qty').value) || 0;
+            let battUCost = parseFloat(document.getElementById('battery_unit_cost').value) || 0;
+            let battTot = battQty * battUCost;
+            document.getElementById('battery_total_display').value = battTot.toFixed(2);
+
+            let tireQty = parseFloat(document.getElementById('tire_qty').value) || 0;
+            let tireUCost = parseFloat(document.getElementById('tire_unit_cost').value) || 0;
+            let tireTot = tireQty * tireUCost;
+            document.getElementById('tire_total_display').value = tireTot.toFixed(2);
+
+            calculateGrandTotal();
+        }
+
         function calculateGrandTotal() {
             let rows = document.querySelectorAll('#woSpareTableBody tr');
             let totalSpareCost = 0;
@@ -274,11 +337,19 @@ SHARED_MODAL_HTML = """
             document.getElementById('spare_parts_cost_hidden').value = totalSpareCost.toFixed(2);
             document.getElementById('spare_parts_qty_hidden').value = totalSpareQty;
 
-            let lubeCost = parseFloat(document.getElementById('lubricants_cost').value) || 0;
-            let battCost = parseFloat(document.getElementById('batteries_cost').value) || 0;
-            let tireCost = parseFloat(document.getElementById('tires_cost').value) || 0;
+            let lubeQty = parseFloat(document.getElementById('lubrication_qty').value) || 0;
+            let lubeUCost = parseFloat(document.getElementById('lubrication_unit_cost').value) || 0;
+            let lubeTot = lubeQty * lubeUCost;
 
-            let grandTotal = totalSpareCost + lubeCost + battCost + tireCost;
+            let battQty = parseFloat(document.getElementById('battery_qty').value) || 0;
+            let battUCost = parseFloat(document.getElementById('battery_unit_cost').value) || 0;
+            let battTot = battQty * battUCost;
+
+            let tireQty = parseFloat(document.getElementById('tire_qty').value) || 0;
+            let tireUCost = parseFloat(document.getElementById('tire_unit_cost').value) || 0;
+            let tireTot = tireQty * tireUCost;
+
+            let grandTotal = totalSpareCost + lubeTot + battTot + tireTot;
             document.getElementById('grandTotalDisplay').value = grandTotal.toFixed(2);
         }
     </script>
@@ -308,7 +379,7 @@ DASHBOARD_HTML = """
             <li class="nav-item"><a href="/dashboard" class="nav-link text-white active bg-primary rounded">🏠 Dashboard</a></li>
             <li class="nav-item"><a href="/inventory" class="nav-link text-white">📦 Store Inventory</a></li>
             <li class="nav-item"><a href="#" class="nav-link text-success fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">➕ Create New Work Order</a></li>
-            <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 All-In-One-Master Report</a></li>
+            <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 All-In-One-Master Report to Excel</a></li>
             <li class="nav-item"><a href="/export/maintenance_execution" class="nav-link text-white">📥 Execution Log</a></li>
             <li class="nav-item mt-5"><a href="/logout" class="nav-link text-danger">🚪 Logout</a></li>
         </ul>
@@ -328,7 +399,7 @@ DASHBOARD_HTML = """
                         <span class="badge bg-secondary">Dinberu Tefera</span><br>
                         <small class="text-muted fw-bold" style="font-size: 9px;">HEAD OF MECHANICAL WORKSHOP AND GARAGE</small>
                     </div>
-                    <a href="/export/master_report" class="btn btn-success btn-sm fw-bold">📊 All-In-One-Master Report</a>
+                    <a href="/export/master_report" class="btn btn-success btn-sm fw-bold">📊 All-In-One-Master Report to Excel</a>
                     <a href="/logout" class="btn btn-danger btn-sm fw-bold d-lg-none">🚪 Logout</a>
                 </div>
             </div>
@@ -360,8 +431,12 @@ DASHBOARD_HTML = """
                         <div class="row small text-muted">
                             <div class="col-6">Spare Qty: <strong>{{ weekly_spare_qty }} Pcs</strong></div>
                             <div class="col-6">Spare Cost: <strong>ETB {{ "%.2f"|format(weekly_spare_cost) }}</strong></div>
-                            <div class="col-6">Lubricants: <strong>{{ "%.1f"|format(weekly_lube_vol) }} L</strong></div>
-                            <div class="col-6">Lube Cost: <strong>ETB {{ "%.2f"|format(weekly_lube_cost) }}</strong></div>
+                            <div class="col-6">Lubrication Qty: <strong>{{ "%.1f"|format(weekly_lube_qty) }}</strong></div>
+                            <div class="col-6">Lubrication Cost: <strong>ETB {{ "%.2f"|format(weekly_lube_cost) }}</strong></div>
+                            <div class="col-6">Battery Qty: <strong>{{ weekly_batt_qty }} Pcs</strong></div>
+                            <div class="col-6">Battery Cost: <strong>ETB {{ "%.2f"|format(weekly_batt_cost) }}</strong></div>
+                            <div class="col-6">Tire Qty: <strong>{{ weekly_tire_qty }} Pcs</strong></div>
+                            <div class="col-6">Tire Cost: <strong>ETB {{ "%.2f"|format(weekly_tire_cost) }}</strong></div>
                         </div>
                         <div class="mt-2 pt-2 border-top fw-bold text-dark">
                             Total Expenditure: ETB {{ "%.2f"|format(weekly_total_exp) }}
@@ -389,8 +464,12 @@ DASHBOARD_HTML = """
                         <div class="row small text-muted">
                             <div class="col-6">Spare Qty: <strong>{{ monthly_spare_qty }} Pcs</strong></div>
                             <div class="col-6">Spare Cost: <strong>ETB {{ "%.2f"|format(monthly_spare_cost) }}</strong></div>
-                            <div class="col-6">Lubricants: <strong>{{ "%.1f"|format(monthly_lube_vol) }} L</strong></div>
-                            <div class="col-6">Lube Cost: <strong>ETB {{ "%.2f"|format(monthly_lube_cost) }}</strong></div>
+                            <div class="col-6">Lubrication Qty: <strong>{{ "%.1f"|format(monthly_lube_qty) }}</strong></div>
+                            <div class="col-6">Lubrication Cost: <strong>ETB {{ "%.2f"|format(monthly_lube_cost) }}</strong></div>
+                            <div class="col-6">Battery Qty: <strong>{{ monthly_batt_qty }} Pcs</strong></div>
+                            <div class="col-6">Battery Cost: <strong>ETB {{ "%.2f"|format(monthly_batt_cost) }}</strong></div>
+                            <div class="col-6">Tire Qty: <strong>{{ monthly_tire_qty }} Pcs</strong></div>
+                            <div class="col-6">Tire Cost: <strong>ETB {{ "%.2f"|format(monthly_tire_cost) }}</strong></div>
                         </div>
                         <div class="mt-2 pt-2 border-top fw-bold text-success">
                             Total Expenditure: ETB {{ "%.2f"|format(monthly_total_exp) }}
@@ -407,7 +486,6 @@ DASHBOARD_HTML = """
                 <a href="/export/maintenance_execution" class="btn btn-light btn-sm text-dark fw-bold py-0" style="font-size: 11px;">📥 Export Execution Log</a>
             </div>
             <div class="card-body p-3">
-                <!-- From Date to To Date Filter Form -->
                 <form method="GET" action="/dashboard" class="row g-2 align-items-center mb-3 bg-light p-2 rounded border">
                     <div class="col-md-auto">
                         <label class="form-label mb-0 fw-bold fs-7">From Date:</label>
@@ -432,9 +510,12 @@ DASHBOARD_HTML = """
                                 <th>Vehicle Model & Plate</th>
                                 <th>Next Due</th>
                                 <th>Maintenance Type</th>
-                                <th>Replaced Spare Parts & Qty</th>
-                                <th>Spare Cost (ETB)</th>
-                                <th>Total Cost (ETB)</th>
+                                <th>Replaced Spares</th>
+                                <th>Spare Cost</th>
+                                <th>Lube Cost</th>
+                                <th>Battery Cost</th>
+                                <th>Tire Cost</th>
+                                <th>Total Cost</th>
                                 <th style="text-align: center;">Action</th>
                             </tr>
                         </thead>
@@ -448,6 +529,9 @@ DASHBOARD_HTML = """
                                 <td><span class="badge bg-info text-dark">{{ wo.maintenance_type }}</span></td>
                                 <td class="fw-bold text-primary">{{ wo.replaced_spare_name }}</td>
                                 <td>{{ "%.2f"|format(wo.spare_parts_cost) }}</td>
+                                <td>{{ "%.2f"|format(wo.lubrication_cost) }}</td>
+                                <td>{{ "%.2f"|format(wo.batteries_cost) }}</td>
+                                <td>{{ "%.2f"|format(wo.tires_cost) }}</td>
                                 <td class="fw-bold text-success">{{ "%.2f"|format(wo.total_expenditure) }} ETB</td>
                                 <td class="text-center">
                                     <form method="POST" action="/delete_work_order/{{ wo.id }}" onsubmit="return confirm('Are you sure you want to delete this work order?');" style="margin: 0;">
@@ -457,7 +541,7 @@ DASHBOARD_HTML = """
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="9" class="text-center text-muted">No records found for the selected date range.</td>
+                                <td colspan="12" class="text-center text-muted">No records found for the selected date range.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -498,7 +582,7 @@ INVENTORY_HTML = """
             <li class="nav-item"><a href="/dashboard" class="nav-link text-white">🏠 Dashboard</a></li>
             <li class="nav-item"><a href="/inventory" class="nav-link text-white active bg-primary rounded">📦 Store Inventory</a></li>
             <li class="nav-item"><a href="#" class="nav-link text-success fw-bold" data-bs-toggle="modal" data-bs-target="#addWorkOrderModal">➕ Create New Work Order</a></li>
-            <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 All-In-One-Master Report</a></li>
+            <li class="nav-item"><a href="/export/master_report" class="nav-link text-white">📊 All-In-One-Master Report to Excel</a></li>
             <li class="nav-item"><a href="/export/maintenance_execution" class="nav-link text-white">📥 Execution Log</a></li>
             <li class="nav-item mt-5"><a href="/logout" class="nav-link text-danger">🚪 Logout</a></li>
         </ul>
@@ -688,11 +772,11 @@ def dashboard():
     month_ago = now - timedelta(days=30)
 
     weekly_jobs = weekly_hours = weekly_spare_qty = weekly_spare_cost = 0.0
-    weekly_lube_vol = weekly_lube_cost = weekly_total_exp = 0.0
+    weekly_lube_qty = weekly_lube_cost = weekly_batt_qty = weekly_batt_cost = weekly_tire_qty = weekly_tire_cost = weekly_total_exp = 0.0
     weekly_cm = weekly_pm = weekly_insp = 0
 
     monthly_jobs = monthly_hours = monthly_spare_qty = monthly_spare_cost = 0.0
-    monthly_lube_vol = monthly_lube_cost = monthly_total_exp = 0.0
+    monthly_lube_qty = monthly_lube_cost = monthly_batt_qty = monthly_batt_cost = monthly_tire_qty = monthly_tire_cost = monthly_total_exp = 0.0
     monthly_cm = monthly_pm = monthly_insp = 0
 
     all_orders = WorkOrder.query.all()
@@ -709,8 +793,12 @@ def dashboard():
             monthly_hours += wo.effective_work_hours
             monthly_spare_qty += wo.spare_parts_qty
             monthly_spare_cost += wo.spare_parts_cost
-            monthly_lube_vol += wo.lubricants_volume
-            monthly_lube_cost += wo.lubricants_cost
+            monthly_lube_qty += wo.lubrication_qty
+            monthly_lube_cost += wo.lubrication_cost
+            monthly_batt_qty += wo.battery_qty
+            monthly_batt_cost += wo.batteries_cost
+            monthly_tire_qty += wo.tire_qty
+            monthly_tire_cost += wo.tires_cost
             monthly_total_exp += wo.total_expenditure
             
             if m_type == 'CM':
@@ -725,8 +813,12 @@ def dashboard():
             weekly_hours += wo.effective_work_hours
             weekly_spare_qty += wo.spare_parts_qty
             weekly_spare_cost += wo.spare_parts_cost
-            weekly_lube_vol += wo.lubricants_volume
-            weekly_lube_cost += wo.lubricants_cost
+            weekly_lube_qty += wo.lubrication_qty
+            weekly_lube_cost += wo.lubrication_cost
+            weekly_batt_qty += wo.battery_qty
+            weekly_batt_cost += wo.batteries_cost
+            weekly_tire_qty += wo.tire_qty
+            weekly_tire_cost += wo.tires_cost
             weekly_total_exp += wo.total_expenditure
 
             if m_type == 'CM':
@@ -740,10 +832,16 @@ def dashboard():
         DASHBOARD_HTML, 
         work_orders=work_orders, 
         weekly_jobs=int(weekly_jobs), weekly_hours=weekly_hours, weekly_spare_qty=int(weekly_spare_qty), weekly_spare_cost=weekly_spare_cost,
-        weekly_lube_vol=weekly_lube_vol, weekly_lube_cost=weekly_lube_cost, weekly_total_exp=weekly_total_exp,
+        weekly_lube_qty=weekly_lube_qty, weekly_lube_cost=weekly_lube_cost, 
+        weekly_batt_qty=int(weekly_batt_qty), weekly_batt_cost=weekly_batt_cost,
+        weekly_tire_qty=int(weekly_tire_qty), weekly_tire_cost=weekly_tire_cost,
+        weekly_total_exp=weekly_total_exp,
         weekly_cm=weekly_cm, weekly_pm=weekly_pm, weekly_insp=weekly_insp,
         monthly_jobs=int(monthly_jobs), monthly_hours=monthly_hours, monthly_spare_qty=int(monthly_spare_qty), monthly_spare_cost=monthly_spare_cost,
-        monthly_lube_vol=monthly_lube_vol, monthly_lube_cost=monthly_lube_cost, monthly_total_exp=monthly_total_exp,
+        monthly_lube_qty=monthly_lube_qty, monthly_lube_cost=monthly_lube_cost,
+        monthly_batt_qty=int(monthly_batt_qty), monthly_batt_cost=monthly_batt_cost,
+        monthly_tire_qty=int(monthly_tire_qty), monthly_tire_cost=monthly_tire_cost,
+        monthly_total_exp=monthly_total_exp,
         monthly_cm=monthly_cm, monthly_pm=monthly_pm, monthly_insp=monthly_insp,
         shared_modal=SHARED_MODAL_HTML
     ))
@@ -836,10 +934,18 @@ def add_work_order():
             
     replaced_spare_name = ", ".join(spare_summary_list) if spare_summary_list else "-"
     
-    lubricants_volume = float(request.form.get('lubricants_volume', 0.0))
-    lubricants_cost = float(request.form.get('lubricants_cost', 0.0))
-    batteries_cost = float(request.form.get('batteries_cost', 0.0))
-    tires_cost = float(request.form.get('tires_cost', 0.0))
+    # Consumables separate calculations
+    lubrication_qty = float(request.form.get('lubrication_qty', 0.0))
+    lubrication_unit_cost = float(request.form.get('lubrication_unit_cost', 0.0))
+    lubrication_cost = lubrication_qty * lubrication_unit_cost
+
+    battery_qty = int(request.form.get('battery_qty', 0))
+    battery_unit_cost = float(request.form.get('battery_unit_cost', 0.0))
+    batteries_cost = battery_qty * battery_unit_cost
+
+    tire_qty = int(request.form.get('tire_qty', 0))
+    tire_unit_cost = float(request.form.get('tire_unit_cost', 0.0))
+    tires_cost = tire_qty * tire_unit_cost
     
     effective_hours = 0.0
     try:
@@ -850,7 +956,7 @@ def add_work_order():
     except:
         effective_hours = 2.0
 
-    total_expenditure = total_spare_cost + lubricants_cost + batteries_cost + tires_cost
+    total_expenditure = total_spare_cost + lubrication_cost + batteries_cost + tires_cost
     
     new_wo = WorkOrder(
         serial_number=serial_number,
@@ -871,9 +977,14 @@ def add_work_order():
         replaced_spare_name=replaced_spare_name,
         spare_parts_qty=total_spare_qty,
         spare_parts_cost=total_spare_cost,
-        lubricants_volume=lubricants_volume,
-        lubricants_cost=lubricants_cost,
+        lubrication_qty=lubrication_qty,
+        lubrication_unit_cost=lubrication_unit_cost,
+        lubrication_cost=lubrication_cost,
+        battery_qty=battery_qty,
+        battery_unit_cost=battery_unit_cost,
         batteries_cost=batteries_cost,
+        tire_qty=tire_qty,
+        tire_unit_cost=tire_unit_cost,
         tires_cost=tires_cost,
         effective_work_hours=effective_hours,
         total_expenditure=total_expenditure
@@ -920,6 +1031,15 @@ def export_weekly_report():
                     'Replaced Spare Parts': wo.replaced_spare_name,
                     'Total Spare Qty': wo.spare_parts_qty,
                     'Spare Cost (ETB)': wo.spare_parts_cost,
+                    'Lubrication Qty': wo.lubrication_qty,
+                    'Lubrication Unit Cost': wo.lubrication_unit_cost,
+                    'Lubrication Cost': wo.lubrication_cost,
+                    'Battery Qty': wo.battery_qty,
+                    'Battery Unit Cost': wo.battery_unit_cost,
+                    'Battery Cost': wo.batteries_cost,
+                    'Tire Qty': wo.tire_qty,
+                    'Tire Unit Cost': wo.tire_unit_cost,
+                    'Tire Cost': wo.tires_cost,
                     'Total Expenditure (ETB)': wo.total_expenditure
                 })
                 
@@ -965,6 +1085,15 @@ def export_monthly_report():
                     'Replaced Spare Parts': wo.replaced_spare_name,
                     'Total Spare Qty': wo.spare_parts_qty,
                     'Spare Cost (ETB)': wo.spare_parts_cost,
+                    'Lubrication Qty': wo.lubrication_qty,
+                    'Lubrication Unit Cost': wo.lubrication_unit_cost,
+                    'Lubrication Cost': wo.lubrication_cost,
+                    'Battery Qty': wo.battery_qty,
+                    'Battery Unit Cost': wo.battery_unit_cost,
+                    'Battery Cost': wo.batteries_cost,
+                    'Tire Qty': wo.tire_qty,
+                    'Tire Unit Cost': wo.tire_unit_cost,
+                    'Tire Cost': wo.tires_cost,
                     'Total Expenditure (ETB)': wo.total_expenditure
                 })
                 
@@ -991,17 +1120,11 @@ def export_master_report():
         month_ago = now - timedelta(days=30)
         
         work_orders = WorkOrder.query.all()
-        inventory_items = SpareInventory.query.all()
         
-        # 1. Weekly Summary Data
-        weekly_data = []
-        for wo in work_orders:
-            try:
-                wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
-            except:
-                wo_date = now
-            if wo_date >= week_ago:
-                weekly_data.append({
+        def build_wo_list(filtered_orders):
+            res = []
+            for wo in filtered_orders:
+                res.append({
                     'Serial Number': wo.serial_number,
                     'Work Order No': wo.work_order_no,
                     'Vehicle Plate': wo.vehicle_plate,
@@ -1013,35 +1136,25 @@ def export_master_report():
                     'Replaced Spare Parts': wo.replaced_spare_name,
                     'Total Spare Qty': wo.spare_parts_qty,
                     'Spare Cost (ETB)': wo.spare_parts_cost,
+                    'Lubrication Qty': wo.lubrication_qty,
+                    'Lubrication Unit Cost': wo.lubrication_unit_cost,
+                    'Lubrication Cost': wo.lubrication_cost,
+                    'Battery Qty': wo.battery_qty,
+                    'Battery Unit Cost': wo.battery_unit_cost,
+                    'Battery Cost': wo.batteries_cost,
+                    'Tire Qty': wo.tire_qty,
+                    'Tire Unit Cost': wo.tire_unit_cost,
+                    'Tire Cost': wo.tires_cost,
                     'Total Expenditure (ETB)': wo.total_expenditure
                 })
-        df_weekly = pd.DataFrame(weekly_data)
+            return res
 
-        # 2. Monthly Summary Data
-        monthly_data = []
-        for wo in work_orders:
-            try:
-                wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
-            except:
-                wo_date = now
-            if wo_date >= month_ago:
-                monthly_data.append({
-                    'Serial Number': wo.serial_number,
-                    'Work Order No': wo.work_order_no,
-                    'Vehicle Plate': wo.vehicle_plate,
-                    'Vehicle Model': wo.vehicle_model,
-                    'Job Status': wo.job_status,
-                    'Maintenance Type': wo.maintenance_type,
-                    'Work Category': wo.work_category,
-                    'Start Time': wo.start_datetime,
-                    'Replaced Spare Parts': wo.replaced_spare_name,
-                    'Total Spare Qty': wo.spare_parts_qty,
-                    'Spare Cost (ETB)': wo.spare_parts_cost,
-                    'Total Expenditure (ETB)': wo.total_expenditure
-                })
-        df_monthly = pd.DataFrame(monthly_data)
+        weekly_filtered = [wo for wo in work_orders if (lambda d: d >= week_ago)(datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M') if 'start_datetime' in dir(wo) and wo.start_datetime else now)]
+        monthly_filtered = [wo for wo in work_orders if (lambda d: d >= month_ago)(datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M') if 'start_datetime' in dir(wo) and wo.start_datetime else now)]
 
-        # 3. Execution Log Data
+        df_weekly = pd.DataFrame(build_wo_list(weekly_filtered))
+        df_monthly = pd.DataFrame(build_wo_list(monthly_filtered))
+
         exec_data = []
         for wo in work_orders:
             exec_data.append({
@@ -1062,35 +1175,25 @@ def export_master_report():
                 'Replaced Spare Parts': wo.replaced_spare_name,
                 'Total Spare Qty': wo.spare_parts_qty,
                 'Spare Cost (ETB)': wo.spare_parts_cost,
-                'Lube Vol (L)': wo.lubricants_volume,
-                'Lube Cost (ETB)': wo.lubricants_cost,
-                'Batt Cost (ETB)': wo.batteries_cost,
-                'Tire Cost (ETB)': wo.tires_cost,
+                'Lubrication Qty': wo.lubrication_qty,
+                'Lubrication Unit Cost': wo.lubrication_unit_cost,
+                'Lubrication Cost': wo.lubrication_cost,
+                'Battery Qty': wo.battery_qty,
+                'Battery Unit Cost': wo.battery_unit_cost,
+                'Battery Cost': wo.batteries_cost,
+                'Tire Qty': wo.tire_qty,
+                'Tire Unit Cost': wo.tire_unit_cost,
+                'Tire Cost': wo.tires_cost,
                 'Effective Hours (hrs)': wo.effective_work_hours,
                 'Total Expenditure (ETB)': wo.total_expenditure
             })
         df_exec = pd.DataFrame(exec_data)
 
-        # 4. Store Inventory Data
-        inv_data = []
-        for item in inventory_items:
-            inv_data.append({
-                'ID': item.id,
-                'Part Name': item.part_name,
-                'Specification': item.spec,
-                'Quantity': item.quantity,
-                'Unit Cost (ETB)': item.unit_cost,
-                'Location': item.location
-            })
-        df_inv = pd.DataFrame(inv_data)
-
-        # Write to Multi-Sheet Excel using Pandas & Openpyxl
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
             df_weekly.to_excel(writer, index=False, sheet_name='weekly summary report')
             df_monthly.to_excel(writer, index=False, sheet_name='monthly summary report')
             df_exec.to_excel(writer, index=False, sheet_name='excution log')
-            df_inv.to_excel(writer, index=False, sheet_name='store inventory')
             
         output.seek(0)
         
@@ -1127,10 +1230,15 @@ def export_maintenance_execution():
                 'Replaced Spare Parts': wo.replaced_spare_name,
                 'Total Spare Qty': wo.spare_parts_qty,
                 'Spare Cost (ETB)': wo.spare_parts_cost,
-                'Lube Vol (L)': wo.lubricants_volume,
-                'Lube Cost (ETB)': wo.lubricants_cost,
-                'Batt Cost (ETB)': wo.batteries_cost,
-                'Tire Cost (ETB)': wo.tires_cost,
+                'Lubrication Qty': wo.lubrication_qty,
+                'Lubrication Unit Cost': wo.lubrication_unit_cost,
+                'Lubrication Cost': wo.lubrication_cost,
+                'Battery Qty': wo.battery_qty,
+                'Battery Unit Cost': wo.battery_unit_cost,
+                'Battery Cost': wo.batteries_cost,
+                'Tire Qty': wo.tire_qty,
+                'Tire Unit Cost': wo.tire_unit_cost,
+                'Tire Cost': wo.tires_cost,
                 'Effective Hours (hrs)': wo.effective_work_hours,
                 'Total Expenditure (ETB)': wo.total_expenditure
             })
