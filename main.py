@@ -6,7 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v23.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v24.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
