@@ -6,7 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v24.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v25.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -193,7 +193,7 @@ SHARED_MODAL_HTML = """
 
                             <!-- 2. LUBRICATION SECTION -->
                             <div class="col-12 mt-3">
-                                <label class="form-label fw-bold text-secondary fs-6">2. Lubrication List (Multi-Row & Auto Cost)</label>
+                                <label class="form-label fw-bold text-secondary fs-6">2. Lubrication List (Multi-Row, Liters & Auto Cost)</label>
                                 <div class="table-responsive">
                                     <table class="table table-bordered align-middle" id="woLubeTable">
                                         <thead class="table-secondary">
@@ -221,7 +221,7 @@ SHARED_MODAL_HTML = """
 
                             <!-- 3. BATTERY SECTION -->
                             <div class="col-12 mt-3">
-                                <label class="form-label fw-bold text-dark fs-6">3. Batteries List (Multi-Row & Auto Cost)</label>
+                                <label class="form-label fw-bold text-dark fs-6">3. Batteries List (Multi-Row, Qty & Auto Cost)</label>
                                 <div class="table-responsive">
                                     <table class="table table-bordered align-middle" id="woBattTable">
                                         <thead class="table-dark">
@@ -249,7 +249,7 @@ SHARED_MODAL_HTML = """
 
                             <!-- 4. TIRE SECTION -->
                             <div class="col-12 mt-3">
-                                <label class="form-label fw-bold text-success fs-6">4. Tires List (Multi-Row & Auto Cost)</label>
+                                <label class="form-label fw-bold text-success fs-6">4. Tires List (Multi-Row, Qty & Auto Cost)</label>
                                 <div class="table-responsive">
                                     <table class="table table-bordered align-middle" id="woTireTable">
                                         <thead class="table-success text-dark">
