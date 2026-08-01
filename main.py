@@ -6,7 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v20.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v21.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -26,25 +26,21 @@ class WorkOrder(db.Model):
     end_datetime = db.Column(db.String(50), nullable=False)
     maintenance_type = db.Column(db.String(50), nullable=False) 
     work_category = db.Column(db.String(100), nullable=False) 
-    description = db.Column(db.Text, nullable=True)
     
-    replaced_spare_name = db.Column(db.String(300), nullable=True, default='-')
+    replaced_spare_name = db.Column(db.String(500), nullable=True, default='-')
     spare_parts_qty = db.Column(db.Integer, nullable=False, default=0)
     spare_parts_cost = db.Column(db.Float, nullable=False, default=0.0)
     
-    # Lubrication (ቅባት) - Separated Quantity & Unit Cost
+    lubrication_details = db.Column(db.String(500), nullable=True, default='-')
     lubrication_qty = db.Column(db.Float, nullable=False, default=0.0)
-    lubrication_unit_cost = db.Column(db.Float, nullable=False, default=0.0)
     lubrication_cost = db.Column(db.Float, nullable=False, default=0.0)
 
-    # Battery (ባትሪ) - Separated Quantity & Unit Cost
+    battery_details = db.Column(db.String(500), nullable=True, default='-')
     battery_qty = db.Column(db.Integer, nullable=False, default=0)
-    battery_unit_cost = db.Column(db.Float, nullable=False, default=0.0)
     batteries_cost = db.Column(db.Float, nullable=False, default=0.0)
 
-    # Tire (ጎማ) - Separated Quantity & Unit Cost
+    tire_details = db.Column(db.String(500), nullable=True, default='-')
     tire_qty = db.Column(db.Integer, nullable=False, default=0)
-    tire_unit_cost = db.Column(db.Float, nullable=False, default=0.0)
     tires_cost = db.Column(db.Float, nullable=False, default=0.0)
 
     effective_work_hours = db.Column(db.Float, nullable=False, default=0.0)
@@ -101,7 +97,7 @@ SHARED_MODAL_HTML = """
                         <h5 class="modal-title">Create New Work Order (+5000 KM / +250 Hours Auto Due)</h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
-                    <div class="modal-body">
+                    <div class="modal-body" style="max-height: 75vh; overflow-y: auto;">
                         <div class="row g-3">
                             <div class="col-md-3">
                                 <label class="form-label">Serial Number (S/N)</label>
@@ -167,8 +163,9 @@ SHARED_MODAL_HTML = """
                                 <input type="text" class="form-control" name="work_category" required placeholder="e.g. Engine Maintenance">
                             </div>
 
+                            <!-- 1. SPARE PARTS SECTION -->
                             <div class="col-12 mt-3">
-                                <label class="form-label fw-bold text-primary fs-6">Replaced Spare Parts List (Multi-Row & Auto Cost)</label>
+                                <label class="form-label fw-bold text-primary fs-6">1. Spare Parts Replacement List</label>
                                 <div class="table-responsive">
                                     <table class="table table-bordered align-middle" id="woSpareTable">
                                         <thead class="table-dark">
@@ -182,73 +179,103 @@ SHARED_MODAL_HTML = """
                                         </thead>
                                         <tbody id="woSpareTableBody">
                                             <tr>
-                                                <td><input type="text" class="form-control" name="spare_name[]" required placeholder="e.g. Oil Filter / Brake Pad"></td>
-                                                <td><input type="number" class="form-control spare-qty" name="spare_qty[]" required min="1" value="1" oninput="calculateRowAndTotal(this)"></td>
-                                                <td><input type="number" step="0.01" class="form-control spare-cost" name="spare_unit_cost[]" required min="0" value="0.00" oninput="calculateRowAndTotal(this)"></td>
-                                                <td><input type="text" class="form-control bg-light row-total" readonly value="0.00"></td>
-                                                <td class="text-center">
-                                                    <button type="button" class="btn btn-danger btn-sm" onclick="removeWoSpareRow(this)">X</button>
-                                                </td>
+                                                <td><input type="text" class="form-control" name="spare_name[]" placeholder="e.g. Oil Filter"></td>
+                                                <td><input type="number" class="form-control spare-qty" name="spare_qty[]" min="1" value="1" oninput="calculateAll()"></td>
+                                                <td><input type="number" step="0.01" class="form-control spare-cost" name="spare_unit_cost[]" min="0" value="0.00" oninput="calculateAll()"></td>
+                                                <td><input type="text" class="form-control bg-light spare-row-total" readonly value="0.00"></td>
+                                                <td class="text-center"><button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">X</button></td>
                                             </tr>
                                         </tbody>
                                     </table>
                                 </div>
-                                <button type="button" class="btn btn-success btn-sm fw-bold mt-1" onclick="addWoSpareRow()">+ Add Row Spare Part</button>
+                                <button type="button" class="btn btn-success btn-sm fw-bold" onclick="addSpareRow()">+ Add Spare Part Row</button>
                             </div>
 
-                            <!-- Total Spare Parts Cost -->
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold text-success">Total Spare Parts Cost (ETB)</label>
-                                <input type="text" class="form-control fw-bold text-success bg-light" id="totalSparePartsCostDisplay" readonly value="0.00">
-                                <input type="hidden" name="spare_parts_cost" id="spare_parts_cost_hidden" value="0.00">
-                                <input type="hidden" name="spare_parts_qty" id="spare_parts_qty_hidden" value="0">
+                            <!-- 2. LUBRICATION SECTION -->
+                            <div class="col-12 mt-3">
+                                <label class="form-label fw-bold text-secondary fs-6">2. Lubrication (ቅባት) List</label>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered align-middle" id="woLubeTable">
+                                        <thead class="table-secondary">
+                                            <tr>
+                                                <th>Lubricant Name / Type</th>
+                                                <th style="width: 130px;">Quantity (L/Kg)</th>
+                                                <th style="width: 150px;">Unit Cost (ETB)</th>
+                                                <th style="width: 150px;">Total Cost (ETB)</th>
+                                                <th style="width: 80px; text-align: center;">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="woLubeTableBody">
+                                            <tr>
+                                                <td><input type="text" class="form-control" name="lube_name[]" placeholder="e.g. Engine Oil 15W40"></td>
+                                                <td><input type="number" step="0.01" class="form-control lube-qty" name="lube_qty[]" min="0" value="0" oninput="calculateAll()"></td>
+                                                <td><input type="number" step="0.01" class="form-control lube-cost" name="lube_unit_cost[]" min="0" value="0.00" oninput="calculateAll()"></td>
+                                                <td><input type="text" class="form-control bg-light lube-row-total" readonly value="0.00"></td>
+                                                <td class="text-center"><button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">X</button></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <button type="button" class="btn btn-secondary btn-sm fw-bold" onclick="addLubeRow()">+ Add Lubrication Row</button>
                             </div>
 
-                            <div class="col-12"><hr class="my-2"></div>
-
-                            <!-- Lubrication Section (ቅባት) -->
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">Lubrication Qty (L/Kg)</label>
-                                <input type="number" step="0.01" class="form-control sub-calc" name="lubrication_qty" id="lubrication_qty" value="0.00" min="0" oninput="calculateSubCosts()">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">Lubrication Unit Cost (ETB)</label>
-                                <input type="number" step="0.01" class="form-control sub-calc" name="lubrication_unit_cost" id="lubrication_unit_cost" value="0.00" min="0" oninput="calculateSubCosts()">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold text-secondary">Lubrication Total (ETB)</label>
-                                <input type="text" class="form-control bg-light fw-bold" id="lubrication_total_display" readonly value="0.00">
-                            </div>
-
-                            <!-- Battery Section (ባትሪ) -->
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">Battery Qty (Pcs)</label>
-                                <input type="number" class="form-control sub-calc" name="battery_qty" id="battery_qty" value="0" min="0" oninput="calculateSubCosts()">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">Battery Unit Cost (ETB)</label>
-                                <input type="number" step="0.01" class="form-control sub-calc" name="battery_unit_cost" id="battery_unit_cost" value="0.00" min="0" oninput="calculateSubCosts()">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold text-secondary">Battery Total (ETB)</label>
-                                <input type="text" class="form-control bg-light fw-bold" id="battery_total_display" readonly value="0.00">
+                            <!-- 3. BATTERY SECTION -->
+                            <div class="col-12 mt-3">
+                                <label class="form-label fw-bold text-dark fs-6">3. Battery (ባትሪ) List</label>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered align-middle" id="woBattTable">
+                                        <thead class="table-dark">
+                                            <tr>
+                                                <th>Battery Specification / Brand</th>
+                                                <th style="width: 130px;">Quantity (Pcs)</th>
+                                                <th style="width: 150px;">Unit Cost (ETB)</th>
+                                                <th style="width: 150px;">Total Cost (ETB)</th>
+                                                <th style="width: 80px; text-align: center;">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="woBattTableBody">
+                                            <tr>
+                                                <td><input type="text" class="form-control" name="batt_name[]" placeholder="e.g. 150Ah Heavy Duty"></td>
+                                                <td><input type="number" class="form-control batt-qty" name="batt_qty[]" min="0" value="0" oninput="calculateAll()"></td>
+                                                <td><input type="number" step="0.01" class="form-control batt-cost" name="batt_unit_cost[]" min="0" value="0.00" oninput="calculateAll()"></td>
+                                                <td><input type="text" class="form-control bg-light batt-row-total" readonly value="0.00"></td>
+                                                <td class="text-center"><button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">X</button></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <button type="button" class="btn btn-dark btn-sm fw-bold" onclick="addBattRow()">+ Add Battery Row</button>
                             </div>
 
-                            <!-- Tire Section (ጎማ) -->
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">Tire Qty (Pcs)</label>
-                                <input type="number" class="form-control sub-calc" name="tire_qty" id="tire_qty" value="0" min="0" oninput="calculateSubCosts()">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">Tire Unit Cost (ETB)</label>
-                                <input type="number" step="0.01" class="form-control sub-calc" name="tire_unit_cost" id="tire_unit_cost" value="0.00" min="0" oninput="calculateSubCosts()">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold text-secondary">Tire Total (ETB)</label>
-                                <input type="text" class="form-control bg-light fw-bold" id="tire_total_display" readonly value="0.00">
+                            <!-- 4. TIRE SECTION -->
+                            <div class="col-12 mt-3">
+                                <label class="form-label fw-bold text-success fs-6">4. Tire (ጎማ) List</label>
+                                <div class="table-responsive">
+                                    <table class="table table-bordered align-middle" id="woTireTable">
+                                        <thead class="table-success text-dark">
+                                            <tr>
+                                                <th>Tire Size / Pattern</th>
+                                                <th style="width: 130px;">Quantity (Pcs)</th>
+                                                <th style="width: 150px;">Unit Cost (ETB)</th>
+                                                <th style="width: 150px;">Total Cost (ETB)</th>
+                                                <th style="width: 80px; text-align: center;">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="woTireTableBody">
+                                            <tr>
+                                                <td><input type="text" class="form-control" name="tire_name[]" placeholder="e.g. 12.00R24"></td>
+                                                <td><input type="number" class="form-control tire-qty" name="tire_qty[]" min="0" value="0" oninput="calculateAll()"></td>
+                                                <td><input type="number" step="0.01" class="form-control tire-cost" name="tire_unit_cost[]" min="0" value="0.00" oninput="calculateAll()"></td>
+                                                <td><input type="text" class="form-control bg-light tire-row-total" readonly value="0.00"></td>
+                                                <td class="text-center"><button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">X</button></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <button type="button" class="btn btn-success btn-sm fw-bold" onclick="addTireRow()">+ Add Tire Row</button>
                             </div>
 
-                            <div class="col-12"><hr class="my-2"></div>
+                            <div class="col-12"><hr class="my-3"></div>
 
                             <!-- Grand Total Expenditure -->
                             <div class="col-md-12 text-end">
@@ -266,90 +293,108 @@ SHARED_MODAL_HTML = """
     </div>
 
     <script>
-        function addWoSpareRow() {
+        function addSpareRow() {
             let tbody = document.getElementById('woSpareTableBody');
-            let newRow = document.createElement('tr');
-            newRow.innerHTML = `
-                <td><input type="text" class="form-control" name="spare_name[]" required placeholder="e.g. Bearing"></td>
-                <td><input type="number" class="form-control spare-qty" name="spare_qty[]" required min="1" value="1" oninput="calculateRowAndTotal(this)"></td>
-                <td><input type="number" step="0.01" class="form-control spare-cost" name="spare_unit_cost[]" required min="0" value="0.00" oninput="calculateRowAndTotal(this)"></td>
-                <td><input type="text" class="form-control bg-light row-total" readonly value="0.00"></td>
-                <td class="text-center">
-                    <button type="button" class="btn btn-danger btn-sm" onclick="removeWoSpareRow(this)">X</button>
-                </td>
+            let row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" class="form-control" name="spare_name[]" placeholder="e.g. Bearing"></td>
+                <td><input type="number" class="form-control spare-qty" name="spare_qty[]" min="1" value="1" oninput="calculateAll()"></td>
+                <td><input type="number" step="0.01" class="form-control spare-cost" name="spare_unit_cost[]" min="0" value="0.00" oninput="calculateAll()"></td>
+                <td><input type="text" class="form-control bg-light spare-row-total" readonly value="0.00"></td>
+                <td class="text-center"><button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">X</button></td>
             `;
-            tbody.appendChild(newRow);
-            calculateGrandTotal();
+            tbody.appendChild(row);
         }
 
-        function removeWoSpareRow(btn) {
-            let tbody = document.getElementById('woSpareTableBody');
+        function addLubeRow() {
+            let tbody = document.getElementById('woLubeTableBody');
+            let row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" class="form-control" name="lube_name[]" placeholder="e.g. Grease"></td>
+                <td><input type="number" step="0.01" class="form-control lube-qty" name="lube_qty[]" min="0" value="0" oninput="calculateAll()"></td>
+                <td><input type="number" step="0.01" class="form-control lube-cost" name="lube_unit_cost[]" min="0" value="0.00" oninput="calculateAll()"></td>
+                <td><input type="text" class="form-control bg-light lube-row-total" readonly value="0.00"></td>
+                <td class="text-center"><button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">X</button></td>
+            `;
+            tbody.appendChild(row);
+        }
+
+        function addBattRow() {
+            let tbody = document.getElementById('woBattTableBody');
+            let row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" class="form-control" name="batt_name[]" placeholder="e.g. Battery"></td>
+                <td><input type="number" class="form-control batt-qty" name="batt_qty[]" min="0" value="0" oninput="calculateAll()"></td>
+                <td><input type="number" step="0.01" class="form-control batt-cost" name="batt_unit_cost[]" min="0" value="0.00" oninput="calculateAll()"></td>
+                <td><input type="text" class="form-control bg-light batt-row-total" readonly value="0.00"></td>
+                <td class="text-center"><button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">X</button></td>
+            `;
+            tbody.appendChild(row);
+        }
+
+        function addTireRow() {
+            let tbody = document.getElementById('woTireTableBody');
+            let row = document.createElement('tr');
+            row.innerHTML = `
+                <td><input type="text" class="form-control" name="tire_name[]" placeholder="e.g. Tire"></td>
+                <td><input type="number" class="form-control tire-qty" name="tire_qty[]" min="0" value="0" oninput="calculateAll()"></td>
+                <td><input type="number" step="0.01" class="form-control tire-cost" name="tire_unit_cost[]" min="0" value="0.00" oninput="calculateAll()"></td>
+                <td><input type="text" class="form-control bg-light tire-row-total" readonly value="0.00"></td>
+                <td class="text-center"><button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">X</button></td>
+            `;
+            tbody.appendChild(row);
+        }
+
+        function removeRow(btn) {
+            let row = btn.closest('tr');
+            let tbody = row.closest('tbody');
             if (tbody.rows.length > 1) {
-                let row = btn.closest('tr');
                 row.remove();
-                calculateGrandTotal();
+                calculateAll();
             } else {
-                alert('At least one spare part row is required!');
+                alert('At least one row must remain!');
             }
         }
 
-        function calculateRowAndTotal(element) {
-            let row = element.closest('tr');
-            let qty = parseFloat(row.querySelector('.spare-qty').value) || 0;
-            let unitCost = parseFloat(row.querySelector('.spare-cost').value) || 0;
-            let rowTotal = qty * unitCost;
-            row.querySelector('.row-total').value = rowTotal.toFixed(2);
-            calculateGrandTotal();
-        }
+        function calculateAll() {
+            let grandTotal = 0;
 
-        function calculateSubCosts() {
-            let lubeQty = parseFloat(document.getElementById('lubrication_qty').value) || 0;
-            let lubeUCost = parseFloat(document.getElementById('lubrication_unit_cost').value) || 0;
-            let lubeTot = lubeQty * lubeUCost;
-            document.getElementById('lubrication_total_display').value = lubeTot.toFixed(2);
-
-            let battQty = parseFloat(document.getElementById('battery_qty').value) || 0;
-            let battUCost = parseFloat(document.getElementById('battery_unit_cost').value) || 0;
-            let battTot = battQty * battUCost;
-            document.getElementById('battery_total_display').value = battTot.toFixed(2);
-
-            let tireQty = parseFloat(document.getElementById('tire_qty').value) || 0;
-            let tireUCost = parseFloat(document.getElementById('tire_unit_cost').value) || 0;
-            let tireTot = tireQty * tireUCost;
-            document.getElementById('tire_total_display').value = tireTot.toFixed(2);
-
-            calculateGrandTotal();
-        }
-
-        function calculateGrandTotal() {
-            let rows = document.querySelectorAll('#woSpareTableBody tr');
-            let totalSpareCost = 0;
-            let totalSpareQty = 0;
-
-            rows.forEach(row => {
-                let qty = parseFloat(row.querySelector('.spare-qty').value) || 0;
-                let unitCost = parseFloat(row.querySelector('.spare-cost').value) || 0;
-                totalSpareCost += (qty * unitCost);
-                totalSpareQty += qty;
+            // Spares
+            document.querySelectorAll('#woSpareTableBody tr').forEach(row => {
+                let q = parseFloat(row.querySelector('.spare-qty').value) || 0;
+                let c = parseFloat(row.querySelector('.spare-cost').value) || 0;
+                let tot = q * c;
+                row.querySelector('.spare-row-total').value = tot.toFixed(2);
+                grandTotal += tot;
             });
 
-            document.getElementById('totalSparePartsCostDisplay').value = totalSpareCost.toFixed(2);
-            document.getElementById('spare_parts_cost_hidden').value = totalSpareCost.toFixed(2);
-            document.getElementById('spare_parts_qty_hidden').value = totalSpareQty;
+            // Lubrication
+            document.querySelectorAll('#woLubeTableBody tr').forEach(row => {
+                let q = parseFloat(row.querySelector('.lube-qty').value) || 0;
+                let c = parseFloat(row.querySelector('.lube-cost').value) || 0;
+                let tot = q * c;
+                row.querySelector('.lube-row-total').value = tot.toFixed(2);
+                grandTotal += tot;
+            });
 
-            let lubeQty = parseFloat(document.getElementById('lubrication_qty').value) || 0;
-            let lubeUCost = parseFloat(document.getElementById('lubrication_unit_cost').value) || 0;
-            let lubeTot = lubeQty * lubeUCost;
+            // Battery
+            document.querySelectorAll('#woBattTableBody tr').forEach(row => {
+                let q = parseFloat(row.querySelector('.batt-qty').value) || 0;
+                let c = parseFloat(row.querySelector('.batt-cost').value) || 0;
+                let tot = q * c;
+                row.querySelector('.batt-row-total').value = tot.toFixed(2);
+                grandTotal += tot;
+            });
 
-            let battQty = parseFloat(document.getElementById('battery_qty').value) || 0;
-            let battUCost = parseFloat(document.getElementById('battery_unit_cost').value) || 0;
-            let battTot = battQty * battUCost;
+            // Tire
+            document.querySelectorAll('#woTireTableBody tr').forEach(row => {
+                let q = parseFloat(row.querySelector('.tire-qty').value) || 0;
+                let c = parseFloat(row.querySelector('.tire-cost').value) || 0;
+                let tot = q * c;
+                row.querySelector('.tire-row-total').value = tot.toFixed(2);
+                grandTotal += tot;
+            });
 
-            let tireQty = parseFloat(document.getElementById('tire_qty').value) || 0;
-            let tireUCost = parseFloat(document.getElementById('tire_unit_cost').value) || 0;
-            let tireTot = tireQty * tireUCost;
-
-            let grandTotal = totalSpareCost + lubeTot + battTot + tireTot;
             document.getElementById('grandTotalDisplay').value = grandTotal.toFixed(2);
         }
     </script>
@@ -509,12 +554,11 @@ DASHBOARD_HTML = """
                                 <th>WO No</th>
                                 <th>Vehicle Model & Plate</th>
                                 <th>Next Due</th>
-                                <th>Maintenance Type</th>
+                                <th>Type</th>
                                 <th>Replaced Spares</th>
-                                <th>Spare Cost</th>
-                                <th>Lube Cost</th>
-                                <th>Battery Cost</th>
-                                <th>Tire Cost</th>
+                                <th>Lubrication</th>
+                                <th>Battery</th>
+                                <th>Tire</th>
                                 <th>Total Cost</th>
                                 <th style="text-align: center;">Action</th>
                             </tr>
@@ -527,11 +571,10 @@ DASHBOARD_HTML = """
                                 <td>{{ wo.vehicle_model }} ({{ wo.vehicle_plate }})</td>
                                 <td class="fw-bold text-danger">{{ wo.next_due_reading }} {{ wo.reading_unit }}</td>
                                 <td><span class="badge bg-info text-dark">{{ wo.maintenance_type }}</span></td>
-                                <td class="fw-bold text-primary">{{ wo.replaced_spare_name }}</td>
-                                <td>{{ "%.2f"|format(wo.spare_parts_cost) }}</td>
-                                <td>{{ "%.2f"|format(wo.lubrication_cost) }}</td>
-                                <td>{{ "%.2f"|format(wo.batteries_cost) }}</td>
-                                <td>{{ "%.2f"|format(wo.tires_cost) }}</td>
+                                <td class="small">{{ wo.replaced_spare_name }}</td>
+                                <td class="small">{{ wo.lubrication_details }}</td>
+                                <td class="small">{{ wo.battery_details }}</td>
+                                <td class="small">{{ wo.tire_details }}</td>
                                 <td class="fw-bold text-success">{{ "%.2f"|format(wo.total_expenditure) }} ETB</td>
                                 <td class="text-center">
                                     <form method="POST" action="/delete_work_order/{{ wo.id }}" onsubmit="return confirm('Are you sure you want to delete this work order?');" style="margin: 0;">
@@ -541,7 +584,7 @@ DASHBOARD_HTML = """
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="12" class="text-center text-muted">No records found for the selected date range.</td>
+                                <td colspan="11" class="text-center text-muted">No records found for the selected date range.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -670,13 +713,13 @@ INVENTORY_HTML = """
                                         <td><input type="number" step="0.01" class="form-control" name="unit_cost[]" required min="0" value="0.00"></td>
                                         <td><input type="text" class="form-control" name="location[]" required value="Main Store"></td>
                                         <td class="text-center">
-                                            <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">X</button>
+                                            <button type="button" class="btn btn-danger btn-sm" onclick="removeInventoryRow(this)">X</button>
                                         </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
-                        <button type="button" class="btn btn-success btn-sm fw-bold mt-2" onclick="addRow()">+ Add Another Row</button>
+                        <button type="button" class="btn btn-success btn-sm fw-bold mt-2" onclick="addInventoryRow()">+ Add Another Row</button>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -691,7 +734,7 @@ INVENTORY_HTML = """
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function addRow() {
+        function addInventoryRow() {
             let tbody = document.getElementById('spareTableBody');
             let newRow = document.createElement('tr');
             newRow.innerHTML = `
@@ -701,17 +744,16 @@ INVENTORY_HTML = """
                 <td><input type="number" step="0.01" class="form-control" name="unit_cost[]" required min="0" value="0.00"></td>
                 <td><input type="text" class="form-control" name="location[]" required value="Main Store"></td>
                 <td class="text-center">
-                    <button type="button" class="btn btn-danger btn-sm" onclick="removeRow(this)">X</button>
+                    <button type="button" class="btn btn-danger btn-sm" onclick="removeInventoryRow(this)">X</button>
                 </td>
             `;
             tbody.appendChild(newRow);
         }
 
-        function removeRow(btn) {
+        function removeInventoryRow(btn) {
             let tbody = document.getElementById('spareTableBody');
             if (tbody.rows.length > 1) {
-                let row = btn.closest('tr');
-                row.remove();
+                btn.closest('tr').remove();
             } else {
                 alert('At least one row is required!');
             }
@@ -731,9 +773,7 @@ def index():
 def login():
     error = None
     if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        if username == 'admin' and password == 'steely2026':
+        if request.form.get('username') == 'admin' and request.form.get('password') == 'steely2026':
             session.clear()
             session['logged_in'] = True
             return redirect(url_for('dashboard'))
@@ -747,23 +787,15 @@ def dashboard():
         return redirect(url_for('login'))
     
     work_orders_query = WorkOrder.query
-
     from_date = request.args.get('from_date')
     to_date = request.args.get('to_date')
 
     if from_date and to_date:
-        work_orders_query = work_orders_query.filter(
-            WorkOrder.start_datetime >= f"{from_date}T00:00",
-            WorkOrder.start_datetime <= f"{to_date}T23:59"
-        )
+        work_orders_query = work_orders_query.filter(WorkOrder.start_datetime >= f"{from_date}T00:00", WorkOrder.start_datetime <= f"{to_date}T23:59")
     elif from_date:
-        work_orders_query = work_orders_query.filter(
-            WorkOrder.start_datetime >= f"{from_date}T00:00"
-        )
+        work_orders_query = work_orders_query.filter(WorkOrder.start_datetime >= f"{from_date}T00:00")
     elif to_date:
-        work_orders_query = work_orders_query.filter(
-            WorkOrder.start_datetime <= f"{to_date}T23:59"
-        )
+        work_orders_query = work_orders_query.filter(WorkOrder.start_datetime <= f"{to_date}T23:59")
 
     work_orders = work_orders_query.all()
     
@@ -779,8 +811,7 @@ def dashboard():
     monthly_lube_qty = monthly_lube_cost = monthly_batt_qty = monthly_batt_cost = monthly_tire_qty = monthly_tire_cost = monthly_total_exp = 0.0
     monthly_cm = monthly_pm = monthly_insp = 0
 
-    all_orders = WorkOrder.query.all()
-    for wo in all_orders:
+    for wo in WorkOrder.query.all():
         try:
             wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
         except:
@@ -800,13 +831,9 @@ def dashboard():
             monthly_tire_qty += wo.tire_qty
             monthly_tire_cost += wo.tires_cost
             monthly_total_exp += wo.total_expenditure
-            
-            if m_type == 'CM':
-                monthly_cm += 1
-            elif m_type == 'PM':
-                monthly_pm += 1
-            elif m_type == 'Inspection & Check':
-                monthly_insp += 1
+            if m_type == 'CM': monthly_cm += 1
+            elif m_type == 'PM': monthly_pm += 1
+            elif m_type == 'Inspection & Check': monthly_insp += 1
 
         if wo_date >= week_ago:
             weekly_jobs += 1
@@ -820,28 +847,19 @@ def dashboard():
             weekly_tire_qty += wo.tire_qty
             weekly_tire_cost += wo.tires_cost
             weekly_total_exp += wo.total_expenditure
-
-            if m_type == 'CM':
-                weekly_cm += 1
-            elif m_type == 'PM':
-                weekly_pm += 1
-            elif m_type == 'Inspection & Check':
-                weekly_insp += 1
+            if m_type == 'CM': weekly_cm += 1
+            elif m_type == 'PM': weekly_pm += 1
+            elif m_type == 'Inspection & Check': weekly_insp += 1
 
     response = make_response(render_template_string(
-        DASHBOARD_HTML, 
-        work_orders=work_orders, 
+        DASHBOARD_HTML, work_orders=work_orders, 
         weekly_jobs=int(weekly_jobs), weekly_hours=weekly_hours, weekly_spare_qty=int(weekly_spare_qty), weekly_spare_cost=weekly_spare_cost,
-        weekly_lube_qty=weekly_lube_qty, weekly_lube_cost=weekly_lube_cost, 
-        weekly_batt_qty=int(weekly_batt_qty), weekly_batt_cost=weekly_batt_cost,
-        weekly_tire_qty=int(weekly_tire_qty), weekly_tire_cost=weekly_tire_cost,
-        weekly_total_exp=weekly_total_exp,
+        weekly_lube_qty=weekly_lube_qty, weekly_lube_cost=weekly_lube_cost, weekly_batt_qty=int(weekly_batt_qty), weekly_batt_cost=weekly_batt_cost,
+        weekly_tire_qty=int(weekly_tire_qty), weekly_tire_cost=weekly_tire_cost, weekly_total_exp=weekly_total_exp,
         weekly_cm=weekly_cm, weekly_pm=weekly_pm, weekly_insp=weekly_insp,
         monthly_jobs=int(monthly_jobs), monthly_hours=monthly_hours, monthly_spare_qty=int(monthly_spare_qty), monthly_spare_cost=monthly_spare_cost,
-        monthly_lube_qty=monthly_lube_qty, monthly_lube_cost=monthly_lube_cost,
-        monthly_batt_qty=int(monthly_batt_qty), monthly_batt_cost=monthly_batt_cost,
-        monthly_tire_qty=int(monthly_tire_qty), monthly_tire_cost=monthly_tire_cost,
-        monthly_total_exp=monthly_total_exp,
+        monthly_lube_qty=monthly_lube_qty, monthly_lube_cost=monthly_lube_cost, monthly_batt_qty=int(monthly_batt_qty), monthly_batt_cost=monthly_batt_cost,
+        monthly_tire_qty=int(monthly_tire_qty), monthly_tire_cost=monthly_tire_cost, monthly_total_exp=monthly_total_exp,
         monthly_cm=monthly_cm, monthly_pm=monthly_pm, monthly_insp=monthly_insp,
         shared_modal=SHARED_MODAL_HTML
     ))
@@ -852,14 +870,7 @@ def dashboard():
 def inventory():
     if not session.get('logged_in'):
         return redirect(url_for('login'))
-    inventory_items = SpareInventory.query.all()
-    response = make_response(render_template_string(
-        INVENTORY_HTML, 
-        inventory_items=inventory_items,
-        shared_modal=SHARED_MODAL_HTML
-    ))
-    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-    return response
+    return make_response(render_template_string(INVENTORY_HTML, inventory_items=SpareInventory.query.all(), shared_modal=SHARED_MODAL_HTML))
 
 @app.route('/logout')
 def logout():
@@ -868,9 +879,7 @@ def logout():
 
 @app.route('/add_spare_multiple', methods=['POST'])
 def add_spare_multiple():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
-    
+    if not session.get('logged_in'): return redirect(url_for('login'))
     part_names = request.form.getlist('part_name[]')
     specs = request.form.getlist('spec[]')
     quantities = request.form.getlist('quantity[]')
@@ -879,22 +888,13 @@ def add_spare_multiple():
     
     for i in range(len(part_names)):
         if part_names[i].strip():
-            new_spare = SpareInventory(
-                part_name=part_names[i],
-                spec=specs[i],
-                quantity=int(quantities[i]),
-                unit_cost=float(unit_costs[i]),
-                location=locations[i]
-            )
-            db.session.add(new_spare)
-            
+            db.session.add(SpareInventory(part_name=part_names[i], spec=specs[i], quantity=int(quantities[i]), unit_cost=float(unit_costs[i]), location=locations[i]))
     db.session.commit()
     return redirect(url_for('inventory'))
 
 @app.route('/add_work_order', methods=['POST'])
 def add_work_order():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
+    if not session.get('logged_in'): return redirect(url_for('login'))
     
     serial_number = request.form.get('serial_number')
     work_order_no = request.form.get('work_order_no')
@@ -902,9 +902,7 @@ def add_work_order():
     vehicle_model = request.form.get('vehicle_model')
     current_reading = float(request.form.get('current_reading', 0.0))
     reading_unit = request.form.get('reading_unit', 'KM')
-    
-    increment_value = 5000.0 if reading_unit == 'KM' else 250.0
-    next_due_reading = current_reading + increment_value
+    next_due_reading = current_reading + (5000.0 if reading_unit == 'KM' else 250.0)
 
     job_status = request.form.get('job_status')
     driver_name = request.form.get('driver_name')
@@ -913,348 +911,133 @@ def add_work_order():
     end_datetime = request.form.get('end_datetime')
     maintenance_type = request.form.get('maintenance_type')
     work_category = request.form.get('work_category')
-    description = request.form.get('description')
     
+    # Spare parts parsing
     spare_names = request.form.getlist('spare_name[]')
     spare_qtys = request.form.getlist('spare_qty[]')
-    spare_unit_costs = request.form.getlist('spare_unit_cost[]')
-    
-    spare_summary_list = []
-    total_spare_qty = 0
-    total_spare_cost = 0.0
-    
+    spare_costs = request.form.getlist('spare_unit_cost[]')
+    spare_list, total_spare_qty, total_spare_cost = [], 0, 0.0
     for i in range(len(spare_names)):
         if spare_names[i].strip():
             q = int(spare_qtys[i]) if i < len(spare_qtys) else 1
-            uc = float(spare_unit_costs[i]) if i < len(spare_unit_costs) else 0.0
+            uc = float(spare_costs[i]) if i < len(spare_costs) else 0.0
             tot = q * uc
             total_spare_qty += q
             total_spare_cost += tot
-            spare_summary_list.append(f"{spare_names[i]} ({q} Pcs @ {uc:.2f} = {tot:.2f} ETB)")
-            
-    replaced_spare_name = ", ".join(spare_summary_list) if spare_summary_list else "-"
-    
-    # Consumables separate calculations
-    lubrication_qty = float(request.form.get('lubrication_qty', 0.0))
-    lubrication_unit_cost = float(request.form.get('lubrication_unit_cost', 0.0))
-    lubrication_cost = lubrication_qty * lubrication_unit_cost
+            spare_list.append(f"{spare_names[i]} ({q} Pcs @ {uc:.2f} = {tot:.2f} ETB)")
 
-    battery_qty = int(request.form.get('battery_qty', 0))
-    battery_unit_cost = float(request.form.get('battery_unit_cost', 0.0))
-    batteries_cost = battery_qty * battery_unit_cost
+    # Lubrication parsing
+    lube_names = request.form.getlist('lube_name[]')
+    lube_qtys = request.form.getlist('lube_qty[]')
+    lube_costs = request.form.getlist('lube_unit_cost[]')
+    lube_list, total_lube_qty, total_lube_cost = [], 0.0, 0.0
+    for i in range(len(lube_names)):
+        if lube_names[i].strip():
+            q = float(lube_qtys[i]) if i < len(lube_qtys) else 0.0
+            uc = float(lube_costs[i]) if i < len(lube_costs) else 0.0
+            tot = q * uc
+            total_lube_qty += q
+            total_lube_cost += tot
+            lube_list.append(f"{lube_names[i]} ({q} L/Kg @ {uc:.2f} = {tot:.2f} ETB)")
 
-    tire_qty = int(request.form.get('tire_qty', 0))
-    tire_unit_cost = float(request.form.get('tire_unit_cost', 0.0))
-    tires_cost = tire_qty * tire_unit_cost
-    
-    effective_hours = 0.0
+    # Battery parsing
+    batt_names = request.form.getlist('batt_name[]')
+    batt_qtys = request.form.getlist('batt_qty[]')
+    batt_costs = request.form.getlist('batt_unit_cost[]')
+    batt_list, total_batt_qty, total_batt_cost = [], 0, 0.0
+    for i in range(len(batt_names)):
+        if batt_names[i].strip():
+            q = int(batt_qtys[i]) if i < len(batt_qtys) else 0
+            uc = float(batt_costs[i]) if i < len(batt_costs) else 0.0
+            tot = q * uc
+            total_batt_qty += q
+            total_batt_cost += tot
+            batt_list.append(f"{batt_names[i]} ({q} Pcs @ {uc:.2f} = {tot:.2f} ETB)")
+
+    # Tire parsing
+    tire_names = request.form.getlist('tire_name[]')
+    tire_qtys = request.form.getlist('tire_qty[]')
+    tire_costs = request.form.getlist('tire_unit_cost[]')
+    tire_list, total_tire_qty, total_tire_cost = [], 0, 0.0
+    for i in range(len(tire_names)):
+        if tire_names[i].strip():
+            q = int(tire_qtys[i]) if i < len(tire_qtys) else 0
+            uc = float(tire_costs[i]) if i < len(tire_costs) else 0.0
+            tot = q * uc
+            total_tire_qty += q
+            total_tire_cost += tot
+            tire_list.append(f"{tire_names[i]} ({q} Pcs @ {uc:.2f} = {tot:.2f} ETB)")
+
+    effective_hours = 2.0
     try:
         s_dt = datetime.strptime(start_datetime, '%Y-%m-%dT%H:%M')
         e_dt = datetime.strptime(end_datetime, '%Y-%m-%dT%H:%M')
-        diff = (e_dt - s_dt).total_seconds() / 3600.0
-        effective_hours = max(0.0, diff)
-    except:
-        effective_hours = 2.0
+        effective_hours = max(0.0, (e_dt - s_dt).total_seconds() / 3600.0)
+    except: pass
 
-    total_expenditure = total_spare_cost + lubrication_cost + batteries_cost + tires_cost
-    
-    new_wo = WorkOrder(
-        serial_number=serial_number,
-        work_order_no=work_order_no,
-        vehicle_plate=vehicle_plate,
-        vehicle_model=vehicle_model,
-        current_reading=current_reading,
-        reading_unit=reading_unit,
-        next_due_reading=next_due_reading,
-        job_status=job_status,
-        driver_name=driver_name,
-        assigned_technicians=assigned_technicians,
-        start_datetime=start_datetime,
-        end_datetime=end_datetime,
-        maintenance_type=maintenance_type,
-        work_category=work_category,
-        description=description,
-        replaced_spare_name=replaced_spare_name,
-        spare_parts_qty=total_spare_qty,
-        spare_parts_cost=total_spare_cost,
-        lubrication_qty=lubrication_qty,
-        lubrication_unit_cost=lubrication_unit_cost,
-        lubrication_cost=lubrication_cost,
-        battery_qty=battery_qty,
-        battery_unit_cost=battery_unit_cost,
-        batteries_cost=batteries_cost,
-        tire_qty=tire_qty,
-        tire_unit_cost=tire_unit_cost,
-        tires_cost=tires_cost,
-        effective_work_hours=effective_hours,
-        total_expenditure=total_expenditure
-    )
-    db.session.add(new_wo)
+    total_expenditure = total_spare_cost + total_lube_cost + total_batt_cost + total_tire_cost
+
+    db.session.add(WorkOrder(
+        serial_number=serial_number, work_order_no=work_order_no, vehicle_plate=vehicle_plate, vehicle_model=vehicle_model,
+        current_reading=current_reading, reading_unit=reading_unit, next_due_reading=next_due_reading, job_status=job_status,
+        driver_name=driver_name, assigned_technicians=assigned_technicians, start_datetime=start_datetime, end_datetime=end_datetime,
+        maintenance_type=maintenance_type, work_category=work_category,
+        replaced_spare_name=", ".join(spare_list) if spare_list else "-", spare_parts_qty=total_spare_qty, spare_parts_cost=total_spare_cost,
+        lubrication_details=", ".join(lube_list) if lube_list else "-", lubrication_qty=total_lube_qty, lubrication_cost=total_lube_cost,
+        battery_details=", ".join(batt_list) if batt_list else "-", battery_qty=total_batt_qty, batteries_cost=total_batt_cost,
+        tire_details=", ".join(tire_list) if tire_list else "-", tire_qty=total_tire_qty, tires_cost=total_tire_cost,
+        effective_work_hours=effective_hours, total_expenditure=total_expenditure
+    ))
     db.session.commit()
     return redirect(url_for('dashboard'))
 
 @app.route('/delete_work_order/<int:wo_id>', methods=['POST'])
 def delete_work_order(wo_id):
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
-    wo = WorkOrder.query.get_or_404(wo_id)
-    db.session.delete(wo)
+    if not session.get('logged_in'): return redirect(url_for('login'))
+    db.session.delete(WorkOrder.query.get_or_404(wo_id))
     db.session.commit()
     return redirect(url_for('dashboard'))
 
-@app.route('/export/weekly_report')
-def export_weekly_report():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
-    try:
-        now = datetime.now()
-        week_ago = now - timedelta(days=7)
-        work_orders = WorkOrder.query.all()
-        
-        data = []
-        for wo in work_orders:
-            try:
-                wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
-            except:
-                wo_date = now
-
-            if wo_date >= week_ago:
-                data.append({
-                    'Serial Number': wo.serial_number,
-                    'Work Order No': wo.work_order_no,
-                    'Vehicle Plate': wo.vehicle_plate,
-                    'Vehicle Model': wo.vehicle_model,
-                    'Job Status': wo.job_status,
-                    'Maintenance Type': wo.maintenance_type,
-                    'Work Category': wo.work_category,
-                    'Start Time': wo.start_datetime,
-                    'Replaced Spare Parts': wo.replaced_spare_name,
-                    'Total Spare Qty': wo.spare_parts_qty,
-                    'Spare Cost (ETB)': wo.spare_parts_cost,
-                    'Lubrication Qty': wo.lubrication_qty,
-                    'Lubrication Unit Cost': wo.lubrication_unit_cost,
-                    'Lubrication Cost': wo.lubrication_cost,
-                    'Battery Qty': wo.battery_qty,
-                    'Battery Unit Cost': wo.battery_unit_cost,
-                    'Battery Cost': wo.batteries_cost,
-                    'Tire Qty': wo.tire_qty,
-                    'Tire Unit Cost': wo.tire_unit_cost,
-                    'Tire Cost': wo.tires_cost,
-                    'Total Expenditure (ETB)': wo.total_expenditure
-                })
-                
-        df = pd.DataFrame(data)
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='weekly summary report')
-        output.seek(0)
-
-        resp = make_response(output.read())
-        resp.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Weekly_Summary_Report.xlsx"
-        resp.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        return resp
-    except Exception as e:
-        return f"Error: {str(e)}", 500
-
-@app.route('/export/monthly_report')
-def export_monthly_report():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
-    try:
-        now = datetime.now()
-        month_ago = now - timedelta(days=30)
-        work_orders = WorkOrder.query.all()
-        
-        data = []
-        for wo in work_orders:
-            try:
-                wo_date = datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M')
-            except:
-                wo_date = now
-
-            if wo_date >= month_ago:
-                data.append({
-                    'Serial Number': wo.serial_number,
-                    'Work Order No': wo.work_order_no,
-                    'Vehicle Plate': wo.vehicle_plate,
-                    'Vehicle Model': wo.vehicle_model,
-                    'Job Status': wo.job_status,
-                    'Maintenance Type': wo.maintenance_type,
-                    'Work Category': wo.work_category,
-                    'Start Time': wo.start_datetime,
-                    'Replaced Spare Parts': wo.replaced_spare_name,
-                    'Total Spare Qty': wo.spare_parts_qty,
-                    'Spare Cost (ETB)': wo.spare_parts_cost,
-                    'Lubrication Qty': wo.lubrication_qty,
-                    'Lubrication Unit Cost': wo.lubrication_unit_cost,
-                    'Lubrication Cost': wo.lubrication_cost,
-                    'Battery Qty': wo.battery_qty,
-                    'Battery Unit Cost': wo.battery_unit_cost,
-                    'Battery Cost': wo.batteries_cost,
-                    'Tire Qty': wo.tire_qty,
-                    'Tire Unit Cost': wo.tire_unit_cost,
-                    'Tire Cost': wo.tires_cost,
-                    'Total Expenditure (ETB)': wo.total_expenditure
-                })
-                
-        df = pd.DataFrame(data)
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='monthly summary report')
-        output.seek(0)
-
-        resp = make_response(output.read())
-        resp.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Monthly_Summary_Report.xlsx"
-        resp.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        return resp
-    except Exception as e:
-        return f"Error: {str(e)}", 500
-
 @app.route('/export/master_report')
 def export_master_report():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
-    try:
-        now = datetime.now()
-        week_ago = now - timedelta(days=7)
-        month_ago = now - timedelta(days=30)
-        
-        work_orders = WorkOrder.query.all()
-        
-        def build_wo_list(filtered_orders):
-            res = []
-            for wo in filtered_orders:
-                res.append({
-                    'Serial Number': wo.serial_number,
-                    'Work Order No': wo.work_order_no,
-                    'Vehicle Plate': wo.vehicle_plate,
-                    'Vehicle Model': wo.vehicle_model,
-                    'Job Status': wo.job_status,
-                    'Maintenance Type': wo.maintenance_type,
-                    'Work Category': wo.work_category,
-                    'Start Time': wo.start_datetime,
-                    'Replaced Spare Parts': wo.replaced_spare_name,
-                    'Total Spare Qty': wo.spare_parts_qty,
-                    'Spare Cost (ETB)': wo.spare_parts_cost,
-                    'Lubrication Qty': wo.lubrication_qty,
-                    'Lubrication Unit Cost': wo.lubrication_unit_cost,
-                    'Lubrication Cost': wo.lubrication_cost,
-                    'Battery Qty': wo.battery_qty,
-                    'Battery Unit Cost': wo.battery_unit_cost,
-                    'Battery Cost': wo.batteries_cost,
-                    'Tire Qty': wo.tire_qty,
-                    'Tire Unit Cost': wo.tire_unit_cost,
-                    'Tire Cost': wo.tires_cost,
-                    'Total Expenditure (ETB)': wo.total_expenditure
-                })
-            return res
-
-        weekly_filtered = [wo for wo in work_orders if (lambda d: d >= week_ago)(datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M') if 'start_datetime' in dir(wo) and wo.start_datetime else now)]
-        monthly_filtered = [wo for wo in work_orders if (lambda d: d >= month_ago)(datetime.strptime(wo.start_datetime, '%Y-%m-%dT%H:%M') if 'start_datetime' in dir(wo) and wo.start_datetime else now)]
-
-        df_weekly = pd.DataFrame(build_wo_list(weekly_filtered))
-        df_monthly = pd.DataFrame(build_wo_list(monthly_filtered))
-
-        exec_data = []
-        for wo in work_orders:
-            exec_data.append({
-                'Serial Number': wo.serial_number,
-                'Work Order No': wo.work_order_no,
-                'Vehicle Plate': wo.vehicle_plate,
-                'Vehicle Model': wo.vehicle_model,
-                'Current Reading': wo.current_reading,
-                'Reading Unit': wo.reading_unit,
-                'Next Due Reading': wo.next_due_reading,
-                'Job Status': wo.job_status,
-                'Driver Name': wo.driver_name,
-                'Assigned Technicians': wo.assigned_technicians,
-                'Start Time': wo.start_datetime,
-                'End Time': wo.end_datetime,
-                'Maintenance Type': wo.maintenance_type,
-                'Work Category': wo.work_category,
-                'Replaced Spare Parts': wo.replaced_spare_name,
-                'Total Spare Qty': wo.spare_parts_qty,
-                'Spare Cost (ETB)': wo.spare_parts_cost,
-                'Lubrication Qty': wo.lubrication_qty,
-                'Lubrication Unit Cost': wo.lubrication_unit_cost,
-                'Lubrication Cost': wo.lubrication_cost,
-                'Battery Qty': wo.battery_qty,
-                'Battery Unit Cost': wo.battery_unit_cost,
-                'Battery Cost': wo.batteries_cost,
-                'Tire Qty': wo.tire_qty,
-                'Tire Unit Cost': wo.tire_unit_cost,
-                'Tire Cost': wo.tires_cost,
-                'Effective Hours (hrs)': wo.effective_work_hours,
-                'Total Expenditure (ETB)': wo.total_expenditure
-            })
-        df_exec = pd.DataFrame(exec_data)
-
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df_weekly.to_excel(writer, index=False, sheet_name='weekly summary report')
-            df_monthly.to_excel(writer, index=False, sheet_name='monthly summary report')
-            df_exec.to_excel(writer, index=False, sheet_name='excution log')
-            
-        output.seek(0)
-        
-        response = make_response(output.read())
-        response.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_All_In_One_Master_Report.xlsx"
-        response.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        return response
-    except Exception as e:
-        return f"Error: {str(e)}", 500
-
-@app.route('/export/maintenance_execution')
-def export_maintenance_execution():
-    if not session.get('logged_in'):
-        return redirect(url_for('login'))
+    if not session.get('logged_in'): return redirect(url_for('login'))
     try:
         work_orders = WorkOrder.query.all()
         data = []
         for wo in work_orders:
             data.append({
-                'Serial Number': wo.serial_number,
-                'Work Order No': wo.work_order_no,
-                'Vehicle Plate': wo.vehicle_plate,
-                'Vehicle Model': wo.vehicle_model,
-                'Current Reading': wo.current_reading,
-                'Reading Unit': wo.reading_unit,
-                'Next Due Reading': wo.next_due_reading,
-                'Job Status': wo.job_status,
-                'Driver Name': wo.driver_name,
-                'Assigned Technicians': wo.assigned_technicians,
-                'Start Time': wo.start_datetime,
-                'End Time': wo.end_datetime,
-                'Maintenance Type': wo.maintenance_type,
-                'Work Category': wo.work_category,
-                'Replaced Spare Parts': wo.replaced_spare_name,
-                'Total Spare Qty': wo.spare_parts_qty,
-                'Spare Cost (ETB)': wo.spare_parts_cost,
-                'Lubrication Qty': wo.lubrication_qty,
-                'Lubrication Unit Cost': wo.lubrication_unit_cost,
-                'Lubrication Cost': wo.lubrication_cost,
-                'Battery Qty': wo.battery_qty,
-                'Battery Unit Cost': wo.battery_unit_cost,
-                'Battery Cost': wo.batteries_cost,
-                'Tire Qty': wo.tire_qty,
-                'Tire Unit Cost': wo.tire_unit_cost,
-                'Tire Cost': wo.tires_cost,
-                'Effective Hours (hrs)': wo.effective_work_hours,
-                'Total Expenditure (ETB)': wo.total_expenditure
+                'Serial Number': wo.serial_number, 'Work Order No': wo.work_order_no, 'Vehicle Plate': wo.vehicle_plate,
+                'Vehicle Model': wo.vehicle_model, 'Current Reading': wo.current_reading, 'Reading Unit': wo.reading_unit,
+                'Next Due Reading': wo.next_due_reading, 'Job Status': wo.job_status, 'Driver Name': wo.driver_name,
+                'Assigned Technicians': wo.assigned_technicians, 'Start Time': wo.start_datetime, 'End Time': wo.end_datetime,
+                'Maintenance Type': wo.maintenance_type, 'Work Category': wo.work_category, 'Replaced Spare Parts': wo.replaced_spare_name,
+                'Spare Cost (ETB)': wo.spare_parts_cost, 'Lubrication Details': wo.lubrication_details, 'Lubrication Cost': wo.lubrication_cost,
+                'Battery Details': wo.battery_details, 'Battery Cost': wo.batteries_cost, 'Tire Details': wo.tire_details, 'Tire Cost': wo.tires_cost,
+                'Effective Hours (hrs)': wo.effective_work_hours, 'Total Expenditure (ETB)': wo.total_expenditure
             })
-            
         df = pd.DataFrame(data)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='excution log')
+            df.to_excel(writer, index=False, sheet_name='master report')
         output.seek(0)
-
-        response = make_response(output.read())
-        response.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Maintenance_Execution_Report.xlsx"
-        response.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        return response
+        resp = make_response(output.read())
+        resp.headers["Content-Disposition"] = "attachment; filename=SteelY_RMI_Master_Report.xlsx"
+        resp.headers["Content-type"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return resp
     except Exception as e:
         return f"Error: {str(e)}", 500
+
+@app.route('/export/maintenance_execution')
+def export_maintenance_execution():
+    return export_master_report()
+
+@app.route('/export/weekly_report')
+def export_weekly_report():
+    return export_master_report()
+
+@app.route('/export/monthly_report')
+def export_monthly_report():
+    return export_master_report()
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
