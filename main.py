@@ -6,7 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 
 app = Flask(__name__)
 app.secret_key = 'steely_rmi_secure_secret_key_2026'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v22.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///steely_rmi_garage_v23.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -165,7 +165,7 @@ SHARED_MODAL_HTML = """
 
                             <!-- 1. SPARE PARTS SECTION -->
                             <div class="col-12 mt-3">
-                                <label class="form-label fw-bold text-primary fs-6">Replaced Spare Parts List (Multi-Row & Auto Cost)</label>
+                                <label class="form-label fw-bold text-primary fs-6">1. Replaced Spare Parts List (Multi-Row & Auto Cost)</label>
                                 <div class="table-responsive">
                                     <table class="table table-bordered align-middle" id="woSpareTable">
                                         <thead class="table-dark">
@@ -193,13 +193,13 @@ SHARED_MODAL_HTML = """
 
                             <!-- 2. LUBRICATION SECTION -->
                             <div class="col-12 mt-3">
-                                <label class="form-label fw-bold text-secondary fs-6">Lubricants List (Multi-Row & Auto Cost)</label>
+                                <label class="form-label fw-bold text-secondary fs-6">2. Lubrication List (Multi-Row & Auto Cost)</label>
                                 <div class="table-responsive">
                                     <table class="table table-bordered align-middle" id="woLubeTable">
                                         <thead class="table-secondary">
                                             <tr>
                                                 <th>Lubricant Name / Type</th>
-                                                <th style="width: 130px;">Quantity / Liter</th>
+                                                <th style="width: 130px;">Quantity (Liter)</th>
                                                 <th style="width: 150px;">Unit Cost (ETB)</th>
                                                 <th style="width: 150px;">Total Cost (ETB)</th>
                                                 <th style="width: 80px; text-align: center;">Action</th>
@@ -216,12 +216,12 @@ SHARED_MODAL_HTML = """
                                         </tbody>
                                     </table>
                                 </div>
-                                <button type="button" class="btn btn-secondary btn-sm fw-bold" onclick="addLubeRow()">+ Add Row Lubricant</button>
+                                <button type="button" class="btn btn-secondary btn-sm fw-bold" onclick="addLubeRow()">+ Add Row Lubrication</button>
                             </div>
 
                             <!-- 3. BATTERY SECTION -->
                             <div class="col-12 mt-3">
-                                <label class="form-label fw-bold text-dark fs-6">Batteries List (Multi-Row & Auto Cost)</label>
+                                <label class="form-label fw-bold text-dark fs-6">3. Batteries List (Multi-Row & Auto Cost)</label>
                                 <div class="table-responsive">
                                     <table class="table table-bordered align-middle" id="woBattTable">
                                         <thead class="table-dark">
@@ -249,7 +249,7 @@ SHARED_MODAL_HTML = """
 
                             <!-- 4. TIRE SECTION -->
                             <div class="col-12 mt-3">
-                                <label class="form-label fw-bold text-success fs-6">Tires List (Multi-Row & Auto Cost)</label>
+                                <label class="form-label fw-bold text-success fs-6">4. Tires List (Multi-Row & Auto Cost)</label>
                                 <div class="table-responsive">
                                     <table class="table table-bordered align-middle" id="woTireTable">
                                         <thead class="table-success text-dark">
@@ -384,7 +384,6 @@ SHARED_MODAL_HTML = """
             let totalBatt = 0;
             let totalTire = 0;
 
-            // Spares
             document.querySelectorAll('#woSpareTableBody tr').forEach(row => {
                 let q = parseFloat(row.querySelector('.spare-qty').value) || 0;
                 let c = parseFloat(row.querySelector('.spare-cost').value) || 0;
@@ -393,7 +392,6 @@ SHARED_MODAL_HTML = """
                 totalSpare += tot;
             });
 
-            // Lubrication
             document.querySelectorAll('#woLubeTableBody tr').forEach(row => {
                 let q = parseFloat(row.querySelector('.lube-qty').value) || 0;
                 let c = parseFloat(row.querySelector('.lube-cost').value) || 0;
@@ -402,7 +400,6 @@ SHARED_MODAL_HTML = """
                 totalLube += tot;
             });
 
-            // Battery
             document.querySelectorAll('#woBattTableBody tr').forEach(row => {
                 let q = parseFloat(row.querySelector('.batt-qty').value) || 0;
                 let c = parseFloat(row.querySelector('.batt-cost').value) || 0;
@@ -411,7 +408,6 @@ SHARED_MODAL_HTML = """
                 totalBatt += tot;
             });
 
-            // Tire
             document.querySelectorAll('#woTireTableBody tr').forEach(row => {
                 let q = parseFloat(row.querySelector('.tire-qty').value) || 0;
                 let c = parseFloat(row.querySelector('.tire-cost').value) || 0;
@@ -507,7 +503,7 @@ DASHBOARD_HTML = """
                         <div class="row small text-muted">
                             <div class="col-6">Spare Qty: <strong>{{ weekly_spare_qty }} Pcs</strong></div>
                             <div class="col-6">Spare Cost: <strong>ETB {{ "%.2f"|format(weekly_spare_cost) }}</strong></div>
-                            <div class="col-6">Lubrication Qty: <strong>{{ "%.1f"|format(weekly_lube_qty) }} L/Kg</strong></div>
+                            <div class="col-6">Lubrication Qty: <strong>{{ "%.1f"|format(weekly_lube_qty) }} L</strong></div>
                             <div class="col-6">Lubrication Cost: <strong>ETB {{ "%.2f"|format(weekly_lube_cost) }}</strong></div>
                             <div class="col-6">Battery Qty: <strong>{{ weekly_batt_qty }} Pcs</strong></div>
                             <div class="col-6">Battery Cost: <strong>ETB {{ "%.2f"|format(weekly_batt_cost) }}</strong></div>
@@ -540,7 +536,7 @@ DASHBOARD_HTML = """
                         <div class="row small text-muted">
                             <div class="col-6">Spare Qty: <strong>{{ monthly_spare_qty }} Pcs</strong></div>
                             <div class="col-6">Spare Cost: <strong>ETB {{ "%.2f"|format(monthly_spare_cost) }}</strong></div>
-                            <div class="col-6">Lubrication Qty: <strong>{{ "%.1f"|format(monthly_lube_qty) }} L/Kg</strong></div>
+                            <div class="col-6">Lubrication Qty: <strong>{{ "%.1f"|format(monthly_lube_qty) }} L</strong></div>
                             <div class="col-6">Lubrication Cost: <strong>ETB {{ "%.2f"|format(monthly_lube_cost) }}</strong></div>
                             <div class="col-6">Battery Qty: <strong>{{ monthly_batt_qty }} Pcs</strong></div>
                             <div class="col-6">Battery Cost: <strong>ETB {{ "%.2f"|format(monthly_batt_cost) }}</strong></div>
@@ -969,7 +965,7 @@ def add_work_order():
             tot = q * uc
             total_lube_qty += q
             total_lube_cost += tot
-            lube_list.append(f"{lube_names[i]} ({q} L/Kg @ {uc:.2f} = {tot:.2f} ETB)")
+            lube_list.append(f"{lube_names[i]} ({q} Liters @ {uc:.2f} = {tot:.2f} ETB)")
 
     # Battery parsing
     batt_names = request.form.getlist('batt_name[]')
